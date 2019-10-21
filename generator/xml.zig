@@ -17,36 +17,20 @@ const entities = [_]Entity{
 
 fn XmlUtf8Parser(comptime ReadError: type) type {
     return struct {
-        pub const Self = @This();
+        const Self = @This();
         pub const Stream = std.io.InStream(ReadError);
 
         in: *Stream,
-        current: ?u32,
 
         pub fn init(in: *Stream) Self {
             return Self{
-                .in = in,
-                .current = null
+                .in = in
             };
         }
 
-        pub fn consume(self: *Self) void {
-            self.current = null;
-        }
-
-        pub fn peek(self: *Self) !?u32 {
-            if (self.current) |cp| {
-                return cp;
-            }
-
+        pub fn next(self: *Self) !?u32 {
             const cp = (try self.nextCodepoint()) orelse return null;
-            self.current = if (cp == '&') try self.nextEntity() else cp;
-            return self.current.?;
-        }
-
-        pub fn consumeAndPeek(self: *Self) !?u32 {
-            self.consume();
-            return try self.peek();
+            return if (cp == '&') try self.nextEntity() else cp;
         }
 
         fn nextEntity(self: *Self) !u32 {
@@ -92,12 +76,10 @@ fn testXmlUtf8Parser(text: []const u8, expected: []const u8) !void {
     var i: usize = 0;
     defer testing.expect(i == expected.len);
 
-    while (try p.consumeAndPeek()) |cp| {
+    while (try p.next()) |cp| {
         testing.expect(cp == expected[i]);
         i += 1;
     }
-
-    testing.expect((try p.consumeAndPeek()) == null);
 }
 
 test "XmlUtf8Parser" {
@@ -107,17 +89,4 @@ test "XmlUtf8Parser" {
     testing.expectError(error.InvalidEntity, testXmlUtf8Parser("python&&", "python"));
     testing.expectError(error.InvalidEntity, testXmlUtf8Parser("python&test;", "python"));
     testing.expectError(error.InvalidEntity, testXmlUtf8Parser("python&boa", "python"));
-
-    var slice_in = std.io.SliceInStream.init("test");
-    var p = XmlUtf8Parser(std.io.SliceInStream.Error).init(&slice_in.stream);
-
-    testing.expect((try p.peek()).? == 't');
-    testing.expect((try p.peek()).? == 't');
-    p.consume();
-    testing.expect((try p.peek()).? == 'e');
-    testing.expect((try p.peek()).? == 'e');
-    testing.expect((try p.consumeAndPeek()).? == 's');
-    testing.expect((try p.consumeAndPeek()).? == 't');
-    testing.expect((try p.consumeAndPeek()) == null);
-    testing.expect((try p.peek()) == null);
 }
