@@ -6,7 +6,7 @@ pub fn build(b: *Builder) void {
     generator.setBuildMode(b.standardReleaseOptions());
 
     var test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&b.addTest("generator/xml.zig").step);
+    test_step.dependOn(&b.addTest("generator/main.zig").step);
 
     const run_cmd = generator.run();
 
