@@ -16,21 +16,16 @@ pub const Content = union(enum) {
     Element: *Element
 };
 
-// Wrapper to work around compiler crash
-pub const Child = struct {
-    content: Content
-};
-
 pub const Element = struct {
     tag: []const u8,
     attributes: SegmentedList(*Attribute, 0),
-    children: SegmentedList(Child, 0),
+    children: SegmentedList(Content, 0),
 
     fn init(tag: []const u8, alloc: *Allocator) Element {
         return .{
             .tag = tag,
             .attributes = SegmentedList(*Attribute, 0).init(alloc),
-            .children = SegmentedList(Child, 0).init(alloc),
+            .children = SegmentedList(Content, 0).init(alloc),
         };
     }
 };
@@ -224,18 +219,7 @@ pub const ParseError = error {
 
 pub fn parse(backing_allocator: *Allocator, source: []const u8) !Document {
     var ctx = ParseContext.init(source);
-    return parseDocument(&ctx, backing_allocator) catch |err| {
-        std.debug.warn("{}\n", .{ctx.currentLine()});
-
-        var i: usize = 0;
-        while (i < ctx.column) : (i += 1) {
-            std.debug.warn(" ", .{});
-        }
-
-        std.debug.warn("^\n", .{});
-
-        return err;
-    };
+    return try parseDocument(&ctx, backing_allocator);
 }
 
 fn parseDocument(ctx: *ParseContext, backing_allocator: *Allocator) !Document {
@@ -370,7 +354,7 @@ fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
         }
 
         const content = try parseContent(ctx, alloc);
-        try element.children.push(.{.content = content});
+        try element.children.push(content);
     }
 
     const closing_tag = try parseNameNoDupe(ctx);
@@ -408,19 +392,19 @@ test "tryParseElement" {
         var ctx = ParseContext.init("<python>test</python>");
         const elem = try tryParseElement(&ctx, std.debug.global_allocator);
         testing.expectEqualSlices(u8, elem.?.tag, "python");
-        testing.expectEqualSlices(u8, elem.?.children.at(0).content.CharData, "test");
+        testing.expectEqualSlices(u8, elem.?.children.at(0).CharData, "test");
     }
 
     {
         var ctx = ParseContext.init("<a>b<c/>d<e/>f<!--g--></a>");
         const elem = try tryParseElement(&ctx, std.debug.global_allocator);
         testing.expectEqualSlices(u8, elem.?.tag, "a");
-        testing.expectEqualSlices(u8, elem.?.children.at(0).content.CharData, "b");
-        testing.expectEqualSlices(u8, elem.?.children.at(1).content.Element.tag, "c");
-        testing.expectEqualSlices(u8, elem.?.children.at(2).content.CharData, "d");
-        testing.expectEqualSlices(u8, elem.?.children.at(3).content.Element.tag, "e");
-        testing.expectEqualSlices(u8, elem.?.children.at(4).content.CharData, "f");
-        testing.expectEqualSlices(u8, elem.?.children.at(5).content.Comment, "g");
+        testing.expectEqualSlices(u8, elem.?.children.at(0).CharData, "b");
+        testing.expectEqualSlices(u8, elem.?.children.at(1).Element.tag, "c");
+        testing.expectEqualSlices(u8, elem.?.children.at(2).CharData, "d");
+        testing.expectEqualSlices(u8, elem.?.children.at(3).Element.tag, "e");
+        testing.expectEqualSlices(u8, elem.?.children.at(4).CharData, "f");
+        testing.expectEqualSlices(u8, elem.?.children.at(5).Comment, "g");
     }
 }
 
