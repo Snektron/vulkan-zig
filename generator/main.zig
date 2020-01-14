@@ -1,7 +1,13 @@
 const std = @import("std");
 const xml = @import("xml.zig");
+const spec = @import("spec.zig");
 
 pub fn main() !void {
+    if (std.os.argv.len <= 1) {
+        std.debug.warn("Usage: vulkan-zig-gen <path-to-vk.xml>\n", .{});
+        return;
+    }
+
     const file = try std.fs.cwd().openFileC(std.os.argv[1], .{});
     defer file.close();
 
@@ -11,10 +17,16 @@ pub fn main() !void {
 
     _ = try file.inStream().stream.read(source);
 
-    var doc = try xml.parse(std.heap.page_allocator, source);
-    defer doc.deinit();
+    var registry = try xml.parse(std.heap.page_allocator, source);
+    defer registry.deinit();
+
+    const vk_spec = spec.generate(std.heap.page_allocator, registry);
+    defer vk_spec.deinit();
+
+    vk_spec.dump();
 }
 
 test "main" {
     _ = @import("xml.zig");
+    _ = @import("spec.zig");
 }

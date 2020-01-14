@@ -17,17 +17,59 @@ pub const Content = union(enum) {
 };
 
 pub const Element = struct {
+    const AttributeList = SegmentedList(*Attribute, 0);
+    const ContentList = SegmentedList(Content, 0);
+
     tag: []const u8,
-    attributes: SegmentedList(*Attribute, 0),
-    children: SegmentedList(Content, 0),
+    attributes: AttributeList,
+    children: ContentList,
 
     fn init(tag: []const u8, alloc: *Allocator) Element {
         return .{
             .tag = tag,
-            .attributes = SegmentedList(*Attribute, 0).init(alloc),
-            .children = SegmentedList(Content, 0).init(alloc),
+            .attributes = AttributeList.init(alloc),
+            .children = ContentList.init(alloc),
         };
     }
+
+    fn getAttribute(self: *Element, attrib_name: []const u8) ?[]const u8 {
+        var it = self.attributes.iterator(0);
+        while (it.next()) |child| {
+            if (mem.eql(u8, child.*.name, attrib_name)) {
+                return child.*.value;
+            }
+        }
+
+        return null;
+    }
+
+    fn findChildByTag(self: *Element, tag: []const u8) ?*Element {
+        return self.findChildrenByTag(tag).next();
+    }
+
+    fn findChildrenByTag(self: *Element, tag: []const u8) FindChildrenByTagIterator {
+        return .{
+            .inner = self.children.iterator(0),
+            .tag = tag
+        };
+    }
+
+    pub const FindChildrenByTagIterator = struct {
+        inner: ContentList.Iterator,
+        tag: []const u8,
+
+        fn next(self: *FindChildrenByTagIterator) ?*Element {
+            while (self.inner.next()) |child| {
+                if (child.* != .Element or !mem.eql(u8, child.*.Element.tag, self.tag)) {
+                    continue;
+                }
+
+                return child.*.Element;
+            }
+
+            return null;
+        }
+    };
 };
 
 pub const XmlDecl = struct {
@@ -228,6 +270,8 @@ fn parseDocument(ctx: *ParseContext, backing_allocator: *Allocator) !Document {
         .xml_decl = null,
         .root = undefined
     };
+
+    errdefer doc.deinit();
 
     doc.xml_decl = try tryParseProlog(ctx, &doc.arena.allocator);
     _ = ctx.eatWs();
