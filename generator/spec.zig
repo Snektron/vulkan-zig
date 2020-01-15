@@ -7,6 +7,7 @@ const SegmentedList = std.SegmentedList;
 const Spec = struct {
     backing_allocator: *Allocator,
     enums: std.StringHashMap(Enum),
+    bitmasks: std.StringHashMap(BitmaskBits),
 
     fn deinit(self: Spec) void {
         self.enums.deinit();
@@ -14,7 +15,7 @@ const Spec = struct {
 
     fn dump(self: Spec) void {
         {
-            std.debug.warn("enums:\n", .{});
+            std.debug.warn("Enums:\n", .{});
             var it = self.enums.iterator();
             while (it.next()) |e| {
                 const kind_text = if (e.value.kind == .Bitmask) " (bitmask)" else "";
@@ -25,7 +26,27 @@ const Spec = struct {
                 }
             }
         }
+
+        {
+            std.debug.warn("Bitmasks:\n", .{});
+            var it = self.bitmasks.iterator();
+            while (it.next()) |b| {
+                std.debug.warn("    {}", .{b.key});
+
+                switch (b.value) {
+                    .None => std.debug.warn("\n", .{}),
+                    .Enum => |bits| std.debug.warn(" [bits: {}]\n", .{bits}),
+                    .Alias => |alias| std.debug.warn(" [alias of: {}]\n", .{alias})
+                }
+            }
+        }
     }
+};
+
+const BitmaskBits = union(enum) {
+    None,
+    Enum: []const u8,
+    Alias: []const u8
 };
 
 const Enum = struct {
@@ -159,11 +180,13 @@ pub fn generate(backing_allocator: *Allocator, registry: xml.Document) Spec {
 
     var spec = Spec{
         .backing_allocator = backing_allocator,
-        .enums = std.StringHashMap(Enum).init(backing_allocator)
+        .enums = std.StringHashMap(Enum).init(backing_allocator),
+        .bitmasks = std.StringHashMap(BitmaskBits).init(backing_allocator)
     };
 
     errdefer spec.deinit();
 
+    processTypes(&spec, registry);
     processEnums(&spec, registry);
     processFeatures(&spec, registry);
     processExtensions(&spec, registry);
@@ -171,14 +194,26 @@ pub fn generate(backing_allocator: *Allocator, registry: xml.Document) Spec {
     return spec;
 }
 
-fn readChildTextOrFail(element: *xml.Element, child_name: []const u8) ![]const u8 {
-    const child = element.findChildByTag(child_name).?;
-    const content = child.children.at(0).*;
-    if (content != .CharData) {
-        return error.InvalidRegistry;
+fn processTypes(spec: *Spec, registry: xml.Document) void {
+    var types = registry.root.findChildByTag("types").?;
+    var it = types.findChildrenByTag("type");
+    while (it.next()) |ty| {
+        const category = ty.getAttribute("category") orelse continue;
+        if (mem.eql(u8, category, "bitmask")) {
+            processBitmaskType(spec, ty);
+        }
     }
+}
 
-    return content.CharData;
+fn processBitmaskType(spec: *Spec, ty: *xml.Element) void {
+    if (ty.getAttribute("name")) |name| {
+        const alias = ty.getAttribute("alias").?;
+        if (spec.bitmasks.put(name, .{.Alias = alias}) catch unreachable) |_| unreachable;
+    } else {
+        const name = ty.findChildByTag("name").?.children.at(0).CharData;
+        const bits: BitmaskBits = if (ty.getAttribute("requires")) |bits_name| .{.Enum = bits_name} else .None;
+        if (spec.bitmasks.put(name, bits) catch unreachable) |_| unreachable;
+    }
 }
 
 fn processEnums(spec: *Spec, registry: xml.Document) void {
@@ -210,7 +245,6 @@ fn processExtension(spec: *Spec, ext: *xml.Element, req: *xml.Element) void {
     var it = req.findChildrenByTag("enum");
     while (it.next()) |field| {
         const enum_name = field.getAttribute("extends") orelse continue;
-        if (Enum.isBackwardsCompatAlias(field)) continue;
 
         // Some extensions define fields for other extensions,
         // these are also defined in those extensions, so just skip them
@@ -228,8 +262,6 @@ fn processFeatures(spec: *Spec, registry: xml.Document) void {
             var enum_it = req.findChildrenByTag("enum");
             while (enum_it.next()) |field| {
                 const enum_name = field.getAttribute("extends") orelse continue;
-                if (Enum.isBackwardsCompatAlias(field)) continue;
-
                 const kv = spec.enums.get(enum_name).?;
                 kv.value.processFieldFromXml(field, null);
             }
