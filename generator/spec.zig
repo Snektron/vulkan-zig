@@ -7,7 +7,8 @@ const SegmentedList = std.SegmentedList;
 const Spec = struct {
     backing_allocator: *Allocator,
     enums: std.StringHashMap(Enum),
-    bitmasks: std.StringHashMap(BitmaskBits),
+    bitmasks: std.StringHashMap(Bitmask),
+    extensions: std.ArrayList(ExtensionInfo),
 
     fn deinit(self: Spec) void {
         self.enums.deinit();
@@ -40,13 +41,26 @@ const Spec = struct {
                 }
             }
         }
+
+        {
+            std.debug.warn("Extensions:\n", .{});
+            for (self.extensions.toSlice()) |ext| {
+                std.debug.warn("    {}: {}, version {}\n", .{ext.number, ext.name, ext.version});
+            }
+        }
     }
 };
 
-const BitmaskBits = union(enum) {
+const Bitmask = union(enum) {
     None,
     Enum: []const u8,
     Alias: []const u8
+};
+
+const ExtensionInfo = struct {
+    name: []const u8,
+    number: u32,
+    version: u32
 };
 
 const Enum = struct {
@@ -120,7 +134,7 @@ const Enum = struct {
         const ptr = self.fields.append(.{.name = name, .value = value}) catch unreachable;
     }
 
-    fn processFieldFromXml(self: *Enum, field: *xml.Element, ext_nr: ?i32) void {
+    fn processFieldFromXml(self: *Enum, field: *xml.Element, ext_nr: ?u32) void {
         if (Enum.isBackwardsCompatAlias(field)) return;
         const name = field.getAttribute("name").?;
         const value = blk: {
@@ -136,19 +150,15 @@ const Enum = struct {
             } else if (field.getAttribute("alias")) |alias| {
                 break :blk Value{.Alias = alias};
             } else if (field.getAttribute("offset")) |offset_str| {
-                const offset = std.fmt.parseInt(i32, offset_str, 10) catch unreachable;
+                const offset = std.fmt.parseInt(u32, offset_str, 10) catch unreachable;
 
                 const actual_ext_nr = ext_nr orelse blk: {
                     const ext_nr_str = field.getAttribute("extnumber").?;
-                    break :blk std.fmt.parseInt(i32, ext_nr_str, 10) catch unreachable;
+                    break :blk std.fmt.parseInt(u32, ext_nr_str, 10) catch unreachable;
                 };
 
-                var value = Enum.extensionEnumValue(actual_ext_nr, offset);
-
-                if (field.getAttribute("dir")) |_| {
-                    // Special case for VkResult
-                    value = -value;
-                }
+                const abs_value = Enum.extensionEnumValue(actual_ext_nr, offset);
+                const value = if (field.getAttribute("dir")) |_| -@intCast(i32, abs_value) else @intCast(i32, abs_value);
 
                 break :blk Value{.Value = value};
             } else {
@@ -168,7 +178,7 @@ const Enum = struct {
         return false;
     }
 
-    fn extensionEnumValue(ext_nr: i32, offset: i32) i32 {
+    fn extensionEnumValue(ext_nr: u32, offset: u32) u32 {
         const extension_value_base = 1000000000;
         const extension_block = 1000;
         return extension_value_base + (ext_nr - 1) * extension_block + offset;
@@ -181,7 +191,8 @@ pub fn generate(backing_allocator: *Allocator, registry: xml.Document) Spec {
     var spec = Spec{
         .backing_allocator = backing_allocator,
         .enums = std.StringHashMap(Enum).init(backing_allocator),
-        .bitmasks = std.StringHashMap(BitmaskBits).init(backing_allocator)
+        .bitmasks = std.StringHashMap(Bitmask).init(backing_allocator),
+        .extensions = std.ArrayList(ExtensionInfo).init(backing_allocator),
     };
 
     errdefer spec.deinit();
@@ -211,7 +222,7 @@ fn processBitmaskType(spec: *Spec, ty: *xml.Element) void {
         if (spec.bitmasks.put(name, .{.Alias = alias}) catch unreachable) |_| unreachable;
     } else {
         const name = ty.findChildByTag("name").?.children.at(0).CharData;
-        const bits: BitmaskBits = if (ty.getAttribute("requires")) |bits_name| .{.Enum = bits_name} else .None;
+        const bits: Bitmask = if (ty.getAttribute("requires")) |bits_name| .{.Enum = bits_name} else .None;
         if (spec.bitmasks.put(name, bits) catch unreachable) |_| unreachable;
     }
 }
@@ -231,27 +242,49 @@ fn processExtensions(spec: *Spec, registry: xml.Document) void {
     var extensions = registry.root.findChildByTag("extensions").?;
     var ext_it = extensions.findChildrenByTag("extension");
     while (ext_it.next()) |ext| {
-        var req_it = ext.findChildrenByTag("require");
-        while (req_it.next()) |req| {
-            processExtension(spec, ext, req);
+        if (ext.getAttribute("supported")) |support| {
+            if (mem.eql(u8, support, "disabled")) continue;
         }
+
+        processExtension(spec, ext);
     }
 }
 
-fn processExtension(spec: *Spec, ext: *xml.Element, req: *xml.Element) void {
+fn processExtension(spec: *Spec, ext: *xml.Element) void {
     const ext_nr_str = ext.getAttribute("number").?;
-    const ext_nr = std.fmt.parseInt(i32, ext_nr_str, 10) catch unreachable;
+    const ext_nr = std.fmt.parseInt(u32, ext_nr_str, 10) catch unreachable;
 
-    var it = req.findChildrenByTag("enum");
-    while (it.next()) |field| {
-        const enum_name = field.getAttribute("extends") orelse continue;
+    var version: ?u32 = null;
 
-        // Some extensions define fields for other extensions,
-        // these are also defined in those extensions, so just skip them
-        if (field.getAttribute("extnumber")) |_| continue;
-        const kv = spec.enums.get(enum_name).?;
-        kv.value.processFieldFromXml(field, ext_nr);
+    var req_it = ext.findChildrenByTag("require");
+    while (req_it.next()) |req| {
+        var it = req.findChildrenByTag("enum");
+        while (it.next()) |field| {
+            if (field.getAttribute("extends")) |enum_name| {
+                // Some extensions define fields for other extensions,
+                // these are also defined in those extensions, so just skip them
+                if (field.getAttribute("extnumber")) |_| continue;
+
+                const kv = spec.enums.get(enum_name).?;
+                kv.value.processFieldFromXml(field, ext_nr);
+            } else if (field.getAttribute("name")) |name| {
+                if (mem.endsWith(u8, name, "_SPEC_VERSION")) {
+                    const version_str = field.getAttribute("value").?;
+                    version = std.fmt.parseInt(u32, version_str, 10) catch unreachable;
+                }
+            }
+        }
     }
+
+    std.debug.warn("{}\n", .{ext.getAttribute("name")});
+
+    var ext_info = ExtensionInfo{
+        .name = ext.getAttribute("name").?,
+        .number = ext_nr,
+        .version = version.?
+    };
+
+    spec.extensions.append(ext_info) catch unreachable;
 }
 
 fn processFeatures(spec: *Spec, registry: xml.Document) void {
