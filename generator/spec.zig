@@ -9,6 +9,7 @@ const Spec = struct {
     enums: std.StringHashMap(Enum),
     bitmasks: std.StringHashMap(Bitmask),
     extensions: std.ArrayList(ExtensionInfo),
+    handles: std.StringHashMap(Handle),
 
     fn deinit(self: Spec) void {
         self.enums.deinit();
@@ -36,7 +37,7 @@ const Spec = struct {
 
                 switch (b.value) {
                     .None => std.debug.warn("\n", .{}),
-                    .Enum => |bits| std.debug.warn(" [bits: {}]\n", .{bits}),
+                    .BitsEnum => |bits| std.debug.warn(" [bits: {}]\n", .{bits}),
                     .Alias => |alias| std.debug.warn(" [alias of: {}]\n", .{alias})
                 }
             }
@@ -48,12 +49,32 @@ const Spec = struct {
                 std.debug.warn("    {}: {}, version {}\n", .{ext.number, ext.name, ext.version});
             }
         }
+
+        {
+            std.debug.warn("Handles:\n", .{});
+            var it = self.handles.iterator();
+            while (it.next()) |kv| {
+                std.debug.warn("    {}", .{kv.key});
+
+                switch (kv.value) {
+                    .Alias => |alias| std.debug.warn(" (alias of {})\n", .{alias}),
+                    .NonDispatchable => std.debug.warn(" (non-dispatchable)\n", .{}),
+                    else => std.debug.warn("\n", .{})
+                }
+            }
+        }
     }
+};
+
+const Handle = union(enum) {
+    Dispatchable,
+    NonDispatchable,
+    Alias: []const u8
 };
 
 const Bitmask = union(enum) {
     None,
-    Enum: []const u8,
+    BitsEnum: []const u8,
     Alias: []const u8
 };
 
@@ -106,7 +127,7 @@ const Enum = struct {
         value: Value
     };
 
-    const backwards_compat_note = "Backwards-compatible alias containing a typo";
+    const typo_note = "Backwards-compatible alias containing a typo";
     const deprecation_note = "Deprecated name for backwards compatibility";
 
     kind: Kind,
@@ -171,7 +192,7 @@ const Enum = struct {
 
     fn isBackwardsCompatAlias(field: *xml.Element) bool {
         if (field.getAttribute("comment")) |comment| {
-            return mem.eql(u8, comment, Enum.backwards_compat_note) or
+            return mem.eql(u8, comment, Enum.typo_note) or
                 mem.eql(u8, comment, Enum.deprecation_note);
         }
 
@@ -193,6 +214,7 @@ pub fn generate(backing_allocator: *Allocator, registry: xml.Document) Spec {
         .enums = std.StringHashMap(Enum).init(backing_allocator),
         .bitmasks = std.StringHashMap(Bitmask).init(backing_allocator),
         .extensions = std.ArrayList(ExtensionInfo).init(backing_allocator),
+        .handles = std.StringHashMap(Handle).init(backing_allocator)
     };
 
     errdefer spec.deinit();
@@ -212,6 +234,8 @@ fn processTypes(spec: *Spec, registry: xml.Document) void {
         const category = ty.getAttribute("category") orelse continue;
         if (mem.eql(u8, category, "bitmask")) {
             processBitmaskType(spec, ty);
+        } else if (mem.eql(u8, category, "handle")) {
+            processHandleType(spec, ty);
         }
     }
 }
@@ -222,8 +246,20 @@ fn processBitmaskType(spec: *Spec, ty: *xml.Element) void {
         if (spec.bitmasks.put(name, .{.Alias = alias}) catch unreachable) |_| unreachable;
     } else {
         const name = ty.findChildByTag("name").?.children.at(0).CharData;
-        const bits: Bitmask = if (ty.getAttribute("requires")) |bits_name| .{.Enum = bits_name} else .None;
+        const bits: Bitmask = if (ty.getAttribute("requires")) |bits_name| .{.BitsEnum = bits_name} else .None;
         if (spec.bitmasks.put(name, bits) catch unreachable) |_| unreachable;
+    }
+}
+
+fn processHandleType(spec: *Spec, ty: *xml.Element) void {
+    if (ty.getAttribute("alias")) |alias| {
+        const name = ty.getAttribute("name").?;
+        if (spec.handles.put(name, .{.Alias = alias}) catch unreachable) |_| unreachable;
+    } else {
+        const define_type_str = ty.findChildByTag("type").?.children.at(0).CharData;
+        const name = ty.findChildByTag("name").?.children.at(0).CharData;
+        const handle: Handle = if (std.mem.eql(u8, define_type_str, "VK_DEFINE_HANDLE")) .Dispatchable else .NonDispatchable;
+        if (spec.handles.put(name, handle) catch unreachable) |_| unreachable;
     }
 }
 
