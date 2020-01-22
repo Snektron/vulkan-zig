@@ -97,7 +97,12 @@ pub const Registry = struct {
             std.debug.warn("Structs:\n", .{});
             var it = self.structs.iterator();
             while (it.next()) |kv| {
-                std.debug.warn("    {} ({} fields)\n", .{kv.key, kv.value.members.count()});
+                std.debug.warn("    {}:\n", .{kv.key});
+
+                var member_it = kv.value.members.iterator(0);
+                while (member_it.next()) |member| {
+                    std.debug.warn("        {} = {}\n", .{member.name, member.type_info});
+                }
             }
         }
 
@@ -190,24 +195,31 @@ const TypeInfo = struct {
         return type_info;
     }
 
-    fn dump(self: TypeInfo) void {
+    pub fn format(
+        self: TypeInfo,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        context: var,
+        comptime Errors: type,
+        output: fn (@TypeOf(context), []const u8) Errors!void
+    ) Errors!void {
         for (self.pointers) |ptr| {
             switch (ptr.size) {
-                .One => std.debug.warn("*", .{}),
-                .Many => std.debug.warn("[*]", .{}),
-                .ZeroTerminated => std.debug.warn("[*:0]", .{})
+                .One => try output(context, "*"),
+                .Many => try output(context, "[*]"),
+                .ZeroTerminated => try output(context, "[*:0]")
             }
 
             if (ptr.is_const) {
-                std.debug.warn("const ", .{});
+                try output(context, "const ");
             }
         }
 
         if (self.array_size) |array_size| {
-            std.debug.warn("[{}]", .{array_size});
+            try std.fmt.format(context, Errors, output, "[{}]", .{array_size});
         }
 
-        std.debug.warn("{}", .{self.name});
+        try output(context, self.name);
     }
 
     fn lenToPointerSize(len: []const u8) PointerSize {
@@ -224,17 +236,19 @@ const TypeInfo = struct {
 const StructInfo = struct {
     const Member = struct {
         name: []const u8,
-        ty: TypeInfo,
+        type_info: TypeInfo,
     };
 
     members: std.SegmentedList(Member, 0),
-    extends: ?[]const u8,
 
-    fn init(allocator: *Allocator, extends: ?[]const u8) StructInfo {
+    fn init(allocator: *Allocator) StructInfo {
         return .{
             .members = std.SegmentedList(Member, 0).init(allocator),
-            .extends = extends,
         };
+    }
+
+    fn addMember(self: *StructInfo, name: []const u8, type_info: TypeInfo) void {
+        self.members.push(.{.name = name, .type_info = type_info}) catch unreachable;
     }
 };
 
@@ -412,20 +426,20 @@ fn processHandleType(registry: *Registry, ty: *xml.Element) void {
 
 fn processStructType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getAttribute("name").?;
-    const extends = ty.getAttribute("structextends");
 
-    var s = StructInfo.init(&registry.arena.allocator, extends);
+    if (ty.getAttribute("alias")) |alias| {
+        // TODO
+        return;
+    }
 
-    std.debug.warn("{}:\n", .{name});
+    var s = StructInfo.init(&registry.arena.allocator);
 
     var members = ty.findChildrenByTag("member");
     while (members.next()) |member| {
         const member_name = member.getCharData("name").?;
         const type_info = TypeInfo.fromXml(&registry.arena.allocator, member);
 
-        std.debug.warn("    {} = ", .{member_name});
-        type_info.dump();
-        std.debug.warn("\n", .{});
+        s.addMember(member_name, type_info);
     }
 
     if (registry.structs.put(name, s) catch unreachable) |_| unreachable;

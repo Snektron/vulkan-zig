@@ -23,7 +23,7 @@ pub fn main() !void {
     const registry = reg.generate(std.heap.page_allocator, spec.root);
     defer registry.deinit();
 
-    // registry.dump();
+    registry.dump();
 }
 
 test "main" {
