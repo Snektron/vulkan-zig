@@ -43,6 +43,18 @@ pub const Element = struct {
         return null;
     }
 
+    fn getCharData(self: *Element, child_tag: []const u8) ?[]const u8 {
+        const child = self.findChildByTag(child_tag) orelse return null;
+        if (child.children.count() != 1) {
+            return null;
+        }
+
+        return switch (child.children.at(0).*) {
+            .CharData => |char_data| char_data,
+            else => null
+        };
+    }
+
     fn findChildByTag(self: *Element, tag: []const u8) ?*Element {
         return self.findChildrenByTag(tag).next();
     }
