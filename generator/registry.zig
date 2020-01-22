@@ -97,7 +97,7 @@ pub const Registry = struct {
             std.debug.warn("Structs:\n", .{});
             var it = self.structs.iterator();
             while (it.next()) |kv| {
-                std.debug.warn("    {}:\n", .{kv.key});
+                std.debug.warn("    {} ({} aliases):\n", .{kv.key, kv.value.aliases.count()});
 
                 var member_it = kv.value.members.iterator(0);
                 while (member_it.next()) |member| {
@@ -203,6 +203,10 @@ const TypeInfo = struct {
         comptime Errors: type,
         output: fn (@TypeOf(context), []const u8) Errors!void
     ) Errors!void {
+        if (self.array_size) |array_size| {
+            try std.fmt.format(context, Errors, output, "[{}]", .{array_size});
+        }
+
         for (self.pointers) |ptr| {
             switch (ptr.size) {
                 .One => try output(context, "*"),
@@ -213,10 +217,6 @@ const TypeInfo = struct {
             if (ptr.is_const) {
                 try output(context, "const ");
             }
-        }
-
-        if (self.array_size) |array_size| {
-            try std.fmt.format(context, Errors, output, "[{}]", .{array_size});
         }
 
         try output(context, self.name);
@@ -240,15 +240,21 @@ const StructInfo = struct {
     };
 
     members: std.SegmentedList(Member, 0),
+    aliases: std.SegmentedList([]const u8, 0),
 
     fn init(allocator: *Allocator) StructInfo {
         return .{
             .members = std.SegmentedList(Member, 0).init(allocator),
+            .aliases = std.SegmentedList([]const u8, 0).init(allocator)
         };
     }
 
     fn addMember(self: *StructInfo, name: []const u8, type_info: TypeInfo) void {
         self.members.push(.{.name = name, .type_info = type_info}) catch unreachable;
+    }
+
+    fn addAlias(self: *StructInfo, alias: []const u8) void {
+        self.aliases.push(alias) catch unreachable;
     }
 };
 
@@ -428,7 +434,9 @@ fn processStructType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getAttribute("name").?;
 
     if (ty.getAttribute("alias")) |alias| {
-        // TODO
+        // Aliases should always be defined after their parent type, so this should be safe
+        var s = &registry.structs.get(alias).?.value;
+        s.addAlias(name);
         return;
     }
 
