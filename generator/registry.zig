@@ -5,6 +5,17 @@ const Allocator = mem.Allocator;
 const SegmentedList = std.SegmentedList;
 const StringHashMap = std.StringHashMap;
 
+fn count(haystack: []const u8, needle: u8) usize {
+    var total: usize = 0;
+    for (haystack) |elem| {
+        if (elem == needle) {
+            total += 1;
+        }
+    }
+
+    return total;
+}
+
 pub const Registry = struct {
     arena: std.heap.ArenaAllocator,
 
@@ -12,6 +23,7 @@ pub const Registry = struct {
     bitmasks: StringHashMap(BitmaskInfo),
     handles: StringHashMap(HandleInfo),
     structs: StringHashMap(StructInfo),
+    commands: StringHashMap(CommandInfo),
 
     extensions: SegmentedList(ExtensionInfo, 0),
 
@@ -28,6 +40,7 @@ pub const Registry = struct {
                 .bitmasks = StringHashMap(BitmaskInfo).init(allocator),
                 .handles = StringHashMap(HandleInfo).init(allocator),
                 .structs = StringHashMap(StructInfo).init(allocator),
+                .commands = StringHashMap(CommandInfo).init(allocator),
                 .extensions = undefined
             };
 
@@ -44,6 +57,7 @@ pub const Registry = struct {
         self.bitmasks.deinit();
         self.handles.deinit();
         self.structs.deinit();
+        self.commands.deinit();
 
         // Copy to stack so that the arena doesn't destroy itself
         var arena = self.arena;
@@ -107,6 +121,35 @@ pub const Registry = struct {
         }
 
         {
+            std.debug.warn("Commands:\n", .{});
+            var it = self.commands.iterator();
+            while (it.next()) |kv| {
+                std.debug.warn("    fn {}(\n", .{kv.key});
+
+                var param_it = kv.value.parameters.iterator(0);
+                while (param_it.next()) |param| {
+                    std.debug.warn("        {}: {},\n", .{param.name, param.type_info});
+                }
+
+                std.debug.warn("    ) {}\n", .{kv.value.return_type});
+
+                if (kv.value.success_codes.len > 0) {
+                    std.debug.warn("        Success codes:\n", .{});
+                    for (kv.value.success_codes) |code| {
+                        std.debug.warn("            {}\n", .{code});
+                    }
+                }
+
+                if (kv.value.error_codes.len > 0) {
+                    std.debug.warn("        Error codes:\n", .{});
+                    for (kv.value.error_codes) |code| {
+                        std.debug.warn("            {}\n", .{code});
+                    }
+                }
+            }
+        }
+
+        {
             std.debug.warn("Extensions:\n", .{});
             var it = self.extensions.iterator(0);
             while (it.next()) |ext| {
@@ -151,10 +194,7 @@ const TypeInfo = struct {
         }
 
         if (stars) |ptr_text| {
-            var npointers: usize = 0;
-            for (ptr_text) |c| {
-                if (c == '*') npointers += 1;
-            }
+            const npointers = count(ptr_text, '*');
 
             type_info.pointers = allocator.alloc(TypeInfo.Pointer, npointers) catch unreachable;
 
@@ -236,17 +276,31 @@ const TypeInfo = struct {
 const StructInfo = struct {
     const Member = struct {
         name: []const u8,
-        type_info: TypeInfo,
+        type_info: TypeInfo
     };
 
-    members: std.SegmentedList(Member, 0),
-    aliases: std.SegmentedList([]const u8, 0),
+    members: SegmentedList(Member, 0),
+    aliases: SegmentedList([]const u8, 0),
 
     fn init(allocator: *Allocator) StructInfo {
         return .{
-            .members = std.SegmentedList(Member, 0).init(allocator),
-            .aliases = std.SegmentedList([]const u8, 0).init(allocator)
+            .members = SegmentedList(Member, 0).init(allocator),
+            .aliases = SegmentedList([]const u8, 0).init(allocator)
         };
+    }
+
+    fn fromXml(allocator: *Allocator, elem: *xml.Element) StructInfo {
+        var s = StructInfo.init(allocator);
+
+        var members = elem.findChildrenByTag("member");
+        while (members.next()) |member| {
+            const member_name = member.getCharData("name").?;
+            const type_info = TypeInfo.fromXml(allocator, member);
+
+            s.addMember(member_name, type_info);
+        }
+
+        return s;
     }
 
     fn addMember(self: *StructInfo, name: []const u8, type_info: TypeInfo) void {
@@ -254,6 +308,73 @@ const StructInfo = struct {
     }
 
     fn addAlias(self: *StructInfo, alias: []const u8) void {
+        self.aliases.push(alias) catch unreachable;
+    }
+};
+
+const CommandInfo = struct {
+    const Parameter = struct {
+        name: []const u8,
+        type_info: TypeInfo
+    };
+
+    parameters: SegmentedList(Parameter, 0),
+    return_type: []const u8, // Return type is always plain
+    success_codes: []const []const u8,
+    error_codes: []const []const u8,
+    aliases: SegmentedList([]const u8, 0),
+
+    fn init(allocator: *Allocator, return_type: []const u8) CommandInfo {
+        return .{
+            .parameters = SegmentedList(Parameter, 0).init(allocator),
+            .return_type = return_type,
+            .success_codes = &[_][]u8{},
+            .error_codes = &[_][]u8{},
+            .aliases = SegmentedList([]const u8, 0).init(allocator)
+        };
+    }
+
+    fn fromXml(allocator: *Allocator, elem: *xml.Element) CommandInfo {
+        const return_type = elem.findChildByTag("proto").?.getCharData("type").?;
+        var cmd = CommandInfo.init(allocator, return_type);
+
+        if (elem.getAttribute("successcodes")) |codes| {
+            cmd.success_codes = CommandInfo.splitResultCodes(allocator, codes);
+        }
+
+        if (elem.getAttribute("errorcodes")) |codes| {
+            cmd.error_codes = CommandInfo.splitResultCodes(allocator, codes);
+        }
+
+        var parameters = elem.findChildrenByTag("param");
+        while (parameters.next()) |param| {
+            const param_name = param.getCharData("name").?;
+            const type_info = TypeInfo.fromXml(allocator, param);
+
+            cmd.addParameter(param_name, type_info);
+        }
+
+        return cmd;
+    }
+
+    fn splitResultCodes(allocator: *Allocator, text: []const u8) []const []const u8 {
+        const ncodes = 1 + count(text, ',');
+        const codes = allocator.alloc([]const u8, ncodes) catch unreachable;
+
+        var it = mem.separate(text, ",");
+
+        for (codes) |*code, i| {
+            code.* = it.next().?;
+        }
+
+        return codes;
+    }
+
+    fn addParameter(self: *CommandInfo, name: []const u8, type_info: TypeInfo) void {
+        self.parameters.push(.{.name = name, .type_info = type_info}) catch unreachable;
+    }
+
+    fn addAlias(self: *CommandInfo, alias: []const u8) void {
         self.aliases.push(alias) catch unreachable;
     }
 };
@@ -304,12 +425,12 @@ const EnumInfo = struct {
     };
 
     kind: Kind,
-    variants: std.SegmentedList(Variant, 0),
+    variants: SegmentedList(Variant, 0),
 
     fn init(allocator: *Allocator, kind: Kind) EnumInfo {
         return .{
             .kind = kind,
-            .variants = std.SegmentedList(Variant, 0).init(allocator)
+            .variants = SegmentedList(Variant, 0).init(allocator)
         };
     }
 
@@ -385,7 +506,8 @@ pub fn generate(backing_allocator: *Allocator, root: *xml.Element) *Registry {
     var registry = Registry.init(backing_allocator) catch unreachable;
 
     processTypes(registry, root);
-    processEnumInfos(registry, root);
+    processEnums(registry, root);
+    processCommands(registry, root);
     processFeatures(registry, root);
     processExtensions(registry, root);
 
@@ -440,26 +562,33 @@ fn processStructType(registry: *Registry, ty: *xml.Element) void {
         return;
     }
 
-    var s = StructInfo.init(&registry.arena.allocator);
-
-    var members = ty.findChildrenByTag("member");
-    while (members.next()) |member| {
-        const member_name = member.getCharData("name").?;
-        const type_info = TypeInfo.fromXml(&registry.arena.allocator, member);
-
-        s.addMember(member_name, type_info);
-    }
-
+    const s = StructInfo.fromXml(&registry.arena.allocator, ty);
     if (registry.structs.put(name, s) catch unreachable) |_| unreachable;
 }
 
-fn processEnumInfos(registry: *Registry, root: *xml.Element) void {
+fn processEnums(registry: *Registry, root: *xml.Element) void {
     var it = root.findChildrenByTag("enums");
     while (it.next()) |enums| {
         const name = enums.getAttribute("name").?;
         if (!mem.eql(u8, name, "API Constants")) {
             const e = EnumInfo.fromXml(&registry.arena.allocator, enums);
             if (registry.enums.put(name, e) catch unreachable) |_| unreachable;
+        }
+    }
+}
+
+fn processCommands(registry: *Registry, root: *xml.Element) void {
+    var commands = root.findChildByTag("commands").?;
+    var command_it = commands.findChildrenByTag("command");
+    while (command_it.next()) |elem| {
+        if (elem.getAttribute("alias")) |alias| {
+            const name = elem.getAttribute("name").?;
+            var cmd = &registry.commands.get(alias).?.value;
+            cmd.addAlias(name);
+        } else {
+            const name = elem.findChildByTag("proto").?.getCharData("name").?;
+            const command = CommandInfo.fromXml(&registry.arena.allocator, elem);
+            if (registry.commands.put(name, command) catch unreachable) |_| unreachable;
         }
     }
 }
