@@ -24,7 +24,7 @@ pub const Registry = struct {
     handles: StringHashMap(HandleInfo),
     structs: StringHashMap(StructInfo),
     commands: StringHashMap(CommandInfo),
-
+    fn_ptrs: StringHashMap(CommandInfo),
     extensions: SegmentedList(ExtensionInfo, 0),
 
     fn init(allocator: *Allocator) !*Registry {
@@ -41,6 +41,7 @@ pub const Registry = struct {
                 .handles = StringHashMap(HandleInfo).init(allocator),
                 .structs = StringHashMap(StructInfo).init(allocator),
                 .commands = StringHashMap(CommandInfo).init(allocator),
+                .fn_ptrs = StringHashMap(CommandInfo).init(allocator),
                 .extensions = undefined
             };
 
@@ -58,6 +59,7 @@ pub const Registry = struct {
         self.handles.deinit();
         self.structs.deinit();
         self.commands.deinit();
+        self.fn_ptrs.deinit();
 
         // Copy to stack so that the arena doesn't destroy itself
         var arena = self.arena;
@@ -131,7 +133,7 @@ pub const Registry = struct {
                     std.debug.warn("        {}: {},\n", .{param.name, param.type_info});
                 }
 
-                std.debug.warn("    ) {}\n", .{kv.value.return_type});
+                std.debug.warn("    ) {}\n", .{kv.value.return_type_info});
 
                 if (kv.value.success_codes.len > 0) {
                     std.debug.warn("        Success codes:\n", .{});
@@ -146,6 +148,21 @@ pub const Registry = struct {
                         std.debug.warn("            {}\n", .{code});
                     }
                 }
+            }
+        }
+
+        {
+            std.debug.warn("Function pointers:\n", .{});
+            var it = self.fn_ptrs.iterator();
+            while (it.next()) |kv| {
+                std.debug.warn("    {} = fn(\n", .{kv.key});
+
+                var param_it = kv.value.parameters.iterator(0);
+                while (param_it.next()) |param| {
+                    std.debug.warn("        {}: {},\n", .{param.name, param.type_info});
+                }
+
+                std.debug.warn("    ) {}\n", .{kv.value.return_type_info});
             }
         }
 
@@ -177,7 +194,7 @@ const TypeInfo = struct {
     array_size: ?[]const u8,
 
     fn fromXml(allocator: *Allocator, elem: *xml.Element) TypeInfo {
-        var type_info = TypeInfo {
+        var type_info = TypeInfo{
             .name = elem.getCharData("type").?,
             .pointers = &[_]Pointer{},
             .array_size = elem.getCharData("enum")
@@ -187,7 +204,7 @@ const TypeInfo = struct {
         var stars: ?[]const u8 = null;
         var child_it = elem.children.iterator(0);
         while (child_it.next()) |child| {
-            if (child.* == .CharData and mem.indexOf(u8, child.CharData, "*") != null) {
+            if (child.* == .CharData and mem.indexOfScalar(u8, child.CharData, '*') != null) {
                 stars = child.CharData;
                 break;
             }
@@ -203,12 +220,10 @@ const TypeInfo = struct {
                 var len_it = std.mem.separate(lens, ",");
                 for (type_info.pointers) |*ptr, i| {
                     ptr.size = if (len_it.next()) |len| lenToPointerSize(len) else .One;
-                    ptr.is_const = false;
                 }
             } else {
                 for (type_info.pointers) |*ptr| {
                     ptr.size = .One;
-                    ptr.is_const = false;
                 }
             }
 
@@ -216,23 +231,102 @@ const TypeInfo = struct {
             // Beware: the const of the inner pointer is given before the type name
             // while the others are in the `ptr_text`.
 
-            // Check the inner-most pointer
-            const first_child = elem.children.at(0);
-            const first_const = first_child.* == .CharData and mem.indexOf(u8, first_child.CharData, "const") != null;
-            type_info.pointers[npointers - 1].is_const = first_const;
+            const pre = switch (elem.children.at(0).*) {
+                .CharData => |char_data| char_data,
+                else => ""
+            };
 
-            // Check the outer pointers
-            var const_it = std.mem.separate(ptr_text, "*");
-            _ = const_it.next().?; // Skip the first field
-            var i = npointers - 1;
-            while (i > 0) {
-                i -= 1;
-                const is_const = mem.indexOf(u8, const_it.next().?, "const") != null;
-                type_info.pointers[npointers - i - 1].is_const = is_const;
-            }
+            type_info.parseConstness(pre, ptr_text);
         }
 
         return type_info;
+    }
+
+    fn fromFnPtrReturnTypeXml(allocator: *Allocator, elem: *xml.Element) TypeInfo {
+        // In function pointers, the return type is not contained within a designated tag.
+        // The first chardata of the type has the following structure: 'typedef <return type> (VKAPI_PTR *'
+        // In order to parse the <return type>, strip everything from it until the last star and take the last word
+        // to be the type. Then parse everything in front of the return type word and after the return type word
+        const proto = elem.children.at(0).CharData;
+        std.debug.assert(mem.startsWith(u8, proto, "typedef ") and mem.endsWith(u8, proto, " (VKAPI_PTR *"));
+        const return_type = proto["typedef ".len .. proto.len - " (VKAPI_PTR *".len];
+
+        var first_star = return_type.len;
+        var npointers: usize = 0;
+        var i = return_type.len;
+        while (i > 0) {
+            i -= 1;
+            if (return_type[i] == '*') {
+                first_star = i;
+                npointers += 1;
+            }
+        }
+
+        const name_start = if (mem.lastIndexOfScalar(u8, return_type[0 .. first_star], ' ')) |index| index + 1 else 0;
+        var type_info = TypeInfo{
+            .name = return_type[name_start .. first_star],
+            .pointers = &[_]Pointer{},
+            .array_size = null
+        };
+
+        if (npointers > 0) {
+            type_info.pointers = allocator.alloc(TypeInfo.Pointer, npointers) catch unreachable;
+            for (type_info.pointers) |*ptr| {
+                ptr.size = .One;
+            }
+
+            type_info.parseConstness(return_type[0 .. name_start], return_type[first_star ..]);
+        }
+
+        return type_info;
+    }
+
+    fn fromFnPtrParamTypeXml(allocator: *Allocator, pre: []const u8, name: []const u8, post: []const u8) TypeInfo {
+        // `pre` and `post` contain information that is shared with other types, seperated by commas. In
+        // the case of `pre`, get everything after the comma (if present), and for `post`, everything before
+        // and including the last star before the last. If there is no star, the segment contains no
+        // useful information anyway. Note that the star should never appear *after* the comma (that wouldn't be
+        // a valid C type).
+        // Ex: <type>void</type>* pUserData, <type>void</type>* pMemory
+
+        const pre_start = if (mem.indexOfScalar(u8, pre, ',')) |index| index + 1 else pre.len;
+        const post_end = if (mem.indexOfScalar(u8, post, '*')) |index| index + 1 else 0;
+        const npointers = count(post[0 .. post_end], '*');
+
+        var type_info = TypeInfo{
+            .name = name,
+            .pointers = &[_]Pointer{},
+            .array_size = null
+        };
+
+        if (npointers > 0) {
+            type_info.pointers = allocator.alloc(TypeInfo.Pointer, npointers) catch unreachable;
+            for (type_info.pointers) |*ptr| {
+                ptr.size = .One;
+            }
+
+            type_info.parseConstness(pre[pre_start ..], post[0 .. post_end]);
+        }
+
+        return type_info;
+    }
+
+    fn parseConstness(self: *TypeInfo, pre: []const u8, post: []const u8) void {
+        // Beware: the const of the inner pointer is given before the type name (in `pre`)
+        // while the others are in the `post`.
+
+        // Check the outer pointers
+        var const_it = std.mem.separate(post, "*");
+        var i: usize = self.pointers.len;
+        while (i > 0) {
+            i -= 1;
+            const is_const = mem.indexOf(u8, const_it.next().?, "const") != null;
+            self.pointers[i].is_const = is_const;
+        }
+
+        // Check the inner-most pointer
+        const first_const = mem.indexOf(u8, pre, "const") != null;
+        self.pointers[self.pointers.len - 1].is_const = first_const;
     }
 
     pub fn format(
@@ -319,15 +413,15 @@ const CommandInfo = struct {
     };
 
     parameters: SegmentedList(Parameter, 0),
-    return_type: []const u8, // Return type is always plain
+    return_type_info: TypeInfo,
     success_codes: []const []const u8,
     error_codes: []const []const u8,
     aliases: SegmentedList([]const u8, 0),
 
-    fn init(allocator: *Allocator, return_type: []const u8) CommandInfo {
+    fn init(allocator: *Allocator, return_type_info: TypeInfo) CommandInfo {
         return .{
             .parameters = SegmentedList(Parameter, 0).init(allocator),
-            .return_type = return_type,
+            .return_type_info = return_type_info,
             .success_codes = &[_][]u8{},
             .error_codes = &[_][]u8{},
             .aliases = SegmentedList([]const u8, 0).init(allocator)
@@ -335,8 +429,8 @@ const CommandInfo = struct {
     }
 
     fn fromXml(allocator: *Allocator, elem: *xml.Element) CommandInfo {
-        const return_type = elem.findChildByTag("proto").?.getCharData("type").?;
-        var cmd = CommandInfo.init(allocator, return_type);
+        const return_type_info = TypeInfo.fromXml(allocator, elem.findChildByTag("proto").?);
+        var cmd = CommandInfo.init(allocator, return_type_info);
 
         if (elem.getAttribute("successcodes")) |codes| {
             cmd.success_codes = CommandInfo.splitResultCodes(allocator, codes);
@@ -352,6 +446,31 @@ const CommandInfo = struct {
             const type_info = TypeInfo.fromXml(allocator, param);
 
             cmd.addParameter(param_name, type_info);
+        }
+
+        return cmd;
+    }
+
+    fn fromFnPtrXml(allocator: *Allocator, elem: *xml.Element) CommandInfo {
+        const return_type_info = TypeInfo.fromFnPtrReturnTypeXml(allocator, elem);
+        var cmd = CommandInfo.init(allocator, return_type_info);
+
+        // The parameters of a function pointer are formulated a bit weird, which is why
+        // the chardata surrounding a <type> is also required to parse it completely.
+        // This loop assumes there are no other elements in a function pointers declatation.
+        var i: usize = 3; // The first parameter's type is at offset 3
+        while (i < elem.children.count() - 1) : (i += 2) {
+            const pre = elem.children.at(i - 1).CharData;
+            const type_name = elem.children.at(i).Element.children.at(0).CharData;
+            const post = elem.children.at(i + 1).CharData;
+            const type_info = TypeInfo.fromFnPtrParamTypeXml(allocator, pre, type_name, post);
+
+            //  To find the type name, take everything until the first space before the last ) or ,.
+            const name_end = mem.lastIndexOfAny(u8, post, "),").?;
+            const name_start = mem.lastIndexOfScalar(u8, post[0 .. name_end], ' ').? + 1;
+            const name = post[name_start .. name_end];
+
+            cmd.addParameter(name, type_info);
         }
 
         return cmd;
@@ -525,6 +644,8 @@ fn processTypes(registry: *Registry, root: *xml.Element) void {
             processHandleType(registry, ty);
         } else if (mem.eql(u8, category, "struct")) {
             processStructType(registry, ty);
+        } else if (mem.eql(u8, category, "funcpointer")) {
+            processFuncPointerType(registry, ty);
         }
     }
 }
@@ -564,6 +685,12 @@ fn processStructType(registry: *Registry, ty: *xml.Element) void {
 
     const s = StructInfo.fromXml(&registry.arena.allocator, ty);
     if (registry.structs.put(name, s) catch unreachable) |_| unreachable;
+}
+
+fn processFuncPointerType(registry: *Registry, ty: *xml.Element) void {
+    const name = ty.getCharData("name").?;
+    const cmd = CommandInfo.fromFnPtrXml(&registry.arena.allocator, ty);
+    if (registry.fn_ptrs.put(name, cmd) catch unreachable) |_| unreachable;
 }
 
 fn processEnums(registry: *Registry, root: *xml.Element) void {
