@@ -28,5 +28,5 @@ pub fn main() !void {
 
 test "main" {
     _ = @import("xml.zig");
-    _ = @import("spec.zig");
+    _ = @import("registry.zig");
 }

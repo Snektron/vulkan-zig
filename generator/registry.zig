@@ -19,12 +19,8 @@ fn count(haystack: []const u8, needle: u8) usize {
 pub const Registry = struct {
     arena: std.heap.ArenaAllocator,
 
-    enums: StringHashMap(EnumInfo),
-    bitmasks: StringHashMap(BitmaskInfo),
-    handles: StringHashMap(HandleInfo),
-    structs: StringHashMap(StructInfo),
-    commands: StringHashMap(CommandInfo),
-    fn_ptrs: StringHashMap(CommandInfo),
+    declarations: SegmentedList(Declaration, 0),
+    declarations_by_name: StringHashMap(*Declaration),
     extensions: SegmentedList(ExtensionInfo, 0),
 
     fn init(allocator: *Allocator) !*Registry {
@@ -36,133 +32,55 @@ pub const Registry = struct {
             const registry = try arena.allocator.create(Registry);
             registry.* = .{
                 .arena = arena,
-                .enums = StringHashMap(EnumInfo).init(allocator),
-                .bitmasks = StringHashMap(BitmaskInfo).init(allocator),
-                .handles = StringHashMap(HandleInfo).init(allocator),
-                .structs = StringHashMap(StructInfo).init(allocator),
-                .commands = StringHashMap(CommandInfo).init(allocator),
-                .fn_ptrs = StringHashMap(CommandInfo).init(allocator),
+                .declarations = undefined,
+                .declarations_by_name = StringHashMap(*Declaration).init(allocator),
                 .extensions = undefined
             };
 
             break :blk registry;
         };
 
+        registry.declarations = SegmentedList(Declaration, 0).init(&registry.arena.allocator);
         registry.extensions = SegmentedList(ExtensionInfo, 0).init(&registry.arena.allocator);
 
         return registry;
     }
 
     fn deinit(self: *Registry) void {
-        self.enums.deinit();
-        self.bitmasks.deinit();
-        self.handles.deinit();
-        self.structs.deinit();
-        self.commands.deinit();
-        self.fn_ptrs.deinit();
+        self.declarations_by_name.deinit();
 
         // Copy to stack so that the arena doesn't destroy itself
         var arena = self.arena;
         arena.deinit();
     }
 
+    fn addDefinition(self: *Registry, name: []const u8, definition: Definition) void {
+        const ptr = self.declarations.addOne() catch unreachable;
+        ptr.* = .{
+            .name = name,
+            .definition = definition
+        };
+
+        if (self.declarations_by_name.put(name, ptr) catch unreachable) |existing| {
+            std.debug.warn("Duplicate definition {}\n", .{existing.key});
+            unreachable;
+        }
+    }
+
+    fn findDefinitionByName(self: *Registry, name: []const u8) ?*Definition {
+        if (self.declarations_by_name.get(name)) |kv| {
+            return &kv.value.definition;
+        }
+
+        return null;
+    }
+
     fn dump(self: *Registry) void {
         {
-            std.debug.warn("Enums:\n", .{});
-            var it = self.enums.iterator();
-            while (it.next()) |e| {
-                const kind_text = if (e.value.kind == .Bitmask) " (bitmask)" else "";
-                std.debug.warn("    {}{}:\n", .{ e.key, kind_text });
-
-                var variant_it = e.value.variants.iterator(0);
-                while (variant_it.next()) |variant| {
-                    std.debug.warn("        {}\n", .{variant.name});
-                }
-            }
-        }
-
-        {
-            std.debug.warn("Bitmasks:\n", .{});
-            var it = self.bitmasks.iterator();
-            while (it.next()) |b| {
-                std.debug.warn("    {}", .{b.key});
-
-                switch (b.value) {
-                    .None => std.debug.warn("\n", .{}),
-                    .Bits => |bits| std.debug.warn(" [bits: {}]\n", .{bits}),
-                    .Alias => |alias| std.debug.warn(" [alias of: {}]\n", .{alias}),
-                }
-            }
-        }
-
-        {
-            std.debug.warn("Handles:\n", .{});
-            var it = self.handles.iterator();
-            while (it.next()) |kv| {
-                std.debug.warn("    {}", .{kv.key});
-
-                switch (kv.value) {
-                    .Alias => |alias| std.debug.warn(" (alias of {})\n", .{alias}),
-                    .NonDispatchable => std.debug.warn(" (non-dispatchable)\n", .{}),
-                    else => std.debug.warn("\n", .{}),
-                }
-            }
-        }
-
-        {
-            std.debug.warn("Structs:\n", .{});
-            var it = self.structs.iterator();
-            while (it.next()) |kv| {
-                std.debug.warn("    {} ({} aliases):\n", .{kv.key, kv.value.aliases.count()});
-
-                var member_it = kv.value.members.iterator(0);
-                while (member_it.next()) |member| {
-                    std.debug.warn("        {} = {}\n", .{member.name, member.type_info});
-                }
-            }
-        }
-
-        {
-            std.debug.warn("Commands:\n", .{});
-            var it = self.commands.iterator();
-            while (it.next()) |kv| {
-                std.debug.warn("    fn {}(\n", .{kv.key});
-
-                var param_it = kv.value.parameters.iterator(0);
-                while (param_it.next()) |param| {
-                    std.debug.warn("        {}: {},\n", .{param.name, param.type_info});
-                }
-
-                std.debug.warn("    ) {}\n", .{kv.value.return_type_info});
-
-                if (kv.value.success_codes.len > 0) {
-                    std.debug.warn("        Success codes:\n", .{});
-                    for (kv.value.success_codes) |code| {
-                        std.debug.warn("            {}\n", .{code});
-                    }
-                }
-
-                if (kv.value.error_codes.len > 0) {
-                    std.debug.warn("        Error codes:\n", .{});
-                    for (kv.value.error_codes) |code| {
-                        std.debug.warn("            {}\n", .{code});
-                    }
-                }
-            }
-        }
-
-        {
-            std.debug.warn("Function pointers:\n", .{});
-            var it = self.fn_ptrs.iterator();
-            while (it.next()) |kv| {
-                std.debug.warn("    {} = fn(\n", .{kv.key});
-
-                var param_it = kv.value.parameters.iterator(0);
-                while (param_it.next()) |param| {
-                    std.debug.warn("        {}: {},\n", .{param.name, param.type_info});
-                }
-
-                std.debug.warn("    ) {}\n", .{kv.value.return_type_info});
+            std.debug.warn("Definitions:\n", .{});
+            var it = self.declarations.iterator(0);
+            while (it.next()) |decl| {
+                std.debug.warn("    {} ({})\n", .{decl.name, std.meta.tagName(decl.definition)});
             }
         }
 
@@ -176,11 +94,40 @@ pub const Registry = struct {
     }
 };
 
+const ExtensionInfo = struct {
+    name: []const u8,
+    number: u32,
+    version: u32,
+};
+
+const Declaration = struct {
+    name: []const u8,
+    definition: Definition
+};
+
+const Definition = union(enum) {
+    Struct: StructInfo,
+    Enum: EnumInfo,
+    Bitmask: BitmaskInfo,
+    Handle: HandleInfo,
+    FnPtr: CommandInfo,
+    Command: CommandInfo,
+    Alias: []const u8
+};
+
+const HandleInfo = struct {
+    dispatchable: bool
+};
+
+const BitmaskInfo = struct {
+    bits_enum: ?[]const u8
+};
+
 // Type info of fields, function parameters, and return types.
 const TypeInfo = struct {
     const PointerSize = enum {
         One,
-        Many, // The length is either given by some expression
+        Many, // The length is given by some expression which cannot be expressed in Zig
         ZeroTerminated
     };
 
@@ -374,12 +321,10 @@ const StructInfo = struct {
     };
 
     members: SegmentedList(Member, 0),
-    aliases: SegmentedList([]const u8, 0),
 
     fn init(allocator: *Allocator) StructInfo {
         return .{
-            .members = SegmentedList(Member, 0).init(allocator),
-            .aliases = SegmentedList([]const u8, 0).init(allocator)
+            .members = SegmentedList(Member, 0).init(allocator)
         };
     }
 
@@ -400,10 +345,6 @@ const StructInfo = struct {
     fn addMember(self: *StructInfo, name: []const u8, type_info: TypeInfo) void {
         self.members.push(.{.name = name, .type_info = type_info}) catch unreachable;
     }
-
-    fn addAlias(self: *StructInfo, alias: []const u8) void {
-        self.aliases.push(alias) catch unreachable;
-    }
 };
 
 const CommandInfo = struct {
@@ -416,7 +357,6 @@ const CommandInfo = struct {
     return_type_info: TypeInfo,
     success_codes: []const []const u8,
     error_codes: []const []const u8,
-    aliases: SegmentedList([]const u8, 0),
 
     fn init(allocator: *Allocator, return_type_info: TypeInfo) CommandInfo {
         return .{
@@ -424,7 +364,6 @@ const CommandInfo = struct {
             .return_type_info = return_type_info,
             .success_codes = &[_][]u8{},
             .error_codes = &[_][]u8{},
-            .aliases = SegmentedList([]const u8, 0).init(allocator)
         };
     }
 
@@ -492,46 +431,9 @@ const CommandInfo = struct {
     fn addParameter(self: *CommandInfo, name: []const u8, type_info: TypeInfo) void {
         self.parameters.push(.{.name = name, .type_info = type_info}) catch unreachable;
     }
-
-    fn addAlias(self: *CommandInfo, alias: []const u8) void {
-        self.aliases.push(alias) catch unreachable;
-    }
-};
-
-const HandleInfo = union(enum) {
-    Dispatchable,
-    NonDispatchable,
-    Alias: []const u8
-};
-
-const BitmaskInfo = union(enum) {
-    None,
-    Bits: []const u8,
-    Alias: []const u8
-};
-
-const ExtensionInfo = struct {
-    name: []const u8,
-    number: u32,
-    version: u32,
 };
 
 const EnumInfo = struct {
-    const Kind = enum {
-        Bitmask,
-        EnumInfo,
-
-        fn parse(str: []const u8) !Kind {
-            if (mem.eql(u8, str, "bitmask")) {
-                return .Bitmask;
-            } else if (mem.eql(u8, str, "enum")) {
-                return .EnumInfo;
-            } else {
-                return error.InvalidEnumInfoKind;
-            }
-        }
-    };
-
     const Value = union(enum) {
         Bitpos: u5, //log2(u32.bit_count)
         Value: i32,
@@ -543,25 +445,12 @@ const EnumInfo = struct {
         value: Value
     };
 
-    kind: Kind,
     variants: SegmentedList(Variant, 0),
 
-    fn init(allocator: *Allocator, kind: Kind) EnumInfo {
+    fn init(allocator: *Allocator) EnumInfo {
         return .{
-            .kind = kind,
             .variants = SegmentedList(Variant, 0).init(allocator)
         };
-    }
-
-    fn fromXml(allocator: *Allocator, enums: *xml.Element) EnumInfo {
-        const kind = EnumInfo.Kind.parse(enums.getAttribute("type").?) catch unreachable;
-        var e = EnumInfo.init(allocator, kind);
-        var it = enums.findChildrenByTag("enum");
-        while (it.next()) |variant| {
-            e.processVariantFromXml(variant, null);
-        }
-
-        return e;
     }
 
     fn addVariant(self: *EnumInfo, name: []const u8, value: Value) void {
@@ -639,7 +528,9 @@ fn processTypes(registry: *Registry, root: *xml.Element) void {
     while (it.next()) |ty| {
         const category = ty.getAttribute("category") orelse continue;
         if (mem.eql(u8, category, "bitmask")) {
-            processBitmaskInfoType(registry, ty);
+            processBitmaskType(registry, ty);
+        } else if (mem.eql(u8, category, "enum")) {
+            processEnumType(registry, ty);
         } else if (mem.eql(u8, category, "handle")) {
             processHandleType(registry, ty);
         } else if (mem.eql(u8, category, "struct")) {
@@ -650,47 +541,59 @@ fn processTypes(registry: *Registry, root: *xml.Element) void {
     }
 }
 
-fn processBitmaskInfoType(registry: *Registry, ty: *xml.Element) void {
+fn processBitmaskType(registry: *Registry, ty: *xml.Element) void {
     if (ty.getAttribute("name")) |name| {
         const alias = ty.getAttribute("alias").?;
-        if (registry.bitmasks.put(name, .{.Alias = alias}) catch unreachable) |_| unreachable;
+        registry.addDefinition(name, .{.Alias = alias});
     } else {
         const name = ty.getCharData("name").?;
-        const bits: BitmaskInfo = if (ty.getAttribute("requires")) |bits_name| .{.Bits = bits_name} else .None;
-        if (registry.bitmasks.put(name, bits) catch unreachable) |_| unreachable;
+        const info = BitmaskInfo {
+            .bits_enum = ty.getAttribute("requires")
+        };
+
+        registry.addDefinition(name, .{.Bitmask = info});
     }
 }
 
 fn processHandleType(registry: *Registry, ty: *xml.Element) void {
     if (ty.getAttribute("alias")) |alias| {
         const name = ty.getAttribute("name").?;
-        if (registry.handles.put(name, .{.Alias = alias}) catch unreachable) |_| unreachable;
+        registry.addDefinition(name, .{.Alias = alias});
     } else {
         const define_type_str = ty.getCharData("type").?;
         const name = ty.getCharData("name").?;
-        const handle: HandleInfo = if (std.mem.eql(u8, define_type_str, "VK_DEFINE_HANDLE")) .Dispatchable else .NonDispatchable;
-        if (registry.handles.put(name, handle) catch unreachable) |_| unreachable;
+        const info = HandleInfo {
+            .dispatchable = std.mem.eql(u8, define_type_str, "VK_DEFINE_HANDLE")
+        };
+
+        registry.addDefinition(name, .{.Handle = info});
     }
+}
+
+fn processEnumType(registry: *Registry, ty: *xml.Element) void {
+    const name = ty.getAttribute("name").?;
+    const def: Definition = if (ty.getAttribute("alias")) |alias|
+        .{.Alias = alias}
+    else
+        .{.Enum = EnumInfo.init(&registry.arena.allocator)};
+
+    registry.addDefinition(name, def);
 }
 
 fn processStructType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getAttribute("name").?;
+    const def: Definition = if (ty.getAttribute("alias")) |alias|
+        .{.Alias = alias}
+    else
+        .{.Struct = StructInfo.fromXml(&registry.arena.allocator, ty)};
 
-    if (ty.getAttribute("alias")) |alias| {
-        // Aliases should always be defined after their parent type, so this should be safe
-        var s = &registry.structs.get(alias).?.value;
-        s.addAlias(name);
-        return;
-    }
-
-    const s = StructInfo.fromXml(&registry.arena.allocator, ty);
-    if (registry.structs.put(name, s) catch unreachable) |_| unreachable;
+    registry.addDefinition(name, def);
 }
 
 fn processFuncPointerType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getCharData("name").?;
     const cmd = CommandInfo.fromFnPtrXml(&registry.arena.allocator, ty);
-    if (registry.fn_ptrs.put(name, cmd) catch unreachable) |_| unreachable;
+    registry.addDefinition(name, .{.FnPtr = cmd});
 }
 
 fn processEnums(registry: *Registry, root: *xml.Element) void {
@@ -698,8 +601,13 @@ fn processEnums(registry: *Registry, root: *xml.Element) void {
     while (it.next()) |enums| {
         const name = enums.getAttribute("name").?;
         if (!mem.eql(u8, name, "API Constants")) {
-            const e = EnumInfo.fromXml(&registry.arena.allocator, enums);
-            if (registry.enums.put(name, e) catch unreachable) |_| unreachable;
+            // If the declaration hasn't been inserted in processEnumTypes,
+            // its a bitmask enum that is not used, so ignore it
+            const def = registry.findDefinitionByName(name) orelse continue;
+            var enum_it = enums.findChildrenByTag("enum");
+            while (enum_it.next()) |variant| {
+                def.Enum.processVariantFromXml(variant, null);
+            }
         }
     }
 }
@@ -710,12 +618,11 @@ fn processCommands(registry: *Registry, root: *xml.Element) void {
     while (command_it.next()) |elem| {
         if (elem.getAttribute("alias")) |alias| {
             const name = elem.getAttribute("name").?;
-            var cmd = &registry.commands.get(alias).?.value;
-            cmd.addAlias(name);
+            registry.addDefinition(name, .{.Alias = alias});
         } else {
             const name = elem.findChildByTag("proto").?.getCharData("name").?;
             const command = CommandInfo.fromXml(&registry.arena.allocator, elem);
-            if (registry.commands.put(name, command) catch unreachable) |_| unreachable;
+            registry.addDefinition(name, .{.Command = command});
         }
     }
 }
@@ -747,8 +654,8 @@ fn processExtension(registry: *Registry, ext: *xml.Element) void {
                 // these are also defined in those extensions, so just skip them
                 if (variant.getAttribute("extnumber")) |_| continue;
 
-                const kv = registry.enums.get(enum_name).?;
-                kv.value.processVariantFromXml(variant, ext_nr);
+                const def = registry.findDefinitionByName(enum_name).?;
+                def.Enum.processVariantFromXml(variant, ext_nr);
             } else if (variant.getAttribute("name")) |name| {
                 if (mem.endsWith(u8, name, "_SPEC_VERSION")) {
                     const version_str = variant.getAttribute("value").?;
@@ -775,8 +682,8 @@ fn processFeatures(registry: *Registry, root: *xml.Element) void {
             var enum_it = req.findChildrenByTag("enum");
             while (enum_it.next()) |variant| {
                 const enum_name = variant.getAttribute("extends") orelse continue;
-                const kv = registry.enums.get(enum_name).?;
-                kv.value.processVariantFromXml(variant, null);
+                const def = registry.findDefinitionByName(enum_name).?;
+                def.Enum.processVariantFromXml(variant, null);
             }
         }
     }
