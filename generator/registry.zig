@@ -38,7 +38,7 @@ pub const Registry = struct {
         return registry;
     }
 
-    fn deinit(self: *Registry) void {
+    fn deinit(self: Registry) void {
         self.declarations_by_name.deinit();
 
         // Copy to stack so that the arena doesn't destroy itself
@@ -467,6 +467,14 @@ const EnumInfo = struct {
         if (EnumInfo.isBackwardsCompatAlias(variant)) return;
         const name = variant.getAttribute("name").?;
         const value = blk: {
+            // An enum variant's value could be defined by any of the following attributes:
+            // - value: Straight up value of the enum variant, in either base 10 or 16 (prefixed with 0x).
+            // - bitpos: Used for bitmasks, and can also be set in extensions.
+            // - alias: The field is an alias of another variant within the same enum.
+            // - offset: Used with features and extensions, where a non-bitpos value is added to an enum.
+            //     The value is given by `1e9 + (extr_nr - 1) * 1e3 + offset`, where `ext_nr` is either
+            //     given by the `extnumber` field (in the case of a feature), or given in the parent <extension>
+            //     tag. In the latter case its passed via the `ext_nr` parameter.
             if (variant.getAttribute("value")) |value_str| {
                 break :blk Value{.Value = parseInt(i32, value_str) catch unreachable};
             } else if (variant.getAttribute("bitpos")) |bitpos_str| {
@@ -540,6 +548,8 @@ fn processTypes(registry: *Registry, root: *xml.Element) void {
             processFuncPointerType(registry, ty);
         } else if (mem.eql(u8, category, "basetype")) {
             processBaseType(registry, ty);
+        } else if (mem.eql(u8, category, "define")) {
+            processDefineType(registry, ty);
         }
     }
 }
@@ -603,6 +613,14 @@ fn processBaseType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getCharData("name").?;
     const type_info = TypeInfo.fromXml(&registry.arena.allocator, ty);
     registry.addDefinition(name, .{.BaseType = type_info});
+}
+
+fn processDefineType(registry: *Registry, ty: *xml.Element) void {
+    if (ty.getCharData("name")) |name| {
+        if (mem.eql(u8, name, "VK_HEADER_VERSION")) {
+            registry.addApiConstant("VK_HEADER_VERSION", mem.trim(u8, ty.children.at(2).CharData, " "));
+        }
+    }
 }
 
 fn processEnums(registry: *Registry, root: *xml.Element) void {

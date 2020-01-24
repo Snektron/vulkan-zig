@@ -17,7 +17,7 @@ pub fn main() !void {
 
     _ = try file.inStream().stream.read(source);
 
-    var spec = try xml.parse(std.heap.page_allocator, source);
+    const spec = try xml.parse(std.heap.page_allocator, source);
     defer spec.deinit();
 
     const registry = reg.generate(std.heap.page_allocator, spec.root);

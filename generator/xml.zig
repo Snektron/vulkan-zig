@@ -95,8 +95,9 @@ pub const Document = struct {
     xml_decl: ?*XmlDecl,
     root: *Element,
 
-    pub fn deinit(self: *Document) void {
-        self.arena.deinit();
+    pub fn deinit(self: Document) void {
+        var arena = self.arena; // Copy to stack so self can be taken by value.
+        arena.deinit();
     }
 };
 
