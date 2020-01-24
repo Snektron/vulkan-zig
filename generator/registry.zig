@@ -121,7 +121,8 @@ const Definition = union(enum) {
     Handle: HandleInfo,
     FnPtr: CommandInfo,
     Command: CommandInfo,
-    Alias: []const u8
+    Alias: []const u8,
+    BaseType: TypeInfo
 };
 
 const HandleInfo = struct {
@@ -537,6 +538,8 @@ fn processTypes(registry: *Registry, root: *xml.Element) void {
             processStructType(registry, ty);
         } else if (mem.eql(u8, category, "funcpointer")) {
             processFuncPointerType(registry, ty);
+        } else if (mem.eql(u8, category, "basetype")) {
+            processBaseType(registry, ty);
         }
     }
 }
@@ -594,6 +597,12 @@ fn processFuncPointerType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getCharData("name").?;
     const cmd = CommandInfo.fromFnPtrXml(&registry.arena.allocator, ty);
     registry.addDefinition(name, .{.FnPtr = cmd});
+}
+
+fn processBaseType(registry: *Registry, ty: *xml.Element) void {
+    const name = ty.getCharData("name").?;
+    const type_info = TypeInfo.fromXml(&registry.arena.allocator, ty);
+    registry.addDefinition(name, .{.BaseType = type_info});
 }
 
 fn processEnums(registry: *Registry, root: *xml.Element) void {
