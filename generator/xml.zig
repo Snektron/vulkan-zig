@@ -202,11 +202,11 @@ const ParseContext = struct {
 
     fn currentLine(self: ParseContext) []const u8 {
         var begin: usize = 0;
-        if (mem.lastIndexOf(u8, self.source[0 .. self.offset], "\n")) |prev_nl| {
+        if (mem.indexOfScalarPos(u8, self.source[0 .. self.offset], '\n')) |prev_nl| {
             begin = prev_nl + 1;
         }
 
-        var end = mem.indexOfPos(u8, self.source, self.offset, "\n") orelse self.source.len;
+        var end = mem.indexOfScalarPos(u8, self.source, self.offset, '\n') orelse self.source.len;
         return self.source[begin .. end];
     }
 };
@@ -571,7 +571,7 @@ fn dupeAndUnescape(alloc: *Allocator, text: []const u8) ![]const u8 {
     var i: usize = 0;
     while (i < text.len) : (j += 1) {
         if (text[i] == '&') {
-            const entity_end = 1 + (mem.indexOfPos(u8, text, i, ";") orelse return error.InvalidEntity);
+            const entity_end = 1 + (mem.indexOfScalarPos(u8, text, i, ';') orelse return error.InvalidEntity);
             str[j] = try unescapeEntity(text[i .. entity_end]);
             i = entity_end;
         } else {

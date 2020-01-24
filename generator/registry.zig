@@ -5,22 +5,12 @@ const Allocator = mem.Allocator;
 const SegmentedList = std.SegmentedList;
 const StringHashMap = std.StringHashMap;
 
-fn count(haystack: []const u8, needle: u8) usize {
-    var total: usize = 0;
-    for (haystack) |elem| {
-        if (elem == needle) {
-            total += 1;
-        }
-    }
-
-    return total;
-}
-
 pub const Registry = struct {
     arena: std.heap.ArenaAllocator,
 
     declarations: SegmentedList(Declaration, 0),
     declarations_by_name: StringHashMap(*Declaration),
+    api_constants: SegmentedList(ApiConstant, 0),
     extensions: SegmentedList(ExtensionInfo, 0),
 
     fn init(allocator: *Allocator) !*Registry {
@@ -34,6 +24,7 @@ pub const Registry = struct {
                 .arena = arena,
                 .declarations = undefined,
                 .declarations_by_name = StringHashMap(*Declaration).init(allocator),
+                .api_constants = undefined,
                 .extensions = undefined
             };
 
@@ -41,6 +32,7 @@ pub const Registry = struct {
         };
 
         registry.declarations = SegmentedList(Declaration, 0).init(&registry.arena.allocator);
+        registry.api_constants = SegmentedList(ApiConstant, 0).init(&registry.arena.allocator);
         registry.extensions = SegmentedList(ExtensionInfo, 0).init(&registry.arena.allocator);
 
         return registry;
@@ -67,6 +59,10 @@ pub const Registry = struct {
         }
     }
 
+    fn addApiConstant(self: *Registry, name: []const u8, expr: []const u8) void {
+        self.api_constants.push(.{.name = name, .expr = expr}) catch unreachable;
+    }
+
     fn findDefinitionByName(self: *Registry, name: []const u8) ?*Definition {
         if (self.declarations_by_name.get(name)) |kv| {
             return &kv.value.definition;
@@ -85,6 +81,14 @@ pub const Registry = struct {
         }
 
         {
+            std.debug.warn("API constants:\n", .{});
+            var it = self.api_constants.iterator(0);
+            while (it.next()) |kv| {
+                std.debug.warn("    {} = {}\n", .{kv.name, kv.expr});
+            }
+        }
+
+        {
             std.debug.warn("Extensions:\n", .{});
             var it = self.extensions.iterator(0);
             while (it.next()) |ext| {
@@ -92,6 +96,11 @@ pub const Registry = struct {
             }
         }
     }
+};
+
+const ApiConstant = struct {
+    name: []const u8,
+    expr: []const u8
 };
 
 const ExtensionInfo = struct {
@@ -173,10 +182,6 @@ const TypeInfo = struct {
                     ptr.size = .One;
                 }
             }
-
-            // Read the constness of each pointer
-            // Beware: the const of the inner pointer is given before the type name
-            // while the others are in the `ptr_text`.
 
             const pre = switch (elem.children.at(0).*) {
                 .CharData => |char_data| char_data,
@@ -435,7 +440,7 @@ const CommandInfo = struct {
 
 const EnumInfo = struct {
     const Value = union(enum) {
-        Bitpos: u5, //log2(u32.bit_count)
+        Bitpos: u5, //log2(u32)
         Value: i32,
         Alias: []const u8,
     };
@@ -462,12 +467,7 @@ const EnumInfo = struct {
         const name = variant.getAttribute("name").?;
         const value = blk: {
             if (variant.getAttribute("value")) |value_str| {
-                const value = if (mem.startsWith(u8, value_str, "0x"))
-                    std.fmt.parseInt(i32, value_str[2..], 16) catch unreachable
-                else
-                    std.fmt.parseInt(i32, value_str, 10) catch unreachable;
-
-                break :blk Value{.Value = value};
+                break :blk Value{.Value = parseInt(i32, value_str) catch unreachable};
             } else if (variant.getAttribute("bitpos")) |bitpos_str| {
                 break :blk Value{.Bitpos = std.fmt.parseInt(u5, bitpos_str, 10) catch unreachable};
             } else if (variant.getAttribute("alias")) |alias| {
@@ -600,15 +600,27 @@ fn processEnums(registry: *Registry, root: *xml.Element) void {
     var it = root.findChildrenByTag("enums");
     while (it.next()) |enums| {
         const name = enums.getAttribute("name").?;
-        if (!mem.eql(u8, name, "API Constants")) {
-            // If the declaration hasn't been inserted in processEnumTypes,
-            // its a bitmask enum that is not used, so ignore it
-            const def = registry.findDefinitionByName(name) orelse continue;
-            var enum_it = enums.findChildrenByTag("enum");
-            while (enum_it.next()) |variant| {
-                def.Enum.processVariantFromXml(variant, null);
-            }
+        if (mem.eql(u8, name, "API Constants")) {
+            processApiConstants(registry, enums);
+            continue;
         }
+
+        // If the declaration hasn't been inserted in processEnumTypes,
+        // its a bitmask enum that is not used, so ignore it
+        const def = registry.findDefinitionByName(name) orelse continue;
+        var enum_it = enums.findChildrenByTag("enum");
+        while (enum_it.next()) |variant| {
+            def.Enum.processVariantFromXml(variant, null);
+        }
+    }
+}
+
+fn processApiConstants(registry: *Registry, enums: *xml.Element) void {
+    var it = enums.findChildrenByTag("enum");
+    while (it.next()) |constant| {
+        const name = constant.getAttribute("name").?;
+        const expr = constant.getAttribute("value") orelse constant.getAttribute("alias").?;
+        registry.addApiConstant(name, expr);
     }
 }
 
@@ -687,4 +699,21 @@ fn processFeatures(registry: *Registry, root: *xml.Element) void {
             }
         }
     }
+}
+
+fn count(haystack: []const u8, needle: u8) usize {
+    var total: usize = 0;
+    for (haystack) |elem| {
+        if (elem == needle) total += 1;
+    }
+
+    return total;
+}
+
+/// Parse an integer in either base-10 or base-16 when prefixed with '0x'.
+fn parseInt(comptime T: type, source: []const u8) !T {
+    return if (mem.startsWith(u8, source, "0x"))
+        try std.fmt.parseInt(T, source[2..], 16)
+    else
+        try std.fmt.parseInt(T, source, 10);
 }
