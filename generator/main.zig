@@ -1,6 +1,6 @@
 const std = @import("std");
 const xml = @import("xml.zig");
-const reg = @import("registry.zig");
+const Registry = @import("registry.zig").Registry;
 
 pub fn main() !void {
     if (std.os.argv.len <= 1) {
@@ -20,7 +20,7 @@ pub fn main() !void {
     const spec = try xml.parse(std.heap.page_allocator, source);
     defer spec.deinit();
 
-    const registry = reg.generate(std.heap.page_allocator, spec.root);
+    const registry = Registry.fromXml(std.heap.page_allocator, spec.root);
     defer registry.deinit();
 
     registry.dump();
@@ -28,5 +28,4 @@ pub fn main() !void {
 
 test "main" {
     _ = @import("xml.zig");
-    _ = @import("registry.zig");
 }

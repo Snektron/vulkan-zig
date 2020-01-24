@@ -38,6 +38,20 @@ pub const Registry = struct {
         return registry;
     }
 
+    pub fn fromXml(allocator: *Allocator, root: *xml.Element) *Registry {
+        std.debug.assert(mem.eql(u8, root.tag, "registry"));
+
+        var registry = Registry.init(allocator) catch unreachable;
+
+        processTypes(registry, root);
+        processEnums(registry, root);
+        processCommands(registry, root);
+        processFeatures(registry, root);
+        processExtensions(registry, root);
+
+        return registry;
+    }
+
     fn deinit(self: Registry) void {
         self.declarations_by_name.deinit();
 
@@ -516,20 +530,6 @@ const EnumInfo = struct {
         return extension_value_base + (ext_nr - 1) * extension_block + offset;
     }
 };
-
-pub fn generate(backing_allocator: *Allocator, root: *xml.Element) *Registry {
-    std.debug.assert(mem.eql(u8, root.tag, "registry"));
-
-    var registry = Registry.init(backing_allocator) catch unreachable;
-
-    processTypes(registry, root);
-    processEnums(registry, root);
-    processCommands(registry, root);
-    processFeatures(registry, root);
-    processExtensions(registry, root);
-
-    return registry;
-}
 
 fn processTypes(registry: *Registry, root: *xml.Element) void {
     var types = root.findChildByTag("types").?;
