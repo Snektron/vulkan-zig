@@ -323,7 +323,6 @@ fn parseEqAttrValue(ctx: *ParseContext, alloc: *Allocator) ![]const u8 {
 fn parseNameNoDupe(ctx: *ParseContext) ![]const u8 {
     // XML's spec on names is very long, so to make this easier
     // we just take any character that is not special and not whitespace
-
     const begin = ctx.offset;
 
     while (ctx.peek()) |ch| {

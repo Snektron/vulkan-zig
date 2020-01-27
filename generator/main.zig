@@ -1,6 +1,7 @@
 const std = @import("std");
 const xml = @import("xml.zig");
 const Registry = @import("registry.zig").Registry;
+const vk_render = @import("render.zig").render;
 
 pub fn main() !void {
     if (std.os.argv.len <= 1) {
@@ -22,8 +23,11 @@ pub fn main() !void {
 
     const registry = Registry.fromXml(std.heap.page_allocator, spec.root);
     defer registry.deinit();
+    // registry.dump();
 
-    registry.dump();
+    const stdout_file = std.io.getStdOut();
+    var stdout = stdout_file.outStream();
+    try vk_render(&stdout.stream, registry);
 }
 
 test "main" {

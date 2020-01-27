@@ -11,6 +11,7 @@ pub const Registry = struct {
     declarations: SegmentedList(Declaration, 0),
     declarations_by_name: StringHashMap(*Declaration),
     api_constants: SegmentedList(ApiConstant, 0),
+    tags: SegmentedList(TagInfo, 0),
     extensions: SegmentedList(ExtensionInfo, 0),
 
     fn init(allocator: *Allocator) !*Registry {
@@ -25,6 +26,7 @@ pub const Registry = struct {
                 .declarations = undefined,
                 .declarations_by_name = StringHashMap(*Declaration).init(allocator),
                 .api_constants = undefined,
+                .tags = undefined,
                 .extensions = undefined
             };
 
@@ -33,6 +35,7 @@ pub const Registry = struct {
 
         registry.declarations = SegmentedList(Declaration, 0).init(&registry.arena.allocator);
         registry.api_constants = SegmentedList(ApiConstant, 0).init(&registry.arena.allocator);
+        registry.tags = SegmentedList(TagInfo, 0).init(&registry.arena.allocator);
         registry.extensions = SegmentedList(ExtensionInfo, 0).init(&registry.arena.allocator);
 
         return registry;
@@ -47,6 +50,7 @@ pub const Registry = struct {
         processEnums(registry, root);
         processCommands(registry, root);
         processFeatures(registry, root);
+        processTags(registry, root);
         processExtensions(registry, root);
 
         return registry;
@@ -77,6 +81,10 @@ pub const Registry = struct {
         self.api_constants.push(.{.name = name, .expr = expr}) catch unreachable;
     }
 
+    fn addTag(self: *Registry, name: []const u8, author: []const u8) void {
+        self.tags.push(.{.name = name, .author = author}) catch unreachable;
+    }
+
     fn findDefinitionByName(self: *Registry, name: []const u8) ?*Definition {
         if (self.declarations_by_name.get(name)) |kv| {
             return &kv.value.definition;
@@ -86,11 +94,13 @@ pub const Registry = struct {
     }
 
     fn dump(self: *Registry) void {
+        const indent = " " ** 4;
+
         {
             std.debug.warn("Definitions:\n", .{});
             var it = self.declarations.iterator(0);
             while (it.next()) |decl| {
-                std.debug.warn("    {} ({})\n", .{decl.name, std.meta.tagName(decl.definition)});
+                std.debug.warn(indent ++ "{} ({})\n", .{decl.name, std.meta.tagName(decl.definition)});
             }
         }
 
@@ -98,7 +108,15 @@ pub const Registry = struct {
             std.debug.warn("API constants:\n", .{});
             var it = self.api_constants.iterator(0);
             while (it.next()) |kv| {
-                std.debug.warn("    {} = {}\n", .{kv.name, kv.expr});
+                std.debug.warn(indent ++ "{} = {}\n", .{kv.name, kv.expr});
+            }
+        }
+
+        {
+            std.debug.warn("Tags:\n", .{});
+            var it = self.tags.iterator(0);
+            while (it.next()) |tag| {
+                std.debug.warn(indent ++ "{} ({})\n", .{tag.name, tag.author});
             }
         }
 
@@ -106,29 +124,34 @@ pub const Registry = struct {
             std.debug.warn("Extensions:\n", .{});
             var it = self.extensions.iterator(0);
             while (it.next()) |ext| {
-                std.debug.warn("    {}: {}, version {}\n", .{ext.number, ext.name, ext.version});
+                std.debug.warn(indent ++ "{}: {}, version {}\n", .{ext.number, ext.name, ext.version});
             }
         }
     }
 };
 
-const ApiConstant = struct {
+pub const ApiConstant = struct {
     name: []const u8,
     expr: []const u8
 };
 
-const ExtensionInfo = struct {
+pub const ExtensionInfo = struct {
     name: []const u8,
     number: u32,
     version: u32,
 };
 
-const Declaration = struct {
+pub const TagInfo = struct {
+    name: []const u8,
+    author: []const u8
+};
+
+pub const Declaration = struct {
     name: []const u8,
     definition: Definition
 };
 
-const Definition = union(enum) {
+pub const Definition = union(enum) {
     Struct: StructInfo,
     Enum: EnumInfo,
     Bitmask: BitmaskInfo,
@@ -139,16 +162,16 @@ const Definition = union(enum) {
     BaseType: TypeInfo
 };
 
-const HandleInfo = struct {
+pub const HandleInfo = struct {
     dispatchable: bool
 };
 
-const BitmaskInfo = struct {
+pub const BitmaskInfo = struct {
     bits_enum: ?[]const u8
 };
 
 // Type info of fields, function parameters, and return types.
-const TypeInfo = struct {
+pub const TypeInfo = struct {
     const PointerSize = enum {
         One,
         Many, // The length is given by some expression which cannot be expressed in Zig
@@ -334,7 +357,7 @@ const TypeInfo = struct {
     }
 };
 
-const StructInfo = struct {
+pub const StructInfo = struct {
     const Member = struct {
         name: []const u8,
         type_info: TypeInfo
@@ -367,7 +390,7 @@ const StructInfo = struct {
     }
 };
 
-const CommandInfo = struct {
+pub const CommandInfo = struct {
     const Parameter = struct {
         name: []const u8,
         type_info: TypeInfo
@@ -453,9 +476,10 @@ const CommandInfo = struct {
     }
 };
 
-const EnumInfo = struct {
+pub const EnumInfo = struct {
     const Value = union(enum) {
         Bitpos: u5, //log2(u32)
+        HexValue: i32, // Combined flags and such
         Value: i32,
         Alias: []const u8,
     };
@@ -474,7 +498,16 @@ const EnumInfo = struct {
     }
 
     fn addVariant(self: *EnumInfo, name: []const u8, value: Value) void {
-        const ptr = self.variants.push(.{.name = name, .value = value}) catch unreachable;
+        // Sometimes a variant is added multiple times with different 'require' parts of an extension
+        // so filter out any duplicates.
+        var it = self.variants.iterator(0);
+        while (it.next()) |variant| {
+            if (mem.eql(u8, variant.name, name)) {
+                return;
+            }
+        }
+
+        _ = self.variants.push(.{.name = name, .value = value}) catch unreachable;
     }
 
     fn processVariantFromXml(self: *EnumInfo, variant: *xml.Element, ext_nr: ?u32) void {
@@ -490,7 +523,11 @@ const EnumInfo = struct {
             //     given by the `extnumber` field (in the case of a feature), or given in the parent <extension>
             //     tag. In the latter case its passed via the `ext_nr` parameter.
             if (variant.getAttribute("value")) |value_str| {
-                break :blk Value{.Value = parseInt(i32, value_str) catch unreachable};
+                if (mem.startsWith(u8, value_str, "0x")) {
+                    break :blk Value{.HexValue = std.fmt.parseInt(i32, value_str[2..], 16) catch unreachable};
+                } else {
+                    break :blk Value{.Value = std.fmt.parseInt(i32, value_str, 10) catch unreachable};
+                }
             } else if (variant.getAttribute("bitpos")) |bitpos_str| {
                 break :blk Value{.Bitpos = std.fmt.parseInt(u5, bitpos_str, 10) catch unreachable};
             } else if (variant.getAttribute("alias")) |alias| {
@@ -666,6 +703,16 @@ fn processCommands(registry: *Registry, root: *xml.Element) void {
     }
 }
 
+fn processTags(registry: *Registry, root: *xml.Element) void {
+    var tags = root.findChildByTag("tags").?;
+    var it = tags.findChildrenByTag("tag");
+    while (it.next()) |tag| {
+        const name = tag.getAttribute("name").?;
+        const author = tag.getAttribute("author").?;
+        registry.addTag(name, author);
+    }
+}
+
 fn processExtensions(registry: *Registry, root: *xml.Element) void {
     var extensions = root.findChildByTag("extensions").?;
     var ext_it = extensions.findChildrenByTag("extension");
@@ -735,12 +782,4 @@ fn count(haystack: []const u8, needle: u8) usize {
     }
 
     return total;
-}
-
-/// Parse an integer in either base-10 or base-16 when prefixed with '0x'.
-fn parseInt(comptime T: type, source: []const u8) !T {
-    return if (mem.startsWith(u8, source, "0x"))
-        try std.fmt.parseInt(T, source[2..], 16)
-    else
-        try std.fmt.parseInt(T, source, 10);
 }
