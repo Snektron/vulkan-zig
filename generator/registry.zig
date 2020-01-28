@@ -85,7 +85,7 @@ pub const Registry = struct {
         self.tags.push(.{.name = name, .author = author}) catch unreachable;
     }
 
-    fn findDefinitionByName(self: *Registry, name: []const u8) ?*Definition {
+    pub fn findDefinitionByName(self: *Registry, name: []const u8) ?*Definition {
         if (self.declarations_by_name.get(name)) |kv| {
             return &kv.value.definition;
         }
