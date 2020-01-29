@@ -68,17 +68,14 @@ pub fn render(out: var, registry: *Registry) !void {
 }
 
 fn trimNamespace(name: []const u8) []const u8 {
-    if (mem.startsWith(u8, name, "VK_")) {
-        return name["VK_".len ..];
-    } else if (mem.startsWith(u8, name, "vk")) {
-        return name["vk".len ..];
-    } else if (mem.startsWith(u8, name, "Vk")) {
-        return name["Vk".len ..];
-    } else if (mem.startsWith(u8, name, "PFN_vk")) {
-        return name["PFN_vk".len..];
-    } else {
-        unreachable;
+    const prefixes = [_][]const u8{"VK_", "vk", "Vk", "PFN_vk"};
+    for (prefixes) |prefix| {
+        if (mem.startsWith(u8, name, prefix)) {
+            return name[prefix.len..];
+        }
     }
+
+    unreachable;
 }
 
 fn getAuthorTag(registry: *Registry, name: []const u8) ?[]const u8 {
@@ -121,28 +118,22 @@ fn isZigReservedIdentifier(name: []const u8) bool {
         }
         return true;
     }
+
     // void is invalid in c so it doesn't need to be checked.
-    return mem.eql(u8, name, "comptime_float") or
-        mem.eql(u8, name, "comptime_int") or
-        mem.eql(u8, name, "bool") or
-        mem.eql(u8, name, "isize") or
-        mem.eql(u8, name, "usize") or
-        mem.eql(u8, name, "f16") or
-        mem.eql(u8, name, "f32") or
-        mem.eql(u8, name, "f64") or
-        mem.eql(u8, name, "f128") or
-        mem.eql(u8, name, "c_longdouble") or
-        mem.eql(u8, name, "noreturn") or
-        mem.eql(u8, name, "type") or
-        mem.eql(u8, name, "anyerror") or
-        mem.eql(u8, name, "c_short") or
-        mem.eql(u8, name, "c_ushort") or
-        mem.eql(u8, name, "c_int") or
-        mem.eql(u8, name, "c_uint") or
-        mem.eql(u8, name, "c_long") or
-        mem.eql(u8, name, "c_ulong") or
-        mem.eql(u8, name, "c_longlong") or
-        mem.eql(u8, name, "c_ulonglong");
+    const reserved_names = [_][]const u8 {
+        "comptime_float", "comptime_int", "bool", "isize",
+        "usize", "f16", "f32", "f64", "f128", "c_longdouble",
+        "noreturn", "type", "anyerror", "c_short", "c_ushort",
+        "c_int", "c_uint", "c_long", "c_ulong", "c_longlong", "c_ulonglong"
+    };
+
+    for (reserved_names) |reserved| {
+        if (mem.eql(u8, reserved, name)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 fn writeIdentifier(out: var, name: []const u8) !void {
@@ -175,7 +166,7 @@ fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
 
 fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void {
     if (type_info.array_size) |array_size| {
-        try out.print("[{}]", .{array_size});
+        try out.print("[{}]", .{trimNamespace(array_size)});
     }
 
     for (type_info.pointers) |ptr| {
