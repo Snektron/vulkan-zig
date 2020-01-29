@@ -32,6 +32,9 @@ const foreign_types = [_]ForeignType{
     .{.name = "zx_handle_t", .expr = @typeName(u32)},
     .{.name = "GgpStreamDescriptor", .expr = @typeName(u32)}, // TODO: Remove GGP-related code
     .{.name = "GgpFrameToken", .expr = @typeName(u32)},
+    .{.name = "ANativeWindow", .expr = "@OpaqueType()"},
+    .{.name = "AHardwareBuffer", .expr = "@OpaqueType()"},
+    .{.name = "CAMetalLayer", .expr = "@OpaqueType()"},
 };
 
 const foreign_types_namespace = "foreign";
@@ -71,6 +74,8 @@ fn trimNamespace(name: []const u8) []const u8 {
         return name["vk".len ..];
     } else if (mem.startsWith(u8, name, "Vk")) {
         return name["Vk".len ..];
+    } else if (mem.startsWith(u8, name, "PFN_vk")) {
+        return name["PFN_vk".len..];
     } else {
         unreachable;
     }
@@ -92,6 +97,7 @@ fn trimTag(registry: *Registry, name: []const u8) []const u8 {
     return mem.trimRight(u8, name[0 .. name.len - tag.name.len], "_");
 }
 
+// Lifted from src-self-hosted/translate_c.zig
 fn isValidZigIdentifier(name: []const u8) bool {
     for (name) |c, i| {
         switch (c) {
@@ -104,8 +110,43 @@ fn isValidZigIdentifier(name: []const u8) bool {
     return true;
 }
 
+// Lifted from src-self-hosted/translate_c.zig
+fn isZigReservedIdentifier(name: []const u8) bool {
+    if (name.len > 1 and (name[0] == 'u' or name[0] == 'i')) {
+        for (name[1..]) |c| {
+            switch (c) {
+                '0'...'9' => {},
+                else => return false,
+            }
+        }
+        return true;
+    }
+    // void is invalid in c so it doesn't need to be checked.
+    return mem.eql(u8, name, "comptime_float") or
+        mem.eql(u8, name, "comptime_int") or
+        mem.eql(u8, name, "bool") or
+        mem.eql(u8, name, "isize") or
+        mem.eql(u8, name, "usize") or
+        mem.eql(u8, name, "f16") or
+        mem.eql(u8, name, "f32") or
+        mem.eql(u8, name, "f64") or
+        mem.eql(u8, name, "f128") or
+        mem.eql(u8, name, "c_longdouble") or
+        mem.eql(u8, name, "noreturn") or
+        mem.eql(u8, name, "type") or
+        mem.eql(u8, name, "anyerror") or
+        mem.eql(u8, name, "c_short") or
+        mem.eql(u8, name, "c_ushort") or
+        mem.eql(u8, name, "c_int") or
+        mem.eql(u8, name, "c_uint") or
+        mem.eql(u8, name, "c_long") or
+        mem.eql(u8, name, "c_ulong") or
+        mem.eql(u8, name, "c_longlong") or
+        mem.eql(u8, name, "c_ulonglong");
+}
+
 fn writeIdentifier(out: var, name: []const u8) !void {
-    if (!isValidZigIdentifier(name) or std.zig.Token.getKeyword(name) != null) {
+    if (!isValidZigIdentifier(name) or isZigReservedIdentifier(name) or std.zig.Token.getKeyword(name) != null) {
         try out.print("@\"{}\"", .{name});
     } else {
         try out.write(name);
@@ -275,8 +316,15 @@ fn renderDeclarations(out: var, registry: *Registry) !void {
 
         switch (decl.definition) {
             .Enum => |*info| try renderEnum(out, decl.name, info),
-            .Alias => |alias| try renderAlias(out, registry, decl.name, alias),
+            // .Alias => |alias| try renderAlias(out, registry, decl.name, alias),
             .FnPtr => |*info| try renderFnPtr(out, registry, decl.name, info),
+            .Struct => |*info| try renderContainer(out, registry, .Struct, decl.name, info),
+            .Union => |*info| try renderContainer(out, registry, .Union, decl.name, info),
+            .BaseType => |type_info| {
+                try writeConstAssignmemt(out, trimNamespace(decl.name));
+                try renderTypeInfo(out, registry, type_info);
+                try out.write(";\n\n");
+            },
             else => {}
         }
     }
@@ -348,8 +396,7 @@ fn renderAlias(out: var, registry: *Registry, name: []const u8, alias: []const u
 }
 
 fn renderFnPtr(out: var, registry: *Registry, name: []const u8, info: *reg.CommandInfo) !void {
-    std.debug.assert(mem.startsWith(u8, name, "PFN_vk"));
-    try writeConstAssignmemt(out, name["PFN_vk".len .. ]);
+    try writeConstAssignmemt(out, trimNamespace(name));
     try out.write("extern fn(");
 
     if (info.parameters.count() > 0) {
@@ -369,10 +416,30 @@ fn renderFnPtr(out: var, registry: *Registry, name: []const u8, info: *reg.Comma
     try out.write(";\n\n");
 }
 
+fn renderContainer(out: var, registry: *Registry, kind: enum{Struct, Union}, name: []const u8, info: *reg.ContainerInfo) !void {
+    try writeConstAssignmemt(out, trimNamespace(name));
+
+    switch (kind) {
+        .Struct => try out.write("extern struct {\n"),
+        .Union => try out.write("extern union {\n")
+    }
+
+    var it = info.members.iterator(0);
+    while (it.next()) |member| {
+        try out.write(base_indent);
+        try writeIdentifier(out, member.name);
+        try out.write(": ");
+        try renderTypeInfo(out, registry, member.type_info);
+        try out.write(",\n");
+    }
+
+    try out.write("};\n\n");
+}
+
 fn renderTest(out: var) !void {
     try out.write(
         \\test "Semantic analysis" {
-        \\    @import("std").meta.refAllDecls(@This());
+        \\    std.meta.refAllDecls(@This());
         \\}
         \\
     );

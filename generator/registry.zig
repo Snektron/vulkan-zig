@@ -152,7 +152,8 @@ pub const Declaration = struct {
 };
 
 pub const Definition = union(enum) {
-    Struct: StructInfo,
+    Struct: ContainerInfo,
+    Union: ContainerInfo,
     Enum: EnumInfo,
     Bitmask: BitmaskInfo,
     Handle: HandleInfo,
@@ -357,7 +358,7 @@ pub const TypeInfo = struct {
     }
 };
 
-pub const StructInfo = struct {
+pub const ContainerInfo = struct {
     const Member = struct {
         name: []const u8,
         type_info: TypeInfo
@@ -365,14 +366,14 @@ pub const StructInfo = struct {
 
     members: SegmentedList(Member, 0),
 
-    fn init(allocator: *Allocator) StructInfo {
+    fn init(allocator: *Allocator) ContainerInfo {
         return .{
             .members = SegmentedList(Member, 0).init(allocator)
         };
     }
 
-    fn fromXml(allocator: *Allocator, elem: *xml.Element) StructInfo {
-        var s = StructInfo.init(allocator);
+    fn fromXml(allocator: *Allocator, elem: *xml.Element) ContainerInfo {
+        var s = ContainerInfo.init(allocator);
 
         var members = elem.findChildrenByTag("member");
         while (members.next()) |member| {
@@ -385,7 +386,7 @@ pub const StructInfo = struct {
         return s;
     }
 
-    fn addMember(self: *StructInfo, name: []const u8, type_info: TypeInfo) void {
+    fn addMember(self: *ContainerInfo, name: []const u8, type_info: TypeInfo) void {
         self.members.push(.{.name = name, .type_info = type_info}) catch unreachable;
     }
 };
@@ -579,7 +580,7 @@ fn processTypes(registry: *Registry, root: *xml.Element) void {
             processEnumType(registry, ty);
         } else if (mem.eql(u8, category, "handle")) {
             processHandleType(registry, ty);
-        } else if (mem.eql(u8, category, "struct")) {
+        } else if (mem.eql(u8, category, "struct") or mem.eql(u8, category, "union")) {
             processStructType(registry, ty);
         } else if (mem.eql(u8, category, "funcpointer")) {
             processFuncPointerType(registry, ty);
@@ -632,10 +633,12 @@ fn processEnumType(registry: *Registry, ty: *xml.Element) void {
 
 fn processStructType(registry: *Registry, ty: *xml.Element) void {
     const name = ty.getAttribute("name").?;
-    const def: Definition = if (ty.getAttribute("alias")) |alias|
-        .{.Alias = alias}
+    const def = if (ty.getAttribute("alias")) |alias|
+        Definition{.Alias = alias}
+    else if (mem.eql(u8, ty.getAttribute("category").?, "union"))
+        Definition{.Union = ContainerInfo.fromXml(&registry.arena.allocator, ty)}
     else
-        .{.Struct = StructInfo.fromXml(&registry.arena.allocator, ty)};
+        Definition{.Struct = ContainerInfo.fromXml(&registry.arena.allocator, ty)};
 
     registry.addDefinition(name, def);
 }
