@@ -32,7 +32,7 @@ pub const Element = struct {
         };
     }
 
-    fn getAttribute(self: *Element, attrib_name: []const u8) ?[]const u8 {
+    pub fn getAttribute(self: *Element, attrib_name: []const u8) ?[]const u8 {
         var it = self.attributes.iterator(0);
         while (it.next()) |child| {
             if (mem.eql(u8, child.*.name, attrib_name)) {
@@ -43,7 +43,7 @@ pub const Element = struct {
         return null;
     }
 
-    fn getCharData(self: *Element, child_tag: []const u8) ?[]const u8 {
+    pub fn getCharData(self: *Element, child_tag: []const u8) ?[]const u8 {
         const child = self.findChildByTag(child_tag) orelse return null;
         if (child.children.count() != 1) {
             return null;
@@ -55,11 +55,11 @@ pub const Element = struct {
         };
     }
 
-    fn findChildByTag(self: *Element, tag: []const u8) ?*Element {
+    pub fn findChildByTag(self: *Element, tag: []const u8) ?*Element {
         return self.findChildrenByTag(tag).next();
     }
 
-    fn findChildrenByTag(self: *Element, tag: []const u8) FindChildrenByTagIterator {
+    pub fn findChildrenByTag(self: *Element, tag: []const u8) FindChildrenByTagIterator {
         return .{
             .inner = self.children.iterator(0),
             .tag = tag
@@ -70,7 +70,7 @@ pub const Element = struct {
         inner: ContentList.Iterator,
         tag: []const u8,
 
-        fn next(self: *FindChildrenByTagIterator) ?*Element {
+        pub fn next(self: *FindChildrenByTagIterator) ?*Element {
             while (self.inner.next()) |child| {
                 if (child.* != .Element or !mem.eql(u8, child.*.Element.tag, self.tag)) {
                     continue;
@@ -424,15 +424,19 @@ fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
 }
 
 test "tryParseElement" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var alloc = &arena.allocator;
+
     {
         var ctx = ParseContext.init("<= a='b'/>");
-        testing.expectEqual(@as(?*Element, null), try tryParseElement(&ctx, std.debug.global_allocator));
+        testing.expectEqual(@as(?*Element, null), try tryParseElement(&ctx, alloc));
         testing.expectEqual(@as(?u8, '<'), ctx.peek());
     }
 
     {
         var ctx = ParseContext.init("<python size='15' color = \"green\"/>");
-        const elem = try tryParseElement(&ctx, std.debug.global_allocator);
+        const elem = try tryParseElement(&ctx, alloc);
         testing.expectEqualSlices(u8, elem.?.tag, "python");
 
         const size_attr = elem.?.attributes.at(0).*;
@@ -446,14 +450,14 @@ test "tryParseElement" {
 
     {
         var ctx = ParseContext.init("<python>test</python>");
-        const elem = try tryParseElement(&ctx, std.debug.global_allocator);
+        const elem = try tryParseElement(&ctx, alloc);
         testing.expectEqualSlices(u8, elem.?.tag, "python");
         testing.expectEqualSlices(u8, elem.?.children.at(0).CharData, "test");
     }
 
     {
         var ctx = ParseContext.init("<a>b<c/>d<e/>f<!--g--></a>");
-        const elem = try tryParseElement(&ctx, std.debug.global_allocator);
+        const elem = try tryParseElement(&ctx, alloc);
         testing.expectEqualSlices(u8, elem.?.tag, "a");
         testing.expectEqualSlices(u8, elem.?.children.at(0).CharData, "b");
         testing.expectEqualSlices(u8, elem.?.children.at(1).Element.tag, "c");
@@ -508,15 +512,19 @@ fn tryParseProlog(ctx: *ParseContext, alloc: *Allocator) !?*XmlDecl {
 }
 
 test "tryParseProlog" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var alloc = &arena.allocator;
+
     {
         var ctx = ParseContext.init("<?xmla version='aa'?>");
-        testing.expectEqual(@as(?*XmlDecl, null), try tryParseProlog(&ctx, std.debug.global_allocator));
+        testing.expectEqual(@as(?*XmlDecl, null), try tryParseProlog(&ctx, alloc));
         testing.expectEqual(@as(?u8, '<'), ctx.peek());
     }
 
     {
         var ctx = ParseContext.init("<?xml version='aa'?>");
-        const decl = try tryParseProlog(&ctx, std.debug.global_allocator);
+        const decl = try tryParseProlog(&ctx, alloc);
         testing.expectEqualSlices(u8, "aa", decl.?.version);
         testing.expectEqual(@as(?[]const u8, null), decl.?.encoding);
         testing.expectEqual(@as(?bool, null), decl.?.standalone);
@@ -524,7 +532,7 @@ test "tryParseProlog" {
 
     {
         var ctx = ParseContext.init("<?xml version=\"aa\" encoding = 'bbb' standalone   \t =   'yes'?>");
-        const decl = try tryParseProlog(&ctx, std.debug.global_allocator);
+        const decl = try tryParseProlog(&ctx, alloc);
         testing.expectEqualSlices(u8, "aa", decl.?.version);
         testing.expectEqualSlices(u8, "bbb", decl.?.encoding.?);
         testing.expectEqual(@as(?bool, true), decl.?.standalone.?);
@@ -584,10 +592,14 @@ fn dupeAndUnescape(alloc: *Allocator, text: []const u8) ![]const u8 {
 }
 
 test "dupeAndUnescape" {
-    testing.expectEqualSlices(u8, "test", try dupeAndUnescape(std.debug.global_allocator, "test"));
-    testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try dupeAndUnescape(std.debug.global_allocator, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(std.debug.global_allocator, "python&"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(std.debug.global_allocator, "python&&"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(std.debug.global_allocator, "python&test;"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(std.debug.global_allocator, "python&boa"));
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var alloc = &arena.allocator;
+
+    testing.expectEqualSlices(u8, "test", try dupeAndUnescape(alloc, "test"));
+    testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try dupeAndUnescape(alloc, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
+    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&"));
+    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&&"));
+    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&test;"));
+    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&boa"));
 }

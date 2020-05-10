@@ -13,12 +13,12 @@ const ForeignType = struct {
 };
 
 const foreign_types = [_]ForeignType{
-    .{.name = "Display", .expr = "@OpaqueType()"},
+    .{.name = "Display", .expr = "Type(.Opaque)"},
     .{.name = "VisualID", .expr = @typeName(c_uint)},
     .{.name = "Window", .expr = @typeName(c_ulong)},
     .{.name = "RROutput", .expr = @typeName(c_ulong)},
-    .{.name = "wl_display", .expr = "@OpaqueType()"},
-    .{.name = "wl_surface", .expr = "@OpaqueType()"},
+    .{.name = "wl_display", .expr = "@Type(.Opaque)"},
+    .{.name = "wl_surface", .expr = "@Type(.Opaque)"},
     .{.name = "HINSTANCE", .expr = "std.os.HINSTANCE"},
     .{.name = "HWND", .expr = "*@OpaqueType()"},
     .{.name = "HMONITOR", .expr = "*OpaqueType()"},
@@ -32,9 +32,9 @@ const foreign_types = [_]ForeignType{
     .{.name = "zx_handle_t", .expr = @typeName(u32)},
     .{.name = "GgpStreamDescriptor", .expr = @typeName(u32)}, // TODO: Remove GGP-related code
     .{.name = "GgpFrameToken", .expr = @typeName(u32)},
-    .{.name = "ANativeWindow", .expr = "@OpaqueType()"},
-    .{.name = "AHardwareBuffer", .expr = "@OpaqueType()"},
-    .{.name = "CAMetalLayer", .expr = "@OpaqueType()"},
+    .{.name = "ANativeWindow", .expr = "@Type(.Opaque)"},
+    .{.name = "AHardwareBuffer", .expr = "@Type(.Opaque)"},
+    .{.name = "CAMetalLayer", .expr = "@Type(.Opaque)"},
 };
 
 const foreign_types_namespace = "foreign";
@@ -59,10 +59,10 @@ const builtin_types = [_]BuiltinType{
 };
 
 pub fn render(out: var, registry: *Registry) !void {
-    try out.write("const std = @import(\"std\");\n\n");
+    try out.writeAll("const std = @import(\"std\");\n\n");
     try renderApiConstants(out, registry);
     try renderForeignTypes(out);
-    try out.write("\n");
+    try out.writeAll("\n");
     try renderDeclarations(out, registry);
     try renderTest(out);
 }
@@ -140,14 +140,14 @@ fn writeIdentifier(out: var, name: []const u8) !void {
     if (!isValidZigIdentifier(name) or isZigReservedIdentifier(name) or std.zig.Token.getKeyword(name) != null) {
         try out.print("@\"{}\"", .{name});
     } else {
-        try out.write(name);
+        try out.writeAll(name);
     }
 }
 
 fn writeConstAssignmemt(out: var, name: []const u8) !void {
-    try out.write("pub const ");
+    try out.writeAll("pub const ");
     try writeIdentifier(out, name);
-    try out.write(" = ");
+    try out.writeAll(" = ");
 }
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
@@ -173,13 +173,13 @@ fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void 
         // Apparently Vulkan optional-ness information is not correct, so every pointer
         // is considered optional
         switch (ptr.size) {
-            .One => try out.write("?*"),
-            .Many => try out.write("?[*]"),
-            .ZeroTerminated => try out.write("?[*:0]")
+            .One => try out.writeAll("?*"),
+            .Many => try out.writeAll("?[*]"),
+            .ZeroTerminated => try out.writeAll("?[*:0]")
         }
 
         if (ptr.is_const) {
-            try out.write("const ");
+            try out.writeAll("const ");
         }
     }
 
@@ -194,7 +194,7 @@ fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void 
     // Some types can be mapped directly to a built-in type
     for (builtin_types) |bty| {
         if (mem.eql(u8, type_info.name, bty.c_name)) {
-            try out.write(bty.zig_name);
+            try out.writeAll(bty.zig_name);
             return;
         }
     }
@@ -203,9 +203,9 @@ fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void 
     // If its not a pointer, its a return type, so `void` should be emitted.
     if (mem.eql(u8, type_info.name, "void")) {
         if (type_info.pointers.len > 0) {
-            try out.write("c_void");
+            try out.writeAll("c_void");
         } else {
-            try out.write("void");
+            try out.writeAll("void");
         }
 
         return;
@@ -219,60 +219,61 @@ fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void 
     try writeIdentifier(out, trimNamespace(type_info.name));
 }
 
-fn renderApiConstantExpr(out: var, constexpr: []const u8) !void {
-    // There are only a few different kinds of tokens in the expressions,
-    // all of which can be tokenized by the Zig tokenizer. The only parts which cannot
-    // be parsed properly are 'f', 'U', and 'ULL' suffixes.
-    // Render the C expression by simply substituting those values
-
+fn renderApiConstantExpr(out: var, constant_expr: []const u8) !void {
     // omit enclosing parenthesis
-    const expr = if (constexpr[0] == '(' and constexpr[constexpr.len - 1] == ')')
-        constexpr[1 .. constexpr.len - 1]
+    const expr = if (constant_expr[0] == '(' and constant_expr[constant_expr.len - 1] == ')')
+        constant_expr[1 .. constant_expr.len - 1]
     else
-        constexpr;
+        constant_expr;
 
-    var tokenizer = std.zig.Tokenizer.init(expr);
-    var peek_tok: ?std.zig.Token = null;
-
-    while (true) {
-        const tok = peek_tok orelse tokenizer.next();
-        const text = expr[tok.start .. tok.end];
-        peek_tok = null;
-
-        switch (tok.id) {
-            .LParen, .RParen, .Tilde => try out.write(text),
-            .Identifier => try writeIdentifier(out, trimNamespace(text)),
-            .Minus => try out.write(" - "),
-            .FloatLiteral => {
-                try out.print("@as(f32, {})", .{text});
-
-                // Float literal has to be followed by an 'f' identifier.
-                const suffix = tokenizer.next();
-                const suffix_text = expr[suffix.start .. suffix.end];
-                if (suffix.id != .Identifier or !mem.eql(u8, suffix_text, "f")) {
-                    return error.ExpectedFloatSuffix;
+    var i: usize = 0;
+    while (i < expr.len) {
+        switch (expr[i]) {
+            '(', ')', '~' => try out.writeByte(expr[i]),
+            '-' => try out.writeAll(" - "),
+            'a'...'z', 'A'...'Z', '_' => {
+                var j = i;
+                while (j < expr.len) : (j += 1) {
+                    switch (expr[j]) {
+                        'a'...'z', 'A'...'Z', '_', '0'...'9' => {},
+                        else => break
+                    }
                 }
-            },
-            .IntegerLiteral => {
-                const suffix = tokenizer.next();
-                const suffix_text = expr[suffix.start .. suffix.end];
 
-                if (suffix.id != .Identifier) {
-                    // Only need to check here because any identifier following an integer
-                    // that is not 'U' or 'ULL' is a syntax error.
-                    peek_tok = suffix;
-                    try out.write(text);
-                } else if (mem.eql(u8, suffix_text, "U")) {
-                    try out.print("@as(u32, {})", .{text});
-                } else if (mem.eql(u8, suffix_text, "ULL")) {
-                    try out.print("@as(u64, {})", .{text});
+                try writeIdentifier(out, trimNamespace(expr[i .. j]));
+                i = j;
+                continue;
+            },
+            '0'...'9' => {
+                var j = i;
+                while (j < expr.len) : (j += 1) {
+                    switch (expr[j]) {
+                        '0'...'9', '.' => {},
+                        else => break
+                    }
+                }
+
+                if (mem.startsWith(u8, expr[j..], "f")) {
+                    try out.print("@as(f32, {})", .{expr[i .. j]});
+                    j += "f".len;
+                } else if (mem.startsWith(u8, expr[j..], "ULL")) {
+                    try out.print("@as(u32, {})", .{expr[i .. j]});
+                    j += "ULL".len;
+                } else if (mem.startsWith(u8, expr[j..], "U")) {
+                    try out.print("@as(u64, {})", .{expr[i .. j]});
+                    j += "U".len;
                 } else {
-                    return error.InvalidIntSuffix;
+                    try out.writeAll(expr[i .. j]);
                 }
+
+                i = j;
+                continue;
             },
-            .Eof => return,
-            else => return error.UnexpectedToken
+            ' ' => {},
+            else => return error.InvalidConstantExpr
         }
+
+        i += 1;
     }
 }
 
@@ -281,23 +282,23 @@ fn renderApiConstants(out: var, registry: *Registry) !void {
     while (it.next()) |constant| {
         try writeConstAssignmemt(out, trimNamespace(constant.name));
         try renderApiConstantExpr(out, constant.expr);
-        try out.write(";\n");
+        try out.writeAll(";\n");
     }
 
-    try out.write("\n");
+    try out.writeAll("\n");
 }
 
 fn renderForeignTypes(out: var) !void {
     try writeConstAssignmemt(out, foreign_types_namespace);
-    try out.write("struct {\n");
+    try out.writeAll("struct {\n");
 
     for (foreign_types) |fty| {
-        try out.write(base_indent);
+        try out.writeAll(base_indent);
         try writeConstAssignmemt(out, fty.name);
         try out.print("{};\n", .{fty.expr});
     }
 
-    try out.write("};\n");
+    try out.writeAll("};\n");
 }
 
 fn renderDeclarations(out: var, registry: *Registry) !void {
@@ -314,7 +315,7 @@ fn renderDeclarations(out: var, registry: *Registry) !void {
             .BaseType => |type_info| {
                 try writeConstAssignmemt(out, trimNamespace(decl.name));
                 try renderTypeInfo(out, registry, type_info);
-                try out.write(";\n\n");
+                try out.writeAll(";\n\n");
             },
             else => {}
         }
@@ -334,14 +335,14 @@ fn renderEnum(out: var, name: []const u8, enum_info: *reg.EnumInfo) !void {
     const trimmed_name = trimNamespace(name);
 
     try writeConstAssignmemt(out, trimmed_name);
-    try out.write("extern enum {\n");
+    try out.writeAll("extern enum {\n");
 
     // Calculate the length of the enum namespace, by iterating through the segments
     // of the variant (in screaming snake case) and comparing it to the name of the enum,
     // until the two differ.
     var prefix_len: usize = 0;
     var snake_prefix_len: usize = 0;
-    var segment_it = mem.separate(enum_info.variants.at(0).name, "_");
+    var segment_it = mem.split(enum_info.variants.at(0).name, "_");
     while (segment_it.next()) |segment| {
         if (prefix_len + segment.len <= name.len and eqlIgnoreCase(segment, name[prefix_len .. prefix_len + segment.len])) {
             prefix_len += segment.len;
@@ -355,7 +356,7 @@ fn renderEnum(out: var, name: []const u8, enum_info: *reg.EnumInfo) !void {
     while (it.next()) |variant| {
         if (variant.value == .Alias) continue; // Skip aliases
 
-        try out.write(base_indent);
+        try out.writeAll(base_indent);
         try writeIdentifier(out, variant.name[snake_prefix_len ..]);
 
         switch (variant.value) {
@@ -366,7 +367,7 @@ fn renderEnum(out: var, name: []const u8, enum_info: *reg.EnumInfo) !void {
         }
     }
 
-    try out.write("};\n\n");
+    try out.writeAll("};\n\n");
 }
 
 fn renderAlias(out: var, registry: *Registry, name: []const u8, alias: []const u8) !void {
@@ -383,52 +384,52 @@ fn renderAlias(out: var, registry: *Registry, name: []const u8, alias: []const u
 
     try writeConstAssignmemt(out, trimNamespace(name));
     try writeIdentifier(out, trimNamespace(alias));
-    try out.write(";\n\n");
+    try out.writeAll(";\n\n");
 }
 
 fn renderFnPtr(out: var, registry: *Registry, name: []const u8, info: *reg.CommandInfo) !void {
     try writeConstAssignmemt(out, trimNamespace(name));
-    try out.write("extern fn(");
+    try out.writeAll("?fn(");
 
     if (info.parameters.count() > 0) {
-        try out.write("\n");
+        try out.writeAll("\n");
         var it = info.parameters.iterator(0);
         while (it.next()) |param| {
-            try out.write(base_indent);
+            try out.writeAll(base_indent);
             try writeIdentifier(out, param.name);
-            try out.write(": ");
+            try out.writeAll(": ");
             try renderTypeInfo(out, registry, param.type_info);
-            try out.write(",\n");
+            try out.writeAll(",\n");
         }
     }
 
-    try out.write(") ");
+    try out.writeAll(") callconv(.C) ");
     try renderTypeInfo(out, registry, info.return_type_info);
-    try out.write(";\n\n");
+    try out.writeAll(";\n\n");
 }
 
 fn renderContainer(out: var, registry: *Registry, kind: enum{Struct, Union}, name: []const u8, info: *reg.ContainerInfo) !void {
     try writeConstAssignmemt(out, trimNamespace(name));
 
     switch (kind) {
-        .Struct => try out.write("extern struct {\n"),
-        .Union => try out.write("extern union {\n")
+        .Struct => try out.writeAll("extern struct {\n"),
+        .Union => try out.writeAll("extern union {\n")
     }
 
     var it = info.members.iterator(0);
     while (it.next()) |member| {
-        try out.write(base_indent);
+        try out.writeAll(base_indent);
         try writeIdentifier(out, member.name);
-        try out.write(": ");
+        try out.writeAll(": ");
         try renderTypeInfo(out, registry, member.type_info);
-        try out.write(",\n");
+        try out.writeAll(",\n");
     }
 
-    try out.write("};\n\n");
+    try out.writeAll("};\n\n");
 }
 
 fn renderTest(out: var) !void {
-    try out.write(
+    try out.writeAll(
         \\test "Semantic analysis" {
         \\    std.meta.refAllDecls(@This());
         \\}

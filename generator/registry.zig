@@ -56,7 +56,7 @@ pub const Registry = struct {
         return registry;
     }
 
-    fn deinit(self: Registry) void {
+    pub fn deinit(self: Registry) void {
         self.declarations_by_name.deinit();
 
         // Copy to stack so that the arena doesn't destroy itself
@@ -212,7 +212,7 @@ pub const TypeInfo = struct {
 
             // Read the sizes of each pointer
             if (elem.getAttribute("len")) |lens| {
-                var len_it = std.mem.separate(lens, ",");
+                var len_it = std.mem.split(lens, ",");
                 for (type_info.pointers) |*ptr, i| {
                     ptr.size = if (len_it.next()) |len| lenToPointerSize(len) else .One;
                 }
@@ -307,7 +307,7 @@ pub const TypeInfo = struct {
         // while the others are in the `post`.
 
         // Check the outer pointers
-        var const_it = std.mem.separate(post, "*");
+        var const_it = std.mem.split(post, "*");
         var i: usize = self.pointers.len;
         while (i > 0) {
             i -= 1;
@@ -344,7 +344,11 @@ pub const TypeInfo = struct {
             }
         }
 
-        try output(context, self.name);
+        if (self.name) |name| {
+            try output(context, self.name);
+        } else {
+            try output(context, "@Type(.Opaque)");
+        }
     }
 
     fn lenToPointerSize(len: []const u8) PointerSize {
@@ -463,7 +467,7 @@ pub const CommandInfo = struct {
         const ncodes = 1 + count(text, ',');
         const codes = allocator.alloc([]const u8, ncodes) catch unreachable;
 
-        var it = mem.separate(text, ",");
+        var it = mem.split(text, ",");
 
         for (codes) |*code, i| {
             code.* = it.next().?;
@@ -650,7 +654,18 @@ fn processFuncPointerType(registry: *Registry, ty: *xml.Element) void {
 }
 
 fn processBaseType(registry: *Registry, ty: *xml.Element) void {
+    const special_names = [_][]const u8{ // handled in render.zig
+        "ANativeWindow",
+        "AHardwareBuffer",
+        "CAMetalLayer"
+    };
+
     const name = ty.getCharData("name").?;
+
+    for (special_names) |special| {
+        if (mem.eql(u8, name, special)) return;
+    }
+
     const type_info = TypeInfo.fromXml(&registry.arena.allocator, ty);
     registry.addDefinition(name, .{.BaseType = type_info});
 }
