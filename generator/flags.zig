@@ -1,74 +1,66 @@
-pub fn Flags(comptime E: type) type {
-    comptime {
-        var bits: u32 = 0;
-        inline for (@typeInfo(E).Enum.fields) |field| {
-            const val: u32 = field.value;
-            std.debug.assert(@popCount(u32, val) == 1);
-            std.debug.assert(bits & val == 0);
-            bits |= val;
-        }
-    }
+const std = @import("std");
+const testing = std.testing;
 
+fn FlagTraits(comptime Self: type) type {
     return struct {
-        const Self = @This();
-        bits: u32,
-
-        pub const none = Self.init(.{});
-        pub const all = comptime blk: {
-            var flags = Self.none;
-            inline for (@typeInfo(E).Enum.fields) |field| {
-                flags.bits |= field.value;
-            }
-            break :blk flags;
-        };
-
         pub fn init(flags: var) Self {
-            return .{.bits = Self.toBits(flags)};
+            var self: u32 = 0;
+
+            inline for (std.meta.fields(@TypeOf(flags))) |field| {
+                self |= @enumToInt(@as(Self, @field(flags, field.name)));
+            }
+
+            return @intToEnum(Self, self);
         }
 
         pub fn merge(lhs: Self, rhs: Self) Self {
-            return .{.bits = lhs.bits | rhs.bits};
+            return @intToEnum(Self, @enumToInt(lhs) | @enumToInt(rhs));
         }
 
         pub fn intersect(lhs: Self, rhs: Self) Self {
-            return .{.bits = lhs.bits & rhs.bits};
+            return @intToEnum(Self, @enumToInt(lhs) & @enumToInt(rhs));
         }
 
         pub fn subtract(lhs: Self, rhs: Self) Self {
-            return .{.bits = lhs.bits & rhs.complement().bits};
+            return @intToEnum(Self, @enumToInt(lhs) & @enumToInt(rhs.complement()));
         }
 
         pub fn complement(self: Self) Self {
-            return .{.bits = ~self.bits & Self.all.bits};
+            const all = comptime blk: {
+                var flags: u32 = 0;
+                for (std.meta.fields(Self)) |field| {
+                    flags |= field.value;
+                }
+                break :blk flags;
+            };
+
+            return @intToEnum(Self, ~@enumToInt(self) & all);
         }
 
         pub fn contains(lhs: Self, rhs: Self) bool {
-            return lhs.bits & rhs.bits == rhs.bits;
+            return @enumToInt(lhs) & @enumToInt(rhs) == @enumToInt(rhs);
         }
 
-        pub fn equals(lhs: Self, rhs: Self) bool {
-            return lhs.bits == rhs.bits;
-        }
+        pub fn format(
+            self: Self,
+            fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            out_stream: var
+        ) @TypeOf(out_stream).Error!void {
+            const bits = @enumToInt(self);
+            var first = true;
+            inline for (std.meta.fields(Self)) |field| {
+                if (@popCount(u32, field.value) != 1) continue;
 
-        fn toBits(flags: var) u32 {
-            const ty = @TypeOf(flags);
-
-            if (ty == Self) {
-                return flags.bits;
-            }
-
-            switch (@typeInfo(ty)) {
-                .EnumLiteral => return @enumToInt(@as(E, flags)),
-                .Struct => |struct_info| {
-                    var value: u32 = 0;
-                    inline for (struct_info.fields) |field| {
-                        value |= @enumToInt(@as(E, @field(flags, field.name)));
+                if (bits & field.value == field.value) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        try std.fmt.formatBuf(" | ", options, out_stream);
                     }
 
-                    return value;
-                },
-                else => @compileError("Value of type '" ++ @typeName(ty)
-                    ++ "' cannot be converted into '" ++ @typeName(Self) ++ "'")
+                    try std.fmt.formatBuf(field.name, options, out_stream);
+                }
             }
         }
     };
