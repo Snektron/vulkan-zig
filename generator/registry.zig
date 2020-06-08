@@ -93,7 +93,7 @@ pub const Registry = struct {
         return null;
     }
 
-    fn dump(self: *Registry) void {
+    pub fn dump(self: *Registry) void {
         const indent = " " ** 4;
 
         {

@@ -13,20 +13,20 @@ const ForeignType = struct {
 };
 
 const foreign_types = [_]ForeignType{
-    .{.name = "Display", .expr = "Type(.Opaque)"},
+    .{.name = "Display", .expr = "@Type(.Opaque)"},
     .{.name = "VisualID", .expr = @typeName(c_uint)},
     .{.name = "Window", .expr = @typeName(c_ulong)},
     .{.name = "RROutput", .expr = @typeName(c_ulong)},
     .{.name = "wl_display", .expr = "@Type(.Opaque)"},
     .{.name = "wl_surface", .expr = "@Type(.Opaque)"},
-    .{.name = "HINSTANCE", .expr = "std.os.HINSTANCE"},
-    .{.name = "HWND", .expr = "*@OpaqueType()"},
-    .{.name = "HMONITOR", .expr = "*OpaqueType()"},
-    .{.name = "HANDLE", .expr = "std.os.HANDLE"},
-    .{.name = "SECURITY_ATTRIBUTES", .expr = "std.os.SECURITY_ATTRIBUTES"},
-    .{.name = "DWORD", .expr = "std.os.DWORD"},
-    .{.name = "LPCWSTR", .expr = "std.os.LPCWSTR"},
-    .{.name = "xcb_connection_t", .expr = "@OpaqueType()"},
+    .{.name = "HINSTANCE", .expr = "u32; //std.os.HINSTANCE"},
+    .{.name = "HWND", .expr = "*@Type(.Opaque)"},
+    .{.name = "HMONITOR", .expr = "*@Type(.Opaque)"},
+    .{.name = "HANDLE", .expr = "u32; //std.os.HANDLE"},
+    .{.name = "SECURITY_ATTRIBUTES", .expr = "u32; //std.os.SECURITY_ATTRIBUTES"},
+    .{.name = "DWORD", .expr = "u32; //std.os.DWORD"},
+    .{.name = "LPCWSTR", .expr = "u32; //std.os.LPCWSTR"},
+    .{.name = "xcb_connection_t", .expr = "@Type(.Opaque)"},
     .{.name = "xcb_visualid_t", .expr = @typeName(u32)},
     .{.name = "xcb_window_t", .expr = @typeName(u32)},
     .{.name = "zx_handle_t", .expr = @typeName(u32)},
@@ -45,6 +45,7 @@ const BuiltinType = struct {
 };
 
 const builtin_types = [_]BuiltinType{
+    .{.c_name = "void", .zig_name = @typeName(void)},
     .{.c_name = "char", .zig_name = @typeName(u8)},
     .{.c_name = "float", .zig_name = @typeName(f32)},
     .{.c_name = "double", .zig_name = @typeName(f64)},
@@ -59,7 +60,7 @@ const builtin_types = [_]BuiltinType{
 };
 
 pub fn render(out: var, registry: *Registry) !void {
-    try out.writeAll("const std = @import(\"std\");\n\n");
+    try out.writeAll("const std = @import(\"std\");\n");
     try renderApiConstants(out, registry);
     try renderForeignTypes(out);
     try out.writeAll("\n");
@@ -144,10 +145,35 @@ fn writeIdentifier(out: var, name: []const u8) !void {
     }
 }
 
+const Identifier = struct {
+    name: []const u8,
+
+    fn init(name: []const u8) Identifier {
+        return .{.name = name};
+    }
+
+    fn needEscape(self: Identifier) bool {
+        return !isValidZigIdentifier(self.name)
+            or isZigReservedIdentifier(self.name)
+            or std.zig.Token.getKeyword(self.name) != null;
+    }
+
+    pub fn format(
+        self: Identifier,
+        fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        out_stream: var
+    ) @TypeOf(out_stream).Error!void {
+        if (self.needEscape()){
+            try out_stream.print("@\"{}\"", .{self.name});
+        } else {
+            try out_stream.writeAll(self.name);
+        }
+    }
+};
+
 fn writeConstAssignmemt(out: var, name: []const u8) !void {
-    try out.writeAll("pub const ");
-    try writeIdentifier(out, name);
-    try out.writeAll(" = ");
+    try out.print("pub const {} = ", .{Identifier.init(name)});
 }
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
@@ -165,6 +191,10 @@ fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
 }
 
 fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void {
+    // If the type is a `void*`, it needs to be translated to `*c_void`.
+    // If its not a pointer, its a return type, so `void` should be emitted.
+    const is_void_ptr = mem.eql(u8, type_info.name, "void") and type_info.pointers.len > 0;
+
     if (type_info.array_size) |array_size| {
         try out.print("[{}]", .{trimNamespace(array_size)});
     }
@@ -174,13 +204,21 @@ fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void 
         // is considered optional
         switch (ptr.size) {
             .One => try out.writeAll("?*"),
-            .Many => try out.writeAll("?[*]"),
+            .Many => if (is_void_ptr)
+                    try out.writeAll("?*")
+                else
+                    try out.writeAll("?[*]"),
             .ZeroTerminated => try out.writeAll("?[*:0]")
         }
 
         if (ptr.is_const) {
             try out.writeAll("const ");
         }
+    }
+
+    if (is_void_ptr) {
+        try out.writeAll("c_void");
+        return;
     }
 
     // If the type is foreign, add the appropriate namespace specifier
@@ -199,24 +237,16 @@ fn renderTypeInfo(out: var, registry: *Registry, type_info: reg.TypeInfo) !void 
         }
     }
 
-    // If the type is a `void*`, it needs to be translated to `*c_void`.
-    // If its not a pointer, its a return type, so `void` should be emitted.
-    if (mem.eql(u8, type_info.name, "void")) {
-        if (type_info.pointers.len > 0) {
-            try out.writeAll("c_void");
-        } else {
-            try out.writeAll("void");
+    // Make sure the type is defined by Vulkan otherwise
+    if (registry.findDefinitionByName(type_info.name)) |def| {
+        if (def.* == .FnPtr) {
+            try out.writeAll("PFN_");
         }
 
-        return;
-    }
-
-    // Make sure the type is defined by Vulkan otherwise
-    if (registry.findDefinitionByName(type_info.name) == null) {
+        try writeIdentifier(out, trimNamespace(type_info.name));
+    } else {
         return error.InvalidType;
     }
-
-    try writeIdentifier(out, trimNamespace(type_info.name));
 }
 
 fn renderApiConstantExpr(out: var, constant_expr: []const u8) !void {
@@ -304,22 +334,65 @@ fn renderForeignTypes(out: var) !void {
 fn renderDeclarations(out: var, registry: *Registry) !void {
     var it = registry.declarations.iterator(0);
     while (it.next()) |decl| {
-        if (decl.definition == .Command) continue; // handled seperately
-
         switch (decl.definition) {
-            .Enum => |*info| try renderEnum(out, decl.name, info),
-            // .Alias => |alias| try renderAlias(out, registry, decl.name, alias),
-            .FnPtr => |*info| try renderFnPtr(out, registry, decl.name, info),
             .Struct => |*info| try renderContainer(out, registry, .Struct, decl.name, info),
             .Union => |*info| try renderContainer(out, registry, .Union, decl.name, info),
+            .Enum => |*info| try renderEnum(out, decl.name, info),
+            .Bitmask => |*info| try renderBitmask(out, decl.name, info),
+            .Handle => |*info| try renderHandle(out, decl.name, info),
+            .FnPtr => |*info| try renderFnPtr(out, registry, decl.name, info),
+            .Command => |*info| try renderCommand(out, registry, decl.name, info),
+            .Alias => |alias| try renderAlias(out, registry, decl.name, alias),
             .BaseType => |type_info| {
                 try writeConstAssignmemt(out, trimNamespace(decl.name));
                 try renderTypeInfo(out, registry, type_info);
-                try out.writeAll(";\n\n");
+                try out.writeAll(";\n");
             },
-            else => {}
+
         }
     }
+}
+
+fn renderCommand(out: var, registry: *Registry, name: []const u8, info: *reg.CommandInfo) !void {
+    try out.writeAll("extern fn ");
+    try writeIdentifier(out, name);
+    try out.writeAll("(");
+
+    if (info.parameters.count() > 0) {
+        try out.writeAll("\n");
+        var it = info.parameters.iterator(0);
+        while (it.next()) |param| {
+            try out.writeAll(base_indent);
+            try writeIdentifier(out, param.name);
+            try out.writeAll(": ");
+            try renderTypeInfo(out, registry, param.type_info);
+            try out.writeAll(",\n");
+        }
+    }
+
+    try out.writeAll(") callconv(.C) ");
+    try renderTypeInfo(out, registry, info.return_type_info);
+    try out.writeAll(";\n\n");
+
+    // var buf: [256]u8 = undefined;
+    // const trimmed = trimNamespace(name);
+    // mem.copy(u8, &buf, trimNamespace(name));
+    // buf[0] = std.ascii.toLower(buf[0]);
+
+    // try writeConstAssignmemt(out, buf[0 .. trimmed.len]);
+    // try writeIdentifier(out, name);
+    // try out.writeAll(";\n");
+}
+
+fn renderHandle(out: var, name: []const u8, info: *const reg.HandleInfo) !void {
+    try writeConstAssignmemt(out, trimNamespace(name));
+    // Todo: (non)-dispatchable
+    try out.writeAll("*@Type(.Opaque);\n");
+}
+
+fn renderBitmask(out: var, name: []const u8, info: *const reg.BitmaskInfo) !void {
+    try writeConstAssignmemt(out, trimNamespace(name));
+    try out.writeAll("Flags;\n");
 }
 
 fn shouldSkipEnum(enum_info: *reg.EnumInfo) bool {
@@ -367,7 +440,7 @@ fn renderEnum(out: var, name: []const u8, enum_info: *reg.EnumInfo) !void {
         }
     }
 
-    try out.writeAll("};\n\n");
+    try out.writeAll("};\n");
 }
 
 fn renderAlias(out: var, registry: *Registry, name: []const u8, alias: []const u8) !void {
@@ -378,17 +451,20 @@ fn renderAlias(out: var, registry: *Registry, name: []const u8, alias: []const u
         def = registry.findDefinitionByName(def.Alias).?;
     }
 
-    if (def.* == .Enum and shouldSkipEnum(&def.Enum)) {
+    if ((def.* == .Enum and shouldSkipEnum(&def.Enum)) or def.* == .Command) {
         return;
     }
 
     try writeConstAssignmemt(out, trimNamespace(name));
     try writeIdentifier(out, trimNamespace(alias));
-    try out.writeAll(";\n\n");
+    try out.writeAll(";\n");
 }
 
 fn renderFnPtr(out: var, registry: *Registry, name: []const u8, info: *reg.CommandInfo) !void {
-    try writeConstAssignmemt(out, trimNamespace(name));
+    try out.writeAll("pub const PFN_");
+    try writeIdentifier(out, name);
+    try out.writeAll(" = ");
+
     try out.writeAll("?fn(");
 
     if (info.parameters.count() > 0) {
@@ -405,7 +481,7 @@ fn renderFnPtr(out: var, registry: *Registry, name: []const u8, info: *reg.Comma
 
     try out.writeAll(") callconv(.C) ");
     try renderTypeInfo(out, registry, info.return_type_info);
-    try out.writeAll(";\n\n");
+    try out.writeAll(";\n");
 }
 
 fn renderContainer(out: var, registry: *Registry, kind: enum{Struct, Union}, name: []const u8, info: *reg.ContainerInfo) !void {
@@ -425,12 +501,13 @@ fn renderContainer(out: var, registry: *Registry, kind: enum{Struct, Union}, nam
         try out.writeAll(",\n");
     }
 
-    try out.writeAll("};\n\n");
+    try out.writeAll("};\n");
 }
 
 fn renderTest(out: var) !void {
     try out.writeAll(
         \\test "Semantic analysis" {
+        \\    @setEvalBranchQuota(2000);
         \\    std.meta.refAllDecls(@This());
         \\}
         \\
