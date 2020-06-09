@@ -12,7 +12,7 @@ pub const Declaration = struct {
 pub const ApiConstant = struct {
     pub const Value = union(enum) {
         expr: []const u8,
-        alias: []const u8,
+        alias: []const u8, // Alias of another API constant
     };
 
     name: []const u8,
@@ -50,9 +50,12 @@ pub const Container = struct {
 pub const Enum = struct {
     pub const Value = union(enum) {
         bitpos: u5, // 1 << bitpos
-        bitvector: u32, // Combined flags
+        bit_vector: i32, // Combined flags & some vendor IDs
         int: i32,
-        alias: []const u8,
+        alias: struct {
+            alias_name: []const u8,
+            is_compat_alias: bool,
+        }
     };
 
     pub const Field = struct {
@@ -61,7 +64,7 @@ pub const Enum = struct {
     };
 
     fields: []Field,
-    is_bitmask_bits: bool,
+    is_bitmask: bool,
 };
 
 pub const Bitmask = struct {
