@@ -55,28 +55,50 @@ pub const Element = struct {
         };
     }
 
+    pub fn elements(self: *Element) ChildElementIterator {
+        return .{
+            .inner = self.children.iterator(0),
+        };
+    }
+
     pub fn findChildByTag(self: *Element, tag: []const u8) ?*Element {
         return self.findChildrenByTag(tag).next();
     }
 
     pub fn findChildrenByTag(self: *Element, tag: []const u8) FindChildrenByTagIterator {
         return .{
-            .inner = self.children.iterator(0),
+            .inner = self.elements(),
             .tag = tag
         };
     }
 
-    pub const FindChildrenByTagIterator = struct {
+    pub const ChildElementIterator = struct {
         inner: ContentList.Iterator,
-        tag: []const u8,
 
-        pub fn next(self: *FindChildrenByTagIterator) ?*Element {
+        pub fn next(self: *ChildElementIterator) ?*Element {
             while (self.inner.next()) |child| {
-                if (child.* != .Element or !mem.eql(u8, child.*.Element.tag, self.tag)) {
+                if (child.* != .Element) {
                     continue;
                 }
 
                 return child.*.Element;
+            }
+
+            return null;
+        }
+    };
+
+    pub const FindChildrenByTagIterator = struct {
+        inner: ChildElementIterator,
+        tag: []const u8,
+
+        pub fn next(self: *FindChildrenByTagIterator) ?*Element {
+            while (self.inner.next()) |child| {
+                if (!mem.eql(u8, child.tag, self.tag)) {
+                    continue;
+                }
+
+                return child;
             }
 
             return null;

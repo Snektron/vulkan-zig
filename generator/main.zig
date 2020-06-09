@@ -1,7 +1,22 @@
 const std = @import("std");
 const xml = @import("xml.zig");
-const Registry = @import("registry.zig").Registry;
-const vk_render = @import("render.zig").render;
+const parseXml = @import("spec-parse.zig").parseXml;
+const registry = @import("registry-new.zig");
+
+pub fn dumpRegistry(reg: registry.Registry) void {
+    for (reg.tags) |tag| {
+        std.debug.warn("tag: name = {}, author = {}\n", .{tag.name, tag.author});
+    }
+
+    for (reg.api_constants) |api_constant| {
+        std.debug.warn("constant: name = {}, ", .{api_constant.name});
+        switch (api_constant.value) {
+            .expr => |expr| std.debug.warn("expr = {}\n", .{expr}),
+            .alias => |alias| std.debug.warn("alias = {}\n", .{alias}),
+        }
+
+    }
+}
 
 pub fn main() !void {
     if (std.os.argv.len <= 1) {
@@ -21,13 +36,10 @@ pub fn main() !void {
     const spec = try xml.parse(std.heap.page_allocator, source);
     defer spec.deinit();
 
-    const registry = Registry.fromXml(std.heap.page_allocator, spec.root);
-    defer registry.deinit();
-    // registry.dump();
+    const result = try parseXml(std.heap.page_allocator, spec.root);
+    defer result.deinit();
 
-    const stdout_file = std.io.getStdOut();
-    var stdout = stdout_file.outStream();
-    try vk_render(stdout, registry);
+    dumpRegistry(result.registry);
 }
 
 test "main" {
