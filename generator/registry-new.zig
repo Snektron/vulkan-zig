@@ -32,10 +32,11 @@ pub const TypeInfo = union(enum) {
     Handle: Handle,
     FnPtr: Command,
     Command: Command,
-    Alias: []const u8,
+    Alias: []const u8, // Alias of another declaration
     Pointer: Pointer,
     Array: Array,
     Opaque: void,
+    Foreign: Foreign
 };
 
 pub const Container = struct {
@@ -107,4 +108,8 @@ pub const Array = struct {
 
     size: ArraySize,
     child: *TypeInfo,
+};
+
+pub const Foreign = struct {
+    dependency: []const u8, // Either a header or vk_platform
 };

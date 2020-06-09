@@ -53,22 +53,41 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
     var i: usize = 0;
     var it = types_elem.findChildrenByTag("type");
     while (it.next()) |ty| {
-        // TODO: Handle foreign types
-        const category = ty.getAttribute("category") orelse continue;
+        out[i] = blk: {
+            const category = ty.getAttribute("category") orelse {
+                break :blk try parseForeigntype(ty);
+            };
 
-        // Enums are handled later, in parseEnums. This also has the effect of filtering
-        // out any enums which have no elements, and should be unused by other parts of the API.
-        out[i] = if (mem.eql(u8, category, "bitmask"))
-                try parseBitmaskType(ty)
-            else if (mem.eql(u8, category, "handle"))
-                try parseHandleType(ty)
-            else
-                continue;
+            // Enums are handled later, in parseEnums. This also has the effect of filtering
+            // out any enums which have no elements, and should be unused by other parts of the API.
+            if (mem.eql(u8, category, "bitmask")) {
+                break :blk try parseBitmaskType(ty);
+            } else if (mem.eql(u8, category, "handle")) {
+                break :blk try parseHandleType(ty);
+            } else if (mem.eql(u8, category, "basetype")) {
+                break :blk try parseBaseType(ty);
+            }
+
+            continue;
+        };
 
         i += 1;
     }
 
     return i;
+}
+
+fn parseForeigntype(ty: *xml.Element) !registry.Declaration {
+    const name = ty.getAttribute("name") orelse return error.InvalidRegistry;
+    const dependency = ty.getAttribute("requires") orelse if (mem.eql(u8, name, "int"))
+            "vk_platform"  // for some reason, int doesn't depend on vk_platform (but the other c types do)
+        else
+            return error.InvalidRegistry;
+
+    return registry.Declaration{
+        .name = name,
+        .decl_type = .{.Foreign = .{.dependency = dependency}},
+    };
 }
 
 fn parseBitmaskType(ty: *xml.Element) !registry.Declaration {
@@ -110,6 +129,21 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
                     .is_dispatchable = dispatchable,
                 }
             }
+        };
+    }
+}
+
+fn parseBaseType(ty: *xml.Element) !registry.Declaration {
+    const name = ty.getCharData("name") orelse return error.InvalidRegistry;
+    if (ty.getCharData("type")) |alias| { // TODO: Parse as full type?
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.Alias = alias},
+        };
+    } else {
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.Opaque = {}},
         };
     }
 }
