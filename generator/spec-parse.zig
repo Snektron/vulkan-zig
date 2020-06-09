@@ -50,7 +50,68 @@ fn parseDeclarations(allocator: *Allocator, root: *xml.Element) ![]registry.Decl
 }
 
 fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *xml.Element) !usize {
-    return 0;
+    var i: usize = 0;
+    var it = types_elem.findChildrenByTag("type");
+    while (it.next()) |ty| {
+        // TODO: Handle foreign types
+        const category = ty.getAttribute("category") orelse continue;
+
+        // Enums are handled later, in parseEnums. This also has the effect of filtering
+        // out any enums which have no elements, and should be unused by other parts of the API.
+        out[i] = if (mem.eql(u8, category, "bitmask"))
+                try parseBitmaskType(ty)
+            else if (mem.eql(u8, category, "handle"))
+                try parseHandleType(ty)
+            else
+                continue;
+
+        i += 1;
+    }
+
+    return i;
+}
+
+fn parseBitmaskType(ty: *xml.Element) !registry.Declaration {
+    if (ty.getAttribute("name")) |name| {
+        const alias = ty.getAttribute("alias") orelse return error.InvalidRegistry;
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.Alias = alias},
+        };
+    } else {
+        return registry.Declaration{
+            .name = ty.getCharData("name") orelse return error.InvalidRegistry,
+            .decl_type = .{.Bitmask = .{.bits_enum = ty.getAttribute("requires")}},
+        };
+    }
+}
+
+fn parseHandleType(ty: *xml.Element) !registry.Declaration {
+    // Parent is not handled in case of an alias
+    if (ty.getAttribute("name")) |name| {
+        const alias = ty.getAttribute("alias") orelse return error.InvalidRegistry;
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.Alias = alias},
+        };
+    } else {
+        const name = ty.getCharData("name") orelse return error.InvalidRegistry;
+        const handle_type = ty.getCharData("type") orelse return error.InvalidRegistry;
+        const dispatchable = mem.eql(u8, handle_type, "VK_DEFINE_HANDLE");
+        if (!dispatchable and !mem.eql(u8, handle_type, "VK_DEFINE_NON_DISPATCHABLE_HANDLE")) {
+            return error.InvalidRegistry;
+        }
+
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{
+                .Handle = .{
+                    .parent = ty.getAttribute("parent"),
+                    .is_dispatchable = dispatchable,
+                }
+            }
+        };
+    }
 }
 
 fn parseEnums(allocator: *Allocator, out: []registry.Declaration, root: *xml.Element) !usize {

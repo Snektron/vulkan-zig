@@ -72,6 +72,7 @@ pub const Bitmask = struct {
 };
 
 pub const Handle = struct {
+    parent: ?[]const u8, // VkInstance has no parent
     is_dispatchable: bool,
 };
 
