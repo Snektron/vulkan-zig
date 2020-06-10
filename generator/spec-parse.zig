@@ -1,6 +1,7 @@
 const std = @import("std");
 const registry = @import("registry-new.zig");
 const xml = @import("xml.zig");
+const xmlc = @import("spec-c-parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -65,7 +66,7 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
             } else if (mem.eql(u8, category, "handle")) {
                 break :blk try parseHandleType(ty);
             } else if (mem.eql(u8, category, "basetype")) {
-                break :blk try parseBaseType(ty);
+                break :blk try parseBaseType(allocator, ty);
             }
 
             continue;
@@ -133,14 +134,14 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
     }
 }
 
-fn parseBaseType(ty: *xml.Element) !registry.Declaration {
+fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration {
     const name = ty.getCharData("name") orelse return error.InvalidRegistry;
-    if (ty.getCharData("type")) |alias| { // TODO: Parse as full type?
-        return registry.Declaration{
-            .name = name,
-            .decl_type = .{.Alias = alias},
-        };
+    if (ty.getCharData("type")) |_| { // TODO: Parse as full type?
+        var tok = xmlc.XmlCTokenizer.init(ty);
+        return try xmlc.parseTypedef(allocator, &tok);
     } else {
+        // Either ANativeWindow, AHardwareBuffer or CAMetalLayer. The latter has a lot of
+        // macros, which is why this part is not built into the xml/c parser.
         return registry.Declaration{
             .name = name,
             .decl_type = .{.Opaque = {}},

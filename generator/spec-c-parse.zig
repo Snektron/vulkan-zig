@@ -2,7 +2,9 @@ const std = @import("std");
 const registry = @import("registry-new.zig");
 const xml = @import("xml.zig");
 const mem = std.mem;
+const Allocator = mem.Allocator;
 const testing = std.testing;
+const ArraySize = registry.Array.ArraySize;
 
 const Token = struct {
     id: Id,
@@ -24,7 +26,6 @@ const Token = struct {
         kw_typedef,
         kw_const,
         kw_vkapi_ptr,
-        whitespace,
     };
 };
 
@@ -75,24 +76,6 @@ const CTokenizer = struct {
         return .{.id = id, .text = token_text};
     }
 
-    fn whitespace(self: *CTokenizer) Token {
-        const start = self.offset;
-        _ = self.consumeNoEof();
-
-        while (true) {
-            const c = self.peek() orelse break;
-            switch (c) {
-                ' ', '\t', '\n', '\r' => _ = self.consumeNoEof(),
-                else => break,
-            }
-        }
-
-        return .{
-            .id = .whitespace,
-            .text = self.source[start .. self.offset],
-        };
-    }
-
     fn int(self: *CTokenizer) Token {
         const start = self.offset;
         _ = self.consumeNoEof();
@@ -113,12 +96,17 @@ const CTokenizer = struct {
     }
 
     fn next(self: *CTokenizer) !?Token {
-        const c = self.peek() orelse return null;
-        var id: Token.Id = undefined;
+        while (true) {
+            switch (self.peek() orelse return null) {
+                ' ', '\t', '\n', '\r' => _ = self.consumeNoEof(),
+                else => break,
+            }
+        }
 
+        const c = self.peek().?;
+        var id: Token.Id = undefined;
         switch (c) {
             'A'...'Z', 'a'...'z', '_' => return self.keyword(),
-            ' ', '\t', '\n', '\r' => return self.whitespace(),
             '0'...'9' => return self.int(),
             '*' => id = .star,
             ',' => id = .comma,
@@ -139,9 +127,16 @@ const CTokenizer = struct {
     }
 };
 
-const XmlCTokenizer = struct {
+pub const XmlCTokenizer = struct {
     it: xml.Element.ContentList.Iterator,
     ctok: ?CTokenizer = null,
+    current: ?Token = null,
+
+    pub fn init(elem: *xml.Element) XmlCTokenizer {
+        return .{
+            .it = elem.children.iterator(0),
+        };
+    }
 
     fn elemToToken(elem: *xml.Element) !?Token {
         if (elem.children.count() != 1 or elem.children.at(0).* != .CharData) {
@@ -161,6 +156,12 @@ const XmlCTokenizer = struct {
     }
 
     fn next(self: *XmlCTokenizer) !?Token {
+        if (self.current) |current| {
+            const token = current;
+            self.current = null;
+            return token;
+        }
+
         while (true) {
             if (self.ctok) |*ctok| {
                 if (try ctok.next()) |tok| {
@@ -185,16 +186,152 @@ const XmlCTokenizer = struct {
         }
     }
 
-    fn nextIgnoreWs(self: *XmlCTokenizer) !?Token {
-        while (try self.next()) |tok| {
-            if (tok.id != .whitespace) {
-                return tok;
-            }
+    fn nextNoEof(self: *XmlCTokenizer) !Token {
+        return (try self.next()) orelse return error.InvalidSyntax;
+    }
+
+    fn peek(self: *XmlCTokenizer) !?Token {
+        if (self.current) |current| {
+            return current;
         }
 
-        return null;
+        self.current = try self.next();
+        return self.current;
+    }
+
+    fn peekNoEof(self: *XmlCTokenizer) !Token {
+        return (try self.peek()) orelse return error.InvalidSyntax;
+    }
+
+    fn expect(self: *XmlCTokenizer, id: Token.Id) !Token {
+        const tok = (try self.next()) orelse return error.UnexpectedEof;
+        if (tok.id != id) {
+            return error.UnexpectedToken;
+        }
+
+        return tok;
     }
 };
+
+const PointerInfo = struct {
+    is_const: bool,
+};
+
+// TYPEDEF = kw_typedef DECLARATION ';'
+pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+    _ = try xctok.expect(.kw_typedef);
+    const decl = try parseDeclaration(allocator, xctok);
+    _ = try xctok.expect(.semicolon);
+    return decl;
+}
+
+// DECLARATION = kw_const? type_name DECLARATOR
+// DECLARATOR = POINTERS? (id | name) ('[' ARRAY_EXPR ']')
+//     | POINTERS? '(' kw_vkapi_ptr '*' name' ')' // TODO
+// POINTERS = (kw_const? '*')+
+pub fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+    // Parse declaration constness
+    var tok = try xctok.nextNoEof();
+    const inner_is_const = tok.id == .kw_const;
+    if (inner_is_const) {
+        tok = try xctok.nextNoEof();
+    }
+
+    // Parse type name
+    if (tok.id != .type_name) return error.InvalidSyntax;
+    const type_name = tok.text;
+
+    var type_info = registry.TypeInfo{.Alias = type_name};
+
+    // Parse pointers
+    type_info = try parsePointers(allocator, xctok, inner_is_const, type_info);
+
+    // Parse name / fn ptr
+    tok = try xctok.nextNoEof();
+    if (tok.id == .lparen) { // Assume this declaration is a function pointer
+        unreachable; // WIP
+    } else if (tok.id != .id and tok.id != .name) {
+        return error.InvalidSyntax;
+    }
+
+    const name = tok.text;
+
+    if (try parseArrayDeclarator(xctok)) |array_size| {
+        const child = try allocator.create(registry.TypeInfo);
+        child.* = type_info;
+        type_info = .{
+            .Array = .{
+                .size = array_size,
+                .child = child,
+            }
+        };
+    }
+
+    return registry.Declaration {
+        .name = name,
+        .decl_type = type_info,
+    };
+}
+
+fn parsePointers(
+    allocator: *Allocator,
+    xctok: *XmlCTokenizer,
+    inner_const: bool,
+    inner: registry.TypeInfo,
+) !registry.TypeInfo {
+    var type_info = inner;
+    var first_const = inner_const;
+
+    while (true) {
+        var tok = (try xctok.peek()) orelse return type_info;
+        var is_const = first_const;
+        first_const = false;
+
+        if (tok.id == .kw_const) {
+            is_const = true;
+            _ = try xctok.nextNoEof();
+            tok = (try xctok.peek()) orelse return type_info;
+        }
+
+        if (tok.id != .star) {
+            // if `is_const` is true at this point, there was a trailing const,
+            // and the declaration itself is const.
+            return type_info;
+        }
+
+        _ = try xctok.nextNoEof();
+
+        const child = try allocator.create(registry.TypeInfo);
+        child.* = type_info;
+
+        type_info = .{
+            .Pointer = .{
+                .size = .one, // set elsewhere
+                .is_const = is_const or (first_const),
+                .child = child,
+            }
+        };
+    }
+}
+
+fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
+    const lbracket = try xctok.peekNoEof();
+    if (lbracket.id != .lbracket) {
+        return null;
+    }
+
+    _ = try xctok.nextNoEof();
+
+    const size_tok = try xctok.nextNoEof();
+    const size: ArraySize = switch (size_tok.id) {
+        .int => .{.int = try std.fmt.parseInt(usize, size_tok.text, 10)},
+        .enum_name => .{.alias = size_tok.text},
+        else => return error.InvalidSyntax
+    };
+
+    _ = try xctok.expect(.rbracket);
+    return size;
+}
 
 fn testTokenizer(tokenizer: var, expected_tokens: []const Token) void {
     for (expected_tokens) |expected| {
@@ -215,7 +352,6 @@ test "CTokenizer" {
         &ctok,
         &[_]Token{
             .{.id = .kw_typedef, .text = "typedef"},
-            .{.id = .whitespace, .text = " "},
             .{.id = .lparen, .text = "("},
             .{.id = .lbracket, .text = "["},
             .{.id = .kw_const, .text = "const"},
@@ -223,9 +359,7 @@ test "CTokenizer" {
             .{.id = .rbracket, .text = "]"},
             .{.id = .star, .text = "*"},
             .{.id = .star, .text = "*"},
-            .{.id = .whitespace, .text = " "},
             .{.id = .kw_vkapi_ptr, .text = "VKAPI_PTR"},
-            .{.id = .whitespace, .text = " "},
             .{.id = .int, .text = "123"},
             .{.id = .comma, .text = ","},
             .{.id = .semicolon, .text = ";"},
@@ -241,20 +375,15 @@ test "XmlCTokenizer" {
     );
     defer document.deinit();
 
-    var xctok = XmlCTokenizer{
-        .it = document.root.children.iterator(0)
-    };
+    var xctok = XmlCTokenizer.init(document.root);
 
     testTokenizer(
         &xctok,
         &[_]Token{
             .{.id = .kw_typedef, .text = "typedef"},
-            .{.id = .whitespace, .text = " "},
             .{.id = .id, .text = "void"},
-            .{.id = .whitespace, .text = " "},
             .{.id = .lparen, .text = "("},
             .{.id = .kw_vkapi_ptr, .text = "VKAPI_PTR"},
-            .{.id = .whitespace, .text = " "},
             .{.id = .star, .text = "*"},
             .{.id = .name, .text = "PFN_vkVoidFunction"},
             .{.id = .rparen, .text = ")"},
@@ -264,4 +393,19 @@ test "XmlCTokenizer" {
             .{.id = .semicolon, .text = ";"},
         }
     );
+}
+
+test "parseTypedef" {
+    const document = try xml.parse(
+        testing.allocator,
+        "<root>typedef const <type>char</type>* pMessage[4];</root>"
+    );
+    defer document.deinit();
+
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
+    var xctok = XmlCTokenizer.init(document.root);
+    const decl = try parseTypedef(&arena.allocator, &xctok);
+    std.debug.warn("{}\n", .{decl.decl_type.Array.child.Pointer});
 }

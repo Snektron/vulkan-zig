@@ -92,6 +92,7 @@ pub const Pointer = struct {
     };
 
     is_const: bool,
+    size: PointerSize,
     child: *TypeInfo,
 };
 
