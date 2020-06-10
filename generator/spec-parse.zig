@@ -87,7 +87,7 @@ fn parseForeigntype(ty: *xml.Element) !registry.Declaration {
 
     return registry.Declaration{
         .name = name,
-        .decl_type = .{.Foreign = .{.dependency = dependency}},
+        .decl_type = .{.foreign = .{.dependency = dependency}},
     };
 }
 
@@ -96,12 +96,12 @@ fn parseBitmaskType(ty: *xml.Element) !registry.Declaration {
         const alias = ty.getAttribute("alias") orelse return error.InvalidRegistry;
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.Alias = alias},
+            .decl_type = .{.alias = alias},
         };
     } else {
         return registry.Declaration{
             .name = ty.getCharData("name") orelse return error.InvalidRegistry,
-            .decl_type = .{.Bitmask = .{.bits_enum = ty.getAttribute("requires")}},
+            .decl_type = .{.bitmask = .{.bits_enum = ty.getAttribute("requires")}},
         };
     }
 }
@@ -112,7 +112,7 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
         const alias = ty.getAttribute("alias") orelse return error.InvalidRegistry;
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.Alias = alias},
+            .decl_type = .{.alias = alias},
         };
     } else {
         const name = ty.getCharData("name") orelse return error.InvalidRegistry;
@@ -125,7 +125,7 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
         return registry.Declaration{
             .name = name,
             .decl_type = .{
-                .Handle = .{
+                .handle = .{
                     .parent = ty.getAttribute("parent"),
                     .is_dispatchable = dispatchable,
                 }
@@ -144,7 +144,7 @@ fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration 
         // macros, which is why this part is not built into the xml/c parser.
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.Opaque = {}},
+            .decl_type = .{.opaque = {}},
         };
     }
 }
@@ -160,7 +160,7 @@ fn parseEnums(allocator: *Allocator, out: []registry.Declaration, root: *xml.Ele
 
         out[i] = .{
             .name = name,
-            .decl_type = .{.Enum = try parseEnumFields(allocator, enums)},
+            .decl_type = .{.enumeration = try parseEnumFields(allocator, enums)},
         };
         i += 1;
     }

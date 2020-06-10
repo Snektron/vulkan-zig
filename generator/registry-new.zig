@@ -25,22 +25,22 @@ pub const Tag = struct {
 };
 
 pub const TypeInfo = union(enum) {
-    Struct: Container,
-    Union: Container,
-    Enum: Enum,
-    Bitmask: Bitmask,
-    Handle: Handle,
-    FnPtr: Command,
-    Command: Command,
-    Alias: []const u8, // Alias of another declaration
-    Pointer: Pointer,
-    Array: Array,
-    Opaque: void,
-    Foreign: Foreign
+    container: Container,
+    enumeration: Enum,
+    bitmask: Bitmask,
+    handle: Handle,
+    fn_ptr: Command,
+    command: Command,
+    alias: []const u8, // Alias of another declaration
+    pointer: Pointer,
+    array: Array,
+    opaque: void,
+    foreign: Foreign
 };
 
 pub const Container = struct {
     fields: []Declaration,
+    is_union: bool,
 };
 
 pub const Enum = struct {

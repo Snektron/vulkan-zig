@@ -241,7 +241,7 @@ pub fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.
     if (tok.id != .type_name) return error.InvalidSyntax;
     const type_name = tok.text;
 
-    var type_info = registry.TypeInfo{.Alias = type_name};
+    var type_info = registry.TypeInfo{.alias = type_name};
 
     // Parse pointers
     type_info = try parsePointers(allocator, xctok, inner_is_const, type_info);
@@ -260,7 +260,7 @@ pub fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.
         const child = try allocator.create(registry.TypeInfo);
         child.* = type_info;
         type_info = .{
-            .Array = .{
+            .array = .{
                 .size = array_size,
                 .child = child,
             }
@@ -305,7 +305,7 @@ fn parsePointers(
         child.* = type_info;
 
         type_info = .{
-            .Pointer = .{
+            .pointer = .{
                 .size = .one, // set elsewhere
                 .is_const = is_const or (first_const),
                 .child = child,
