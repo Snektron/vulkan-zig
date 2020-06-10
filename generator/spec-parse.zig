@@ -67,6 +67,10 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
                 break :blk try parseHandleType(ty);
             } else if (mem.eql(u8, category, "basetype")) {
                 break :blk try parseBaseType(allocator, ty);
+            } else if (mem.eql(u8, category, "struct")) {
+                break :blk try parseContainer(allocator, ty, false);
+            } else if (mem.eql(u8, category, "union")) {
+                break :blk try parseContainer(allocator, ty, true);
             }
 
             continue;
@@ -129,7 +133,7 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
                     .parent = ty.getAttribute("parent"),
                     .is_dispatchable = dispatchable,
                 }
-            }
+            },
         };
     }
 }
@@ -147,6 +151,38 @@ fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration 
             .decl_type = .{.opaque = {}},
         };
     }
+}
+
+fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !registry.Declaration {
+    const name = ty.getAttribute("name") orelse return error.InvalidRegistry;
+
+    if (ty.getAttribute("alias")) |alias| {
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.alias = alias},
+        };
+    }
+
+    var members = try allocator.alloc(registry.Container.Field, ty.children.count());
+    errdefer allocator.free(members);
+
+    var i: usize = 0;
+    var it = ty.findChildrenByTag("member");
+    while (it.next()) |member| {
+        var xctok = xmlc.XmlCTokenizer.init(member);
+        members[i] = try xmlc.parseMember(allocator, &xctok);
+        i += 1;
+    }
+
+    return registry.Declaration{
+        .name = name,
+        .decl_type = .{
+            .container = .{
+                .fields = allocator.shrink(members, i),
+                .is_union = is_union,
+            }
+        },
+    };
 }
 
 fn parseEnums(allocator: *Allocator, out: []registry.Declaration, root: *xml.Element) !usize {

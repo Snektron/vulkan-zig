@@ -39,7 +39,13 @@ pub const TypeInfo = union(enum) {
 };
 
 pub const Container = struct {
-    fields: []Declaration,
+    pub const Field = struct {
+        name: []const u8,
+        field_type: TypeInfo,
+        bits: ?usize,
+    };
+
+    fields: []Field,
     is_union: bool,
 };
 

@@ -19,6 +19,7 @@ const Token = struct {
         star,
         comma,
         semicolon,
+        colon,
         lparen,
         rparen,
         lbracket,
@@ -26,6 +27,7 @@ const Token = struct {
         kw_typedef,
         kw_const,
         kw_vkapi_ptr,
+        kw_struct,
     };
 };
 
@@ -70,6 +72,8 @@ const CTokenizer = struct {
                 Token.Id.kw_const
             else if (mem.eql(u8, token_text, "VKAPI_PTR"))
                 Token.Id.kw_vkapi_ptr
+            else if (mem.eql(u8, token_text, "struct"))
+                Token.Id.kw_struct
             else
                 Token.Id.id;
 
@@ -111,6 +115,7 @@ const CTokenizer = struct {
             '*' => id = .star,
             ',' => id = .comma,
             ';' => id = .semicolon,
+            ':' => id = .colon,
             '[' => id = .lbracket,
             ']' => id = .rbracket,
             '(' => id = .lparen,
@@ -150,6 +155,8 @@ pub const XmlCTokenizer = struct {
             return Token{.id = .enum_name, .text = text};
         } else if (mem.eql(u8, elem.tag, "name")) {
             return Token{.id = .name, .text = text};
+        } else if (mem.eql(u8, elem.tag, "comment")) {
+            return null;
         } else {
             return error.InvalidTag;
         }
@@ -173,16 +180,13 @@ pub const XmlCTokenizer = struct {
 
             if (self.it.next()) |child| {
                 switch (child.*) {
-                    .CharData => |cdata| {
-                        self.ctok = CTokenizer{.source = cdata};
-                        continue;
-                    },
-                    .Comment => continue,
-                    .Element => |elem| return try elemToToken(elem)
+                    .CharData => |cdata| self.ctok = CTokenizer{.source = cdata},
+                    .Comment => {},
+                    .Element => |elem| if (try elemToToken(elem)) |tok| return tok,
                 }
+            } else {
+                return null;
             }
-
-            return null;
         }
     }
 
@@ -222,18 +226,53 @@ pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
     _ = try xctok.expect(.kw_typedef);
     const decl = try parseDeclaration(allocator, xctok);
     _ = try xctok.expect(.semicolon);
+    if (try xctok.peek()) |_| {
+        return error.InvalidSyntax;
+    }
+
     return decl;
 }
 
+pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Container.Field {
+    const decl = try parseDeclaration(allocator, xctok);
+    var field = registry.Container.Field {
+        .name = decl.name,
+        .field_type = decl.decl_type,
+        .bits = null,
+    };
+
+    if (try xctok.peek()) |tok| {
+        if (tok.id != .colon) {
+            return error.InvalidSyntax;
+        }
+
+        _ = try xctok.nextNoEof();
+        const bits = try xctok.expect(.int);
+        field.bits = try std.fmt.parseInt(usize, bits.text, 10);
+
+        // Assume for now that there won't be any invalid C types like `char char* x : 4`.
+
+        if (try xctok.peek()) |_| {
+            return error.InvalidSyntax;
+        }
+    }
+
+    return field;
+}
+
 // DECLARATION = kw_const? type_name DECLARATOR
-// DECLARATOR = POINTERS? (id | name) ('[' ARRAY_EXPR ']')
+// DECLARATOR = POINTERS? (id | name) ('[' ARRAY_EXPR ']')*
 //     | POINTERS? '(' kw_vkapi_ptr '*' name' ')' // TODO
 // POINTERS = (kw_const? '*')+
-pub fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
     // Parse declaration constness
     var tok = try xctok.nextNoEof();
     const inner_is_const = tok.id == .kw_const;
     if (inner_is_const) {
+        tok = try xctok.nextNoEof();
+    }
+
+    if (tok.id == .kw_struct) {
         tok = try xctok.nextNoEof();
     }
 
@@ -255,16 +294,24 @@ pub fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.
     }
 
     const name = tok.text;
+    var inner_type = &type_info;
 
-    if (try parseArrayDeclarator(xctok)) |array_size| {
+    while (try parseArrayDeclarator(xctok)) |array_size| {
+        // Move the current inner type to a new node on the heap
         const child = try allocator.create(registry.TypeInfo);
-        child.* = type_info;
-        type_info = .{
+        child.* = inner_type.*;
+
+        // Re-assign the previous inner type for the array type info node
+        inner_type.* = .{
             .array = .{
                 .size = array_size,
                 .child = child,
             }
         };
+
+        // update the inner_type pointer so it points to the proper
+        // inner type again
+        inner_type = child;
     }
 
     return registry.Declaration {
@@ -307,16 +354,16 @@ fn parsePointers(
         type_info = .{
             .pointer = .{
                 .size = .one, // set elsewhere
-                .is_const = is_const or (first_const),
+                .is_const = is_const or first_const,
                 .child = child,
-            }
+            },
         };
     }
 }
 
 fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
-    const lbracket = try xctok.peekNoEof();
-    if (lbracket.id != .lbracket) {
+    const lbracket = try xctok.peek();
+    if (lbracket == null or lbracket.?.id != .lbracket) {
         return null;
     }
 
@@ -398,7 +445,7 @@ test "XmlCTokenizer" {
 test "parseTypedef" {
     const document = try xml.parse(
         testing.allocator,
-        "<root>typedef const <type>char</type>* pMessage[4];</root>"
+        "<root>typedef const struct <type>Python</type>* pythons[4];</root>"
     );
     defer document.deinit();
 
@@ -407,5 +454,14 @@ test "parseTypedef" {
 
     var xctok = XmlCTokenizer.init(document.root);
     const decl = try parseTypedef(&arena.allocator, &xctok);
-    std.debug.warn("{}\n", .{decl.decl_type.Array.child.Pointer});
+
+    testing.expectEqualSlices(u8, "pythons", decl.name);
+    testing.expectEqual(registry.TypeInfo.array, decl.decl_type);
+    testing.expectEqual(ArraySize{.int = 4}, decl.decl_type.array.size);
+    const array_child = decl.decl_type.array.child.*;
+    testing.expectEqual(registry.TypeInfo.pointer, array_child);
+    const ptr = array_child.pointer;
+    testing.expectEqual(true, ptr.is_const);
+    testing.expectEqual(registry.TypeInfo.alias, ptr.child.*);
+    testing.expectEqualSlices(u8, "Python", ptr.child.alias);
 }
