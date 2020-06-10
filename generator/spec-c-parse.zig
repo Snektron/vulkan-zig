@@ -233,6 +233,7 @@ pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
     return decl;
 }
 
+// MEMBER = DECLARATION (':' int)?
 pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Container.Field {
     const decl = try parseDeclaration(allocator, xctok);
     var field = registry.Container.Field {
@@ -261,9 +262,8 @@ pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Conta
 }
 
 // DECLARATION = kw_const? type_name DECLARATOR
-// DECLARATOR = POINTERS? (id | name) ('[' ARRAY_EXPR ']')*
-//     | POINTERS? '(' kw_vkapi_ptr '*' name' ')' // TODO
-// POINTERS = (kw_const? '*')+
+// DECLARATOR = POINTERS (id | name) ('[' ARRAY_DECLARATOR ']')*
+//     | POINTERS '(' kw_vkapi_ptr '*' name' ')' // TODO
 fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
     // Parse declaration constness
     var tok = try xctok.nextNoEof();
@@ -320,6 +320,7 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
     };
 }
 
+// POINTERS = (kw_const? '*')*
 fn parsePointers(
     allocator: *Allocator,
     xctok: *XmlCTokenizer,
@@ -361,6 +362,7 @@ fn parsePointers(
     }
 }
 
+// ARRAY_DECLARATOR = '[' (int | enum_name) ']'
 fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
     const lbracket = try xctok.peek();
     if (lbracket == null or lbracket.?.id != .lbracket) {

@@ -171,6 +171,7 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     while (it.next()) |member| {
         var xctok = xmlc.XmlCTokenizer.init(member);
         members[i] = try xmlc.parseMember(allocator, &xctok);
+        try parsePointerMeta(&members[i].field_type, member);
         i += 1;
     }
 
@@ -183,6 +184,32 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
             }
         },
     };
+}
+
+fn lenToPointerSize(len: []const u8) registry.Pointer.PointerSize {
+    if (mem.eql(u8, len, "null-terminated")) {
+        return .zero_terminated;
+    } else {
+        return .many;
+    }
+}
+
+fn parsePointerMeta(type_info: *registry.TypeInfo, elem: *xml.Element) !void {
+    if (elem.getAttribute("len")) |lens| {
+        var it = std.mem.split(lens, ",");
+        var current_type_info = type_info;
+        while (current_type_info.* == .pointer) {
+            const size = if (it.next()) |len_str| lenToPointerSize(len_str) else .one;
+            current_type_info.pointer.size = size;
+            current_type_info = current_type_info.pointer.child;
+        }
+
+        if (it.next()) |_| {
+            // There are more elements in the `len` attribute than there are pointers
+            // Something probably went wrong
+            return error.InvalidRegistry;
+        }
+    }
 }
 
 fn parseEnums(allocator: *Allocator, out: []registry.Declaration, root: *xml.Element) !usize {
