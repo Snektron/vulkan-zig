@@ -217,10 +217,6 @@ pub const XmlCTokenizer = struct {
     }
 };
 
-const PointerInfo = struct {
-    is_const: bool,
-};
-
 // TYPEDEF = kw_typedef DECLARATION ';'
 pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
     _ = try xctok.expect(.kw_typedef);
@@ -259,6 +255,14 @@ pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Conta
     }
 
     return field;
+}
+
+pub fn parseParamOrProto(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+    const decl = try parseDeclaration(allocator, xctok);
+    if (try xctok.peek()) |_| {
+        return error.InvalidSyntax;
+    }
+    return decl;
 }
 
 // DECLARATION = kw_const? type_name DECLARATOR

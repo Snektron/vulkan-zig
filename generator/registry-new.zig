@@ -79,7 +79,7 @@ pub const Handle = struct {
 };
 
 pub const Command = struct {
-    const Param = struct {
+    pub const Param = struct {
         name: []const u8,
         param_type: TypeInfo,
     };

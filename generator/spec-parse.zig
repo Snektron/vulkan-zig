@@ -41,7 +41,6 @@ fn parseDeclarations(allocator: *Allocator, root: *xml.Element) ![]registry.Decl
 
     const decl_upper_bound = types_elem.children.count() + commands_elem.children.count();
     const decls = try allocator.alloc(registry.Declaration, decl_upper_bound);
-    errdefer allocator.free(decls);
 
     var count: usize = 0;
     count += try parseTypes(allocator, decls, types_elem);
@@ -164,7 +163,6 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     }
 
     var members = try allocator.alloc(registry.Container.Field, ty.children.count());
-    errdefer allocator.free(members);
 
     var i: usize = 0;
     var it = ty.findChildrenByTag("member");
@@ -196,7 +194,7 @@ fn lenToPointerSize(len: []const u8) registry.Pointer.PointerSize {
 
 fn parsePointerMeta(type_info: *registry.TypeInfo, elem: *xml.Element) !void {
     if (elem.getAttribute("len")) |lens| {
-        var it = std.mem.split(lens, ",");
+        var it = mem.split(lens, ",");
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
             const size = if (it.next()) |len_str| lenToPointerSize(len_str) else .one;
@@ -240,7 +238,6 @@ fn parseEnumFields(allocator: *Allocator, elem: *xml.Element) !registry.Enum {
     }
 
     const fields = try allocator.alloc(registry.Enum.Field, elem.children.count());
-    errdefer allocator.free(fields);
 
     var i: usize = 0;
     var it = elem.findChildrenByTag("enum");
@@ -294,8 +291,81 @@ fn parseEnumField(field: *xml.Element) !registry.Enum.Field {
     };
 }
 
-fn parseCommands(allocator: *Allocator, out: []registry.Declaration, commmands_elem: *xml.Element) !usize {
-    return 0;
+fn parseCommands(allocator: *Allocator, out: []registry.Declaration, commands_elem: *xml.Element) !usize {
+    var i: usize = 0;
+    var it = commands_elem.findChildrenByTag("command");
+    while (it.next()) |elem| {
+        out[i] = try parseCommand(allocator, elem);
+        i += 1;
+    }
+
+    return i;
+}
+
+fn splitResultCodes(allocator: *Allocator, text: []const u8) ![]const []const u8 {
+    var n_codes: usize = 1;
+    for (text) |c| {
+        if (c == ',') n_codes += 1;
+    }
+
+    const codes = try allocator.alloc([]const u8, n_codes);
+    var it = mem.split(text, ",");
+    for (codes) |*code| {
+        code.* = it.next().?;
+    }
+
+    return codes;
+}
+
+fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration {
+    if (elem.getAttribute("alias")) |alias| {
+        const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.alias = alias}
+        };
+    }
+
+    const proto = elem.findChildByTag("proto") orelse return error.InvalidRegistry;
+    var proto_xctok = xmlc.XmlCTokenizer.init(proto);
+    const command_decl = try xmlc.parseParamOrProto(allocator, &proto_xctok);
+
+    var params = try allocator.alloc(registry.Command.Param, elem.children.count());
+
+    var i: usize = 0;
+    var it = elem.findChildrenByTag("param");
+    while (it.next()) |param| {
+        var xctok = xmlc.XmlCTokenizer.init(param);
+        const decl = try xmlc.parseParamOrProto(allocator, &xctok);
+        params[i] = .{.name = decl.name, .param_type = decl.decl_type};
+        try parsePointerMeta(&params[i].param_type, param);
+        i += 1;
+    }
+
+    const return_type = try allocator.create(registry.TypeInfo);
+    return_type.* = command_decl.decl_type;
+
+    const success_codes = if (elem.getAttribute("successcodes")) |codes|
+            try splitResultCodes(allocator, codes)
+        else
+            &[_][]const u8{};
+
+    const error_codes = if (elem.getAttribute("errorcodes")) |codes|
+            try splitResultCodes(allocator, codes)
+        else
+            &[_][]const u8{};
+
+    return registry.Declaration{
+        .name = command_decl.name,
+        .decl_type = .{
+            .command = .{
+                .params = allocator.shrink(params, i),
+                .return_type = return_type,
+                .success_codes = success_codes,
+                .error_codes = error_codes,
+            }
+        }
+    };
 }
 
 fn parseApiConstants(allocator: *Allocator, root: *xml.Element) ![]registry.ApiConstant {
@@ -312,7 +382,6 @@ fn parseApiConstants(allocator: *Allocator, root: *xml.Element) ![]registry.ApiC
     };
 
     const constants = try allocator.alloc(registry.ApiConstant, enums.children.count());
-    errdefer allocator.free(constants);
 
     var i: usize = 0;
     var it = enums.findChildrenByTag("enum");
@@ -338,7 +407,6 @@ fn parseApiConstants(allocator: *Allocator, root: *xml.Element) ![]registry.ApiC
 fn parseTags(allocator: *Allocator, root: *xml.Element) ![]registry.Tag {
     var tags_elem = root.findChildByTag("tags") orelse return error.InvalidRegistry;
     const tags = try allocator.alloc(registry.Tag, tags_elem.children.count());
-    errdefer allocator.free(tags);
 
     var i: usize = 0;
     var it = tags_elem.findChildrenByTag("tag");
