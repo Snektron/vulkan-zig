@@ -29,7 +29,6 @@ pub const TypeInfo = union(enum) {
     enumeration: Enum,
     bitmask: Bitmask,
     handle: Handle,
-    fn_ptr: Command,
     command: Command,
     alias: []const u8, // Alias of another declaration
     pointer: Pointer,

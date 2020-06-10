@@ -70,6 +70,8 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
                 break :blk try parseContainer(allocator, ty, false);
             } else if (mem.eql(u8, category, "union")) {
                 break :blk try parseContainer(allocator, ty, true);
+            } else if (mem.eql(u8, category, "funcpointer")) {
+                break :blk try parseFuncPointer(allocator, ty);
             }
 
             continue;
@@ -182,6 +184,11 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
             }
         },
     };
+}
+
+fn parseFuncPointer(allocator: *Allocator, ty: *xml.Element) !registry.Declaration {
+    var xctok = xmlc.XmlCTokenizer.init(ty);
+    return try xmlc.parseTypedef(allocator, &xctok);
 }
 
 fn lenToPointerSize(len: []const u8) registry.Pointer.PointerSize {

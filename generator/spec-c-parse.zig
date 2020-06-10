@@ -5,6 +5,7 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const testing = std.testing;
 const ArraySize = registry.Array.ArraySize;
+const TypeInfo = registry.TypeInfo;
 
 const Token = struct {
     id: Id,
@@ -226,14 +227,17 @@ pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
         return error.InvalidSyntax;
     }
 
-    return decl;
+    return registry.Declaration{
+        .name = decl.name orelse return error.MissingTypeIdentifier,
+        .decl_type = decl.decl_type,
+    };
 }
 
 // MEMBER = DECLARATION (':' int)?
 pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Container.Field {
     const decl = try parseDeclaration(allocator, xctok);
     var field = registry.Container.Field {
-        .name = decl.name,
+        .name = decl.name orelse return error.MissingTypeIdentifier,
         .field_type = decl.decl_type,
         .bits = null,
     };
@@ -262,13 +266,33 @@ pub fn parseParamOrProto(allocator: *Allocator, xctok: *XmlCTokenizer) !registry
     if (try xctok.peek()) |_| {
         return error.InvalidSyntax;
     }
-    return decl;
+    return registry.Declaration{
+        .name = decl.name orelse return error.MissingTypeIdentifier,
+        .decl_type = decl.decl_type,
+    };
 }
 
+pub const Declaration = struct {
+    name: ?[]const u8, // Parameter names may be optional, especially in case of func(void)
+    decl_type: TypeInfo,
+};
+
+pub const ParseError = error{
+    OutOfMemory,
+    InvalidSyntax,
+    InvalidTag,
+    InvalidXml,
+    Overflow,
+    UnexpectedEof,
+    UnexpectedCharacter,
+    UnexpectedToken,
+    MissingTypeIdentifier,
+};
+
 // DECLARATION = kw_const? type_name DECLARATOR
-// DECLARATOR = POINTERS (id | name) ('[' ARRAY_DECLARATOR ']')*
-//     | POINTERS '(' kw_vkapi_ptr '*' name' ')' // TODO
-fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+// DECLARATOR = POINTERS (id | name)? ('[' ARRAY_DECLARATOR ']')*
+//     | POINTERS '(' FNPTRSUFFIX
+fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Declaration {
     // Parse declaration constness
     var tok = try xctok.nextNoEof();
     const inner_is_const = tok.id == .kw_const;
@@ -279,30 +303,35 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
     if (tok.id == .kw_struct) {
         tok = try xctok.nextNoEof();
     }
-
     // Parse type name
-    if (tok.id != .type_name) return error.InvalidSyntax;
+    if (tok.id != .type_name and tok.id != .id) return error.InvalidSyntax;
     const type_name = tok.text;
 
-    var type_info = registry.TypeInfo{.alias = type_name};
+    var type_info = TypeInfo{.alias = type_name};
 
     // Parse pointers
     type_info = try parsePointers(allocator, xctok, inner_is_const, type_info);
 
     // Parse name / fn ptr
-    tok = try xctok.nextNoEof();
-    if (tok.id == .lparen) { // Assume this declaration is a function pointer
-        unreachable; // WIP
-    } else if (tok.id != .id and tok.id != .name) {
-        return error.InvalidSyntax;
+
+    if (try parseFnPtrSuffix(allocator, xctok, type_info)) |decl| {
+        return decl;
     }
 
-    const name = tok.text;
-    var inner_type = &type_info;
+    const name = blk: {
+        const name_tok = (try xctok.peek()) orelse break :blk null;
+        if (name_tok.id == .id or name_tok.id == .name) {
+            _ = try xctok.nextNoEof();
+            break :blk name_tok.text;
+        } else {
+            break :blk null;
+        }
+    };
 
+    var inner_type = &type_info;
     while (try parseArrayDeclarator(xctok)) |array_size| {
         // Move the current inner type to a new node on the heap
-        const child = try allocator.create(registry.TypeInfo);
+        const child = try allocator.create(TypeInfo);
         child.* = inner_type.*;
 
         // Re-assign the previous inner type for the array type info node
@@ -318,19 +347,87 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
         inner_type = child;
     }
 
-    return registry.Declaration {
+    return Declaration{
         .name = name,
         .decl_type = type_info,
     };
 }
 
+// FNPTRSUFFIX = kw_vkapi_ptr '*' name' ')' '(' ('void' | (DECLARATION (',' DECLARATION)*)?) ')'
+fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: TypeInfo) !?Declaration {
+    const lparen = try xctok.peek();
+    if (lparen == null or lparen.?.id != .lparen) {
+        return null;
+    }
+    _ = try xctok.nextNoEof();
+    _ = try xctok.expect(.kw_vkapi_ptr);
+    _ = try xctok.expect(.star);
+    const name = try xctok.expect(.name);
+    _ = try xctok.expect(.rparen);
+    _ = try xctok.expect(.lparen);
+
+    const command = try allocator.create(registry.TypeInfo);
+    command.* = .{
+        .command = .{
+            .params = &[_]registry.Command.Param{},
+            .return_type = try allocator.create(TypeInfo),
+            .success_codes = &[_][]const u8{},
+            .error_codes = &[_][]const u8{},
+        }
+    };
+
+    command.command.return_type.* = return_type;
+    const command_ptr = Declaration{
+        .name = name.text,
+        .decl_type = .{
+            .pointer = .{
+                .is_const = true,
+                .size = .one,
+                .child = command,
+            }
+        },
+    };
+
+    const first_param = try parseDeclaration(allocator, xctok);
+    if (first_param.name == null) {
+        if (first_param.decl_type != .alias or !mem.eql(u8, first_param.decl_type.alias, "void")) {
+            return error.InvalidSyntax;
+        }
+
+        _ = try xctok.expect(.rparen);
+        return command_ptr;
+    }
+
+    // There is no good way to estimate the number of parameters beforehand.
+    // Fortunately, there are usually a relatively low number of parameters to a function pointer,
+    // so an ArrayList backed by an arena allocator is good enough.
+    var params = std.ArrayList(registry.Command.Param).init(allocator);
+    try params.append(.{
+        .name = first_param.name.?,
+        .param_type = first_param.decl_type,
+    });
+
+    while (true) {
+        switch ((try xctok.peekNoEof()).id) {
+            .rparen => break,
+            .comma => _ = try xctok.nextNoEof(),
+            else => return error.InvalidSyntax,
+        }
+
+        const decl = try parseDeclaration(allocator, xctok);
+        try params.append(.{
+            .name = decl.name orelse return error.MissingTypeIdentifier,
+            .param_type = decl.decl_type,
+        });
+    }
+
+    _ = try xctok.nextNoEof();
+    command.command.params = params.toOwnedSlice();
+    return command_ptr;
+}
+
 // POINTERS = (kw_const? '*')*
-fn parsePointers(
-    allocator: *Allocator,
-    xctok: *XmlCTokenizer,
-    inner_const: bool,
-    inner: registry.TypeInfo,
-) !registry.TypeInfo {
+fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool, inner: TypeInfo) !TypeInfo {
     var type_info = inner;
     var first_const = inner_const;
 
@@ -353,7 +450,7 @@ fn parsePointers(
 
         _ = try xctok.nextNoEof();
 
-        const child = try allocator.create(registry.TypeInfo);
+        const child = try allocator.create(TypeInfo);
         child.* = type_info;
 
         type_info = .{
@@ -377,7 +474,12 @@ fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
 
     const size_tok = try xctok.nextNoEof();
     const size: ArraySize = switch (size_tok.id) {
-        .int => .{.int = try std.fmt.parseInt(usize, size_tok.text, 10)},
+        .int => .{
+            .int = std.fmt.parseInt(usize, size_tok.text, 10) catch |err| switch (err) {
+                error.Overflow => return error.Overflow,
+                error.InvalidCharacter => unreachable,
+            }
+        },
         .enum_name => .{.alias = size_tok.text},
         else => return error.InvalidSyntax
     };
@@ -462,12 +564,12 @@ test "parseTypedef" {
     const decl = try parseTypedef(&arena.allocator, &xctok);
 
     testing.expectEqualSlices(u8, "pythons", decl.name);
-    testing.expectEqual(registry.TypeInfo.array, decl.decl_type);
+    testing.expectEqual(TypeInfo.array, decl.decl_type);
     testing.expectEqual(ArraySize{.int = 4}, decl.decl_type.array.size);
     const array_child = decl.decl_type.array.child.*;
-    testing.expectEqual(registry.TypeInfo.pointer, array_child);
+    testing.expectEqual(TypeInfo.pointer, array_child);
     const ptr = array_child.pointer;
     testing.expectEqual(true, ptr.is_const);
-    testing.expectEqual(registry.TypeInfo.alias, ptr.child.*);
+    testing.expectEqual(TypeInfo.alias, ptr.child.*);
     testing.expectEqualSlices(u8, "Python", ptr.child.alias);
 }
