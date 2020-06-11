@@ -132,8 +132,8 @@ pub const Extension = struct {
     name: []const u8,
     number: u31,
     version: u32,
-    extension_type: ExtensionType,
-    depends: []const u8, // Other extensions
+    extension_type: ?ExtensionType,
+    depends: []const []const u8, // Other extensions
     promoted_to: ?[]const u8,
     platform: ?[]const u8,
     requires: []Require,

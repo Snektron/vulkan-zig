@@ -28,7 +28,7 @@ pub fn parseXml(backing_allocator: *Allocator, root: *xml.Element) !ParseResult 
         .api_constants = try parseApiConstants(allocator, root),
         .tags = try parseTags(allocator, root),
         .features = try parseFeatures(allocator, root),
-        .extensions = &[_]registry.Extension{},
+        .extensions = try parseExtensions(allocator, root),
     };
 
     return ParseResult{
@@ -311,7 +311,7 @@ fn parseCommands(allocator: *Allocator, out: []registry.Declaration, commands_el
     return i;
 }
 
-fn splitResultCodes(allocator: *Allocator, text: []const u8) ![]const []const u8 {
+fn splitCommaAlloc(allocator: *Allocator, text: []const u8) ![]const []const u8 {
     var n_codes: usize = 1;
     for (text) |c| {
         if (c == ',') n_codes += 1;
@@ -355,12 +355,12 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
     return_type.* = command_decl.decl_type;
 
     const success_codes = if (elem.getAttribute("successcodes")) |codes|
-            try splitResultCodes(allocator, codes)
+            try splitCommaAlloc(allocator, codes)
         else
             &[_][]const u8{};
 
     const error_codes = if (elem.getAttribute("errorcodes")) |codes|
-            try splitResultCodes(allocator, codes)
+            try splitCommaAlloc(allocator, codes)
         else
             &[_][]const u8{};
 
@@ -558,5 +558,90 @@ fn parseRequire(allocator: *Allocator, require: *xml.Element, extnumber: ?u31) !
         .commands = commands,
         .required_feature = require.getAttribute("feature"),
         .required_extension = require.getAttribute("extension"),
+    };
+}
+
+fn parseExtensions(allocator: *Allocator, root: *xml.Element) ![]registry.Extension {
+    const extensions_elem = root.findChildByTag("extensions") orelse return error.InvalidRegistry;
+
+    const extensions = try allocator.alloc(registry.Extension, extensions_elem.children.count());
+    var i: usize = 0;
+    var it = extensions_elem.findChildrenByTag("extension");
+    while (it.next()) |extension| {
+        if (try parseExtension(allocator, extension)) |ext| {
+            extensions[i] = ext;
+            i += 1;
+        }
+    }
+
+    return allocator.shrink(extensions, i);
+}
+
+fn findExtVersion(extension: *xml.Element) !u32 {
+    var req_it = extension.findChildrenByTag("require");
+    while (req_it.next()) |req| {
+        var enum_it = req.findChildrenByTag("enum");
+        while (enum_it.next()) |e| {
+            const name = e.getAttribute("name") orelse continue;
+            const value = e.getAttribute("value") orelse continue;
+            if (mem.endsWith(u8, name, "_SPEC_VERSION")) {
+                return try std.fmt.parseInt(u32, value, 10);
+            }
+        }
+    }
+
+    return error.InvalidRegistry;
+}
+
+fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Extension {
+    // Some extensions (in particular 94) are disabled, so just skip them
+    if (extension.getAttribute("supported")) |supported| {
+        if (mem.eql(u8, supported, "disabled")) return null;
+    }
+
+    const name = extension.getAttribute("name") orelse return error.InvalidRegistry;
+    const platform = extension.getAttribute("platform");
+    const promoted_to = extension.getAttribute("promotedto");
+    const version = try findExtVersion(extension);
+
+    const number = blk: {
+        const number_str = extension.getAttribute("number") orelse return error.InvalidRegistry;
+        break :blk try std.fmt.parseInt(u31, number_str, 10);
+    };
+    std.debug.warn("@@@ {}\n", .{name});
+
+    const ext_type: ?registry.Extension.ExtensionType = blk: {
+        const ext_type_str = extension.getAttribute("type") orelse break :blk null;
+        if (mem.eql(u8, ext_type_str, "instance")) {
+            break :blk .instance;
+        } else if (mem.eql(u8, ext_type_str, "device")) {
+            break :blk .device;
+        } else {
+            return error.InvalidRegistry;
+        }
+    };
+
+    const depends = blk: {
+        const requires_str = extension.getAttribute("requires") orelse break :blk &[_][]const u8{};
+        break :blk try splitCommaAlloc(allocator, requires_str);
+    };
+
+    var requires = try allocator.alloc(registry.Require, extension.children.count());
+    var i: usize = 0;
+    var it = extension.findChildrenByTag("require");
+    while (it.next()) |require| {
+        requires[i] = try parseRequire(allocator, require, number);
+        i += 1;
+    }
+
+    return registry.Extension{
+        .name = name,
+        .number = number,
+        .version = version,
+        .extension_type = ext_type,
+        .depends = depends,
+        .promoted_to = promoted_to,
+        .platform = platform,
+        .requires = allocator.shrink(requires, i)
     };
 }
