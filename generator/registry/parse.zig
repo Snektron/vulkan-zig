@@ -608,7 +608,6 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Ext
         const number_str = extension.getAttribute("number") orelse return error.InvalidRegistry;
         break :blk try std.fmt.parseInt(u31, number_str, 10);
     };
-    std.debug.warn("@@@ {}\n", .{name});
 
     const ext_type: ?registry.Extension.ExtensionType = blk: {
         const ext_type_str = extension.getAttribute("type") orelse break :blk null;
