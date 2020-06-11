@@ -9,6 +9,9 @@ pub fn build(b: *Builder) void {
     test_step.dependOn(&b.addTest("generator/main.zig").step);
 
     const run_cmd = generator.run();
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
 
     const run_step = b.step("run", "");
     run_step.dependOn(&run_cmd.step);

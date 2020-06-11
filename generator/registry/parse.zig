@@ -27,7 +27,7 @@ pub fn parseXml(backing_allocator: *Allocator, root: *xml.Element) !ParseResult 
         .decls = try parseDeclarations(allocator, root),
         .api_constants = try parseApiConstants(allocator, root),
         .tags = try parseTags(allocator, root),
-        .features = &[_]registry.Feature{},
+        .features = try parseFeatures(allocator, root),
         .extensions = &[_]registry.Extension{},
     };
 
@@ -429,4 +429,134 @@ fn parseTags(allocator: *Allocator, root: *xml.Element) ![]registry.Tag {
     }
 
     return allocator.shrink(tags, i);
+}
+
+fn parseFeatures(allocator: *Allocator, root: *xml.Element) ![]registry.Feature {
+    var it = root.findChildrenByTag("feature");
+    var count: usize = 0;
+    while (it.next()) |_| count += 1;
+
+    const features = try allocator.alloc(registry.Feature, count);
+    var i: usize = 0;
+    it = root.findChildrenByTag("feature");
+    while (it.next()) |feature| {
+        features[i] = try parseFeature(allocator, feature);
+        i += 1;
+    }
+
+    return features;
+}
+
+fn parseFeature(allocator: *Allocator, feature: *xml.Element) !registry.Feature {
+    const name = feature.getAttribute("name") orelse return error.InvalidRegistry;
+    const number = feature.getAttribute("number") orelse return error.InvalidRegistry;
+
+    var requires = try allocator.alloc(registry.Require, feature.children.count());
+    var i: usize = 0;
+    var it = feature.findChildrenByTag("require");
+    while (it.next()) |require| {
+        requires[i] = try parseRequire(allocator, require, null);
+        i += 1;
+    }
+
+    return registry.Feature{
+        .name = name,
+        .number = number,
+        .requires = allocator.shrink(requires, i)
+    };
+}
+
+fn parseEnumExtension(elem: *xml.Element, parent_extnumber: ?u31) !?registry.Require.EnumExtension {
+    // check for either _SPEC_VERSION or _EXTENSION_NAME
+    const extends = elem.getAttribute("extends") orelse return null;
+
+    if (elem.getAttribute("offset")) |offset_str| {
+        const offset = try std.fmt.parseInt(u31, offset_str, 10);
+        const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
+        const extnumber = if (elem.getAttribute("extnumber")) |num|
+            try std.fmt.parseInt(u31, num, 10)
+        else
+            null;
+
+        const actual_extnumber = extnumber orelse parent_extnumber orelse return error.InvalidRegistry;
+        const value = blk: {
+            const abs_value: i32 = enumExtOffsetToValue(actual_extnumber, offset);
+            if (elem.getAttribute("dir")) |dir| {
+                if (mem.eql(u8, dir, "-")) {
+                    break :blk -abs_value;
+                } else {
+                    return error.InvalidRegistry;
+                }
+            }
+
+            break :blk abs_value;
+        };
+
+        return registry.Require.EnumExtension{
+            .extends = extends,
+            .extnumber = actual_extnumber,
+            .field = .{.name = name, .value = .{.int = value}},
+        };
+    }
+
+    return registry.Require.EnumExtension{
+        .extends = extends,
+        .extnumber = parent_extnumber,
+        .field = try parseEnumField(elem),
+    };
+}
+
+fn enumExtOffsetToValue(extnumber: u31, offset: u31) u31 {
+    const extension_value_base = 1000000000;
+    const extension_block = 1000;
+    return extension_value_base + (extnumber - 1) * extension_block + offset;
+}
+
+fn parseRequire(allocator: *Allocator, require: *xml.Element, extnumber: ?u31) !registry.Require {
+    var n_extends: usize = 0;
+    var n_types: usize = 0;
+    var n_commands: usize = 0;
+
+    var it = require.elements();
+    while (it.next()) |elem| {
+        if (mem.eql(u8, elem.tag, "enum")) {
+            n_extends += 1;
+        } else if (mem.eql(u8, elem.tag, "type")) {
+            n_types += 1;
+        } else if (mem.eql(u8, elem.tag, "command")) {
+            n_commands += 1;
+        }
+    }
+
+    const extends = try allocator.alloc(registry.Require.EnumExtension, n_extends);
+    const types = try allocator.alloc([]const u8, n_types);
+    const commands = try allocator.alloc([]const u8, n_commands);
+
+    var i_extends: usize = 0;
+    var i_types: usize = 0;
+    var i_commands: usize = 0;
+
+    it = require.elements();
+    while (it.next()) |elem| {
+        if (mem.eql(u8, elem.tag, "enum")) {
+            if (try parseEnumExtension(elem, extnumber)) |ext| {
+                extends[i_extends] = ext;
+                i_extends += 1;
+            }
+        } else if (mem.eql(u8, elem.tag, "type")) {
+            types[i_types] = elem.getAttribute("name") orelse return error.InvalidRegistry;
+            i_types += 1;
+        } else if (mem.eql(u8, elem.tag, "command")) {
+            commands[i_commands] = elem.getAttribute("name") orelse return error.InvalidRegistry;
+            i_commands += 1;
+        }
+    }
+
+    return registry.Require{
+        .extends = extends,
+        .types = types,
+        .commands = commands,
+        .required_feature = require.getAttribute("feature"),
+        .required_extension = require.getAttribute("extension"),
+    };
 }

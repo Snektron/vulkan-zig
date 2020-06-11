@@ -130,21 +130,25 @@ pub const Extension = struct {
     };
 
     name: []const u8,
-    number: u32,
+    number: u31,
     version: u32,
     extension_type: ExtensionType,
     depends: []const u8, // Other extensions
+    promoted_to: ?[]const u8,
+    platform: ?[]const u8,
     requires: []Require,
 };
 
 pub const Require = struct {
     pub const EnumExtension = struct {
         extends: []const u8,
+        extnumber: ?u31,
         field: Enum.Field,
     };
 
     extends: []EnumExtension,
     types: []const []const u8,
     commands: []const []const u8,
-    feature: ?[]const u8,
+    required_feature: ?[]const u8,
+    required_extension: ?[]const u8,
 };
