@@ -27,6 +27,8 @@ pub fn parseXml(backing_allocator: *Allocator, root: *xml.Element) !ParseResult 
         .decls = try parseDeclarations(allocator, root),
         .api_constants = try parseApiConstants(allocator, root),
         .tags = try parseTags(allocator, root),
+        .features = &[_]registry.Feature{},
+        .extensions = &[_]registry.Extension{},
     };
 
     return ParseResult{
@@ -85,14 +87,14 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
 
 fn parseForeigntype(ty: *xml.Element) !registry.Declaration {
     const name = ty.getAttribute("name") orelse return error.InvalidRegistry;
-    const dependency = ty.getAttribute("requires") orelse if (mem.eql(u8, name, "int"))
+    const depends = ty.getAttribute("requires") orelse if (mem.eql(u8, name, "int"))
             "vk_platform"  // for some reason, int doesn't depend on vk_platform (but the other c types do)
         else
             return error.InvalidRegistry;
 
     return registry.Declaration{
         .name = name,
-        .decl_type = .{.foreign = .{.dependency = dependency}},
+        .decl_type = .{.foreign = .{.depends = depends}},
     };
 }
 

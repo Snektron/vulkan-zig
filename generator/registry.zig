@@ -2,6 +2,8 @@ pub const Registry = struct {
     decls: []Declaration,
     api_constants: []ApiConstant,
     tags: []Tag,
+    features: []Feature,
+    extensions: []Extension,
 };
 
 pub const Declaration = struct {
@@ -112,5 +114,37 @@ pub const Array = struct {
 };
 
 pub const Foreign = struct {
-    dependency: []const u8, // Either a header or vk_platform
+    depends: []const u8, // Either a header or vk_platform
+};
+
+pub const Feature = struct {
+    name: []const u8,
+    number: []const u8,
+    requires: []Require,
+};
+
+pub const Extension = struct {
+    pub const ExtensionType = enum {
+        instance,
+        device,
+    };
+
+    name: []const u8,
+    number: u32,
+    version: u32,
+    extension_type: ExtensionType,
+    depends: []const u8, // Other extensions
+    requires: []Require,
+};
+
+pub const Require = struct {
+    pub const EnumExtension = struct {
+        extends: []const u8,
+        field: Enum.Field,
+    };
+
+    extends: []EnumExtension,
+    types: []const []const u8,
+    commands: []const []const u8,
+    feature: ?[]const u8,
 };
