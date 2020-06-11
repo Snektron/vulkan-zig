@@ -1,7 +1,7 @@
 const std = @import("std");
 const xml = @import("xml.zig");
-const parseXml = @import("spec-parse.zig").parseXml;
-const registry = @import("registry-new.zig");
+const parseXml = @import("registry/parse.zig").parseXml;
+const registry = @import("registry.zig");
 
 fn renderType(type_info: registry.TypeInfo) void {
     switch (type_info) {
