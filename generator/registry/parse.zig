@@ -480,16 +480,16 @@ fn parseEnumExtension(elem: *xml.Element, parent_extnumber: ?u31) !?registry.Req
 
         const actual_extnumber = extnumber orelse parent_extnumber orelse return error.InvalidRegistry;
         const value = blk: {
-            const abs_value: i32 = enumExtOffsetToValue(actual_extnumber, offset);
+            const abs_value = enumExtOffsetToValue(actual_extnumber, offset);
             if (elem.getAttribute("dir")) |dir| {
                 if (mem.eql(u8, dir, "-")) {
-                    break :blk -abs_value;
+                    break :blk -@as(i32, abs_value);
                 } else {
                     return error.InvalidRegistry;
                 }
             }
 
-            break :blk abs_value;
+            break :blk @as(i32, abs_value);
         };
 
         return registry.Require.EnumExtension{
