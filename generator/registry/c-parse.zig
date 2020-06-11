@@ -382,6 +382,7 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
         .decl_type = .{
             .pointer = .{
                 .is_const = true,
+                .is_optional = false,
                 .size = .one,
                 .child = command,
             }
@@ -455,8 +456,9 @@ fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool
 
         type_info = .{
             .pointer = .{
-                .size = .one, // set elsewhere
                 .is_const = is_const or first_const,
+                .is_optional = false, // set elsewhere
+                .size = .one, // set elsewhere
                 .child = child,
             },
         };

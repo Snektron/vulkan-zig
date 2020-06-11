@@ -143,7 +143,7 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
 
 fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration {
     const name = ty.getCharData("name") orelse return error.InvalidRegistry;
-    if (ty.getCharData("type")) |_| { // TODO: Parse as full type?
+    if (ty.getCharData("type")) |_| {
         var tok = xmlc.XmlCTokenizer.init(ty);
         return try xmlc.parseTypedef(allocator, &tok);
     } else {
@@ -217,6 +217,21 @@ fn parsePointerMeta(type_info: *registry.TypeInfo, elem: *xml.Element) !void {
             return error.InvalidRegistry;
         }
     }
+
+    if (elem.getAttribute("optional")) |optionals| {
+        var it = mem.split(optionals, ",");
+        var current_type_info = type_info;
+        while (current_type_info.* == .pointer) {
+            if (it.next()) |current_optional| {
+                current_type_info.pointer.is_optional = mem.eql(u8, current_optional, "true");
+            } else {
+                // There is no information for this pointer, probably incorrect.
+                return error.InvalidRegistry;
+            }
+
+            current_type_info = current_type_info.pointer.child;
+        }
+    }
 }
 
 fn parseEnums(allocator: *Allocator, out: []registry.Declaration, root: *xml.Element) !usize {
@@ -278,7 +293,6 @@ fn parseEnumField(field: *xml.Element) !registry.Enum.Field {
         //     The value is given by `1e9 + (extr_nr - 1) * 1e3 + offset`, where `ext_nr` is either
         //     given by the `extnumber` field (in the case of a feature), or given in the parent <extension>
         //     tag. In the latter case its passed via the `ext_nr` parameter.
-        // TODO: Handle `offset` elsewhere
         if (field.getAttribute("value")) |value| {
             if (mem.startsWith(u8, value, "0x")) {
                 break :blk .{.bit_vector = try std.fmt.parseInt(i32, value[2..], 16)};
