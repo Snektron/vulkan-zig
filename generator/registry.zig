@@ -35,7 +35,7 @@ pub const TypeInfo = union(enum) {
     alias: []const u8, // Alias of another declaration
     pointer: Pointer,
     array: Array,
-    opaque: void,
+    opaque,
     foreign: Foreign
 };
 
@@ -131,7 +131,7 @@ pub const Extension = struct {
     };
 
     pub const Promotion = union(enum) {
-        none: void,
+        none,
         feature: FeatureLevel,
         extension: []const u8,
     };

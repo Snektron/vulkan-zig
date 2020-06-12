@@ -629,6 +629,14 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Ext
     const platform = extension.getAttribute("platform");
     const version = try findExtVersion(extension);
 
+    // For some reason there are two ways for an extension to state its required
+    // feature level: both seperately in each <require> tag, or using
+    // the requiresCore attribute.
+    const requires_core = if (extension.getAttribute("requiresCore")) |feature_level|
+            try splitFeatureLevel(feature_level, ".")
+        else
+            null;
+
     const promoted_to: registry.Extension.Promotion = blk: {
         const promotedto = extension.getAttribute("promotedto") orelse break :blk .none;
         if (mem.startsWith(u8, promotedto, "VK_VERSION_")) {
@@ -666,6 +674,12 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Ext
     var it = extension.findChildrenByTag("require");
     while (it.next()) |require| {
         requires[i] = try parseRequire(allocator, require, number);
+
+        // If the required feature level has been set explicitly, keep it.
+        if (requires[i].required_feature_level == null) {
+            requires[i].required_feature_level = requires_core;
+        }
+
         i += 1;
     }
 
