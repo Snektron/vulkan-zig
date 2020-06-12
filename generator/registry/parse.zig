@@ -463,7 +463,10 @@ fn parseFeatures(allocator: *Allocator, root: *xml.Element) ![]registry.Feature 
 
 fn parseFeature(allocator: *Allocator, feature: *xml.Element) !registry.Feature {
     const name = feature.getAttribute("name") orelse return error.InvalidRegistry;
-    const number = feature.getAttribute("number") orelse return error.InvalidRegistry;
+    const feature_level = blk: {
+        const number = feature.getAttribute("number") orelse return error.InvalidRegistry;
+        break :blk try splitFeatureLevel(number, ".");
+    };
 
     var requires = try allocator.alloc(registry.Require, feature.children.count());
     var i: usize = 0;
@@ -475,7 +478,7 @@ fn parseFeature(allocator: *Allocator, feature: *xml.Element) !registry.Feature 
 
     return registry.Feature{
         .name = name,
-        .number = number,
+        .level = feature_level,
         .requires = allocator.shrink(requires, i)
     };
 }
@@ -566,11 +569,20 @@ fn parseRequire(allocator: *Allocator, require: *xml.Element, extnumber: ?u31) !
         }
     }
 
+    const required_feature_level = blk: {
+        const feature_level = require.getAttribute("feature") orelse break :blk null;
+        if (!mem.startsWith(u8, feature_level, "VK_VERSION_")) {
+            return error.InvalidRegistry;
+        }
+
+        break :blk try splitFeatureLevel(feature_level["VK_VERSION_".len ..], "_");
+    };
+
     return registry.Require{
         .extends = extends,
         .types = types,
         .commands = commands,
-        .required_feature = require.getAttribute("feature"),
+        .required_feature_level = required_feature_level,
         .required_extension = require.getAttribute("extension"),
     };
 }
@@ -615,8 +627,18 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Ext
 
     const name = extension.getAttribute("name") orelse return error.InvalidRegistry;
     const platform = extension.getAttribute("platform");
-    const promoted_to = extension.getAttribute("promotedto");
     const version = try findExtVersion(extension);
+
+    const promoted_to: registry.Extension.Promotion = blk: {
+        const promotedto = extension.getAttribute("promotedto") orelse break :blk .none;
+        if (mem.startsWith(u8, promotedto, "VK_VERSION_")) {
+            const feature_level = try splitFeatureLevel(promotedto["VK_VERSION_".len ..], "_");
+
+            break :blk .{.feature = feature_level};
+        }
+
+        break :blk .{.extension = promotedto};
+    };
 
     const number = blk: {
         const number_str = extension.getAttribute("number") orelse return error.InvalidRegistry;
@@ -656,5 +678,20 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Ext
         .promoted_to = promoted_to,
         .platform = platform,
         .requires = allocator.shrink(requires, i)
+    };
+}
+
+fn splitFeatureLevel(ver: []const u8, split: []const u8) !registry.FeatureLevel {
+    var it = mem.split(ver, split);
+
+    const major = it.next() orelse return error.InvalidFeatureLevel;
+    const minor = it.next() orelse return error.InvalidFeatureLevel;
+    if (it.next() != null) {
+        return error.InvalidFeatureLevel;
+    }
+
+    return registry.FeatureLevel{
+        .major = try std.fmt.parseInt(u32, major, 10),
+        .minor = try std.fmt.parseInt(u32, minor, 10),
     };
 }

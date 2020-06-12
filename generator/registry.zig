@@ -120,7 +120,7 @@ pub const Foreign = struct {
 
 pub const Feature = struct {
     name: []const u8,
-    number: []const u8,
+    level: FeatureLevel, // from 'number'
     requires: []Require,
 };
 
@@ -130,12 +130,18 @@ pub const Extension = struct {
         device,
     };
 
+    pub const Promotion = union(enum) {
+        none: void,
+        feature: FeatureLevel,
+        extension: []const u8,
+    };
+
     name: []const u8,
     number: u31,
     version: u32,
     extension_type: ?ExtensionType,
     depends: []const []const u8, // Other extensions
-    promoted_to: ?[]const u8,
+    promoted_to: Promotion,
     platform: ?[]const u8,
     requires: []Require,
 };
@@ -150,6 +156,11 @@ pub const Require = struct {
     extends: []EnumExtension,
     types: []const []const u8,
     commands: []const []const u8,
-    required_feature: ?[]const u8,
+    required_feature_level: ?FeatureLevel,
     required_extension: ?[]const u8,
+};
+
+pub const FeatureLevel = struct {
+    major: u32,
+    minor: u32,
 };

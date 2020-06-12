@@ -91,5 +91,5 @@ pub fn main() !void {
 
 test "main" {
     _ = @import("xml.zig");
-    _ = @import("spec-c-parse.zig");
+    _ = @import("registry/c-parse.zig");
 }
