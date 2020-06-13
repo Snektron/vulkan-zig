@@ -579,7 +579,7 @@ fn parseRequire(allocator: *Allocator, require: *xml.Element, extnumber: ?u31) !
     };
 
     return registry.Require{
-        .extends = extends,
+        .extends = allocator.shrink(extends, i_extends),
         .types = types,
         .commands = commands,
         .required_feature_level = required_feature_level,
@@ -594,10 +594,15 @@ fn parseExtensions(allocator: *Allocator, root: *xml.Element) ![]registry.Extens
     var i: usize = 0;
     var it = extensions_elem.findChildrenByTag("extension");
     while (it.next()) |extension| {
-        if (try parseExtension(allocator, extension)) |ext| {
-            extensions[i] = ext;
-            i += 1;
+        // Some extensions (in particular 94) are disabled, so just skip them
+        if (extension.getAttribute("supported")) |supported| {
+            if (mem.eql(u8, supported, "disabled")) {
+                continue;
+            }
         }
+
+        extensions[i] = try parseExtension(allocator, extension);
+        i += 1;
     }
 
     return allocator.shrink(extensions, i);
@@ -619,12 +624,7 @@ fn findExtVersion(extension: *xml.Element) !u32 {
     return error.InvalidRegistry;
 }
 
-fn parseExtension(allocator: *Allocator, extension: *xml.Element) !?registry.Extension {
-    // Some extensions (in particular 94) are disabled, so just skip them
-    if (extension.getAttribute("supported")) |supported| {
-        if (mem.eql(u8, supported, "disabled")) return null;
-    }
-
+fn parseExtension(allocator: *Allocator, extension: *xml.Element) !registry.Extension {
     const name = extension.getAttribute("name") orelse return error.InvalidRegistry;
     const platform = extension.getAttribute("platform");
     const version = try findExtVersion(extension);

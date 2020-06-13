@@ -17,7 +17,7 @@ pub const Content = union(enum) {
 };
 
 pub const Element = struct {
-    pub const AttributeList = SegmentedList(*Attribute, 0);
+    pub const AttributeList = SegmentedList(*Attribute, 1);
     pub const ContentList = SegmentedList(Content, 0);
 
     tag: []const u8,
