@@ -103,7 +103,7 @@ fn parseBitmaskType(ty: *xml.Element) !registry.Declaration {
         const alias = ty.getAttribute("alias") orelse return error.InvalidRegistry;
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.alias = alias},
+            .decl_type = .{.alias = .{.name = alias, .target = .other_type}},
         };
     } else {
         return registry.Declaration{
@@ -119,7 +119,7 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
         const alias = ty.getAttribute("alias") orelse return error.InvalidRegistry;
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.alias = alias},
+            .decl_type = .{.alias = .{.name = alias, .target = .other_type}},
         };
     } else {
         const name = ty.getCharData("name") orelse return error.InvalidRegistry;
@@ -151,7 +151,7 @@ fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration 
         // macros, which is why this part is not built into the xml/c parser.
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.opaque = {}},
+            .decl_type = .{.typedef = .{.opaque = {}}},
         };
     }
 }
@@ -162,7 +162,7 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     if (ty.getAttribute("alias")) |alias| {
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.alias = alias},
+            .decl_type = .{.alias = .{.name = alias, .target = .other_type}},
         };
     }
 
@@ -345,7 +345,7 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
         const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.alias = alias}
+            .decl_type = .{.alias = .{.name = alias, .target = .other_command}}
         };
     }
 
@@ -360,13 +360,13 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
     while (it.next()) |param| {
         var xctok = xmlc.XmlCTokenizer.init(param);
         const decl = try xmlc.parseParamOrProto(allocator, &xctok);
-        params[i] = .{.name = decl.name, .param_type = decl.decl_type};
+        params[i] = .{.name = decl.name, .param_type = decl.decl_type.typedef};
         try parsePointerMeta(&params[i].param_type, param);
         i += 1;
     }
 
     const return_type = try allocator.create(registry.TypeInfo);
-    return_type.* = command_decl.decl_type;
+    return_type.* = command_decl.decl_type.typedef;
 
     const success_codes = if (elem.getAttribute("successcodes")) |codes|
             try splitCommaAlloc(allocator, codes)

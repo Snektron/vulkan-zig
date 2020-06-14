@@ -8,7 +8,28 @@ pub const Registry = struct {
 
 pub const Declaration = struct {
     name: []const u8,
-    decl_type: TypeInfo,
+    decl_type: DeclarationType,
+};
+
+pub const DeclarationType = union(enum) {
+    container: Container,
+    enumeration: Enum,
+    bitmask: Bitmask,
+    handle: Handle,
+    command: Command,
+    alias: Alias,
+    foreign: Foreign,
+    typedef: TypeInfo,
+};
+
+pub const Alias = struct {
+    pub const Target = enum {
+        other_command,
+        other_type,
+    };
+
+    name: []const u8,
+    target: Target,
 };
 
 pub const ApiConstant = struct {
@@ -27,16 +48,11 @@ pub const Tag = struct {
 };
 
 pub const TypeInfo = union(enum) {
-    container: Container,
-    enumeration: Enum,
-    bitmask: Bitmask,
-    handle: Handle,
-    command: Command,
-    alias: []const u8, // Alias of another declaration
+    name: []const u8,
+    command_ptr: Command,
     pointer: Pointer,
     array: Array,
     opaque,
-    foreign: Foreign
 };
 
 pub const Container = struct {

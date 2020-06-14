@@ -229,7 +229,7 @@ pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
 
     return registry.Declaration{
         .name = decl.name orelse return error.MissingTypeIdentifier,
-        .decl_type = decl.decl_type,
+        .decl_type = .{.typedef = decl.decl_type},
     };
 }
 
@@ -268,7 +268,7 @@ pub fn parseParamOrProto(allocator: *Allocator, xctok: *XmlCTokenizer) !registry
     }
     return registry.Declaration{
         .name = decl.name orelse return error.MissingTypeIdentifier,
-        .decl_type = decl.decl_type,
+        .decl_type = .{.typedef = decl.decl_type},
     };
 }
 
@@ -307,7 +307,7 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Dec
     if (tok.id != .type_name and tok.id != .id) return error.InvalidSyntax;
     const type_name = tok.text;
 
-    var type_info = TypeInfo{.alias = type_name};
+    var type_info = TypeInfo{.name = type_name};
 
     // Parse pointers
     type_info = try parsePointers(allocator, xctok, inner_is_const, type_info);
@@ -366,32 +366,24 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
     _ = try xctok.expect(.rparen);
     _ = try xctok.expect(.lparen);
 
-    const command = try allocator.create(registry.TypeInfo);
-    command.* = .{
-        .command = .{
-            .params = &[_]registry.Command.Param{},
-            .return_type = try allocator.create(TypeInfo),
-            .success_codes = &[_][]const u8{},
-            .error_codes = &[_][]const u8{},
-        }
-    };
+    const return_type_heap = try allocator.create(TypeInfo);
+    return_type_heap.* = return_type;
 
-    command.command.return_type.* = return_type;
-    const command_ptr = Declaration{
+    var command_ptr = Declaration{
         .name = name.text,
         .decl_type = .{
-            .pointer = .{
-                .is_const = true,
-                .is_optional = false,
-                .size = .one,
-                .child = command,
+            .command_ptr = .{
+                .params = &[_]registry.Command.Param{},
+                .return_type = return_type_heap,
+                .success_codes = &[_][]const u8{},
+                .error_codes = &[_][]const u8{},
             }
-        },
+        }
     };
 
     const first_param = try parseDeclaration(allocator, xctok);
     if (first_param.name == null) {
-        if (first_param.decl_type != .alias or !mem.eql(u8, first_param.decl_type.alias, "void")) {
+        if (first_param.decl_type != .name or !mem.eql(u8, first_param.decl_type.name, "void")) {
             return error.InvalidSyntax;
         }
 
@@ -423,7 +415,7 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
     }
 
     _ = try xctok.nextNoEof();
-    command.command.params = params.toOwnedSlice();
+    command_ptr.decl_type.command_ptr.params = params.toOwnedSlice();
     return command_ptr;
 }
 

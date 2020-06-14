@@ -24,12 +24,14 @@ fn cmpFeatureLevels(a: FeatureLevel, b: FeatureLevel) std.math.Order {
 const DeclarationResolver = struct {
     const DeclarationSet = std.StringHashMap(void);
     const EnumExtensionMap = std.StringHashMap(std.ArrayList(reg.Enum.Field));
+    const FieldMap = std.StringHashMap(reg.Enum.Value);
 
     allocator: *Allocator,
     reg_arena: *Allocator,
     registry: *reg.Registry,
     declarations: DeclarationSet,
     enum_extensions: EnumExtensionMap,
+    field_map: FieldMap,
 
     fn init(allocator: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) DeclarationResolver {
         return .{
@@ -38,6 +40,7 @@ const DeclarationResolver = struct {
             .registry = registry,
             .declarations = DeclarationSet.init(allocator),
             .enum_extensions = EnumExtensionMap.init(allocator),
+            .field_map = FieldMap.init(allocator),
         };
     }
 
@@ -47,6 +50,7 @@ const DeclarationResolver = struct {
             kv.value.deinit();
         }
 
+        self.field_map.deinit();
         self.enum_extensions.deinit();
         self.declarations.deinit();
     }
@@ -78,22 +82,20 @@ const DeclarationResolver = struct {
         // If there are no extensions for this enum, assume its valid.
         const extensions = self.enum_extensions.get(name) orelse return;
 
-        // Todo: cache this in DeclarationResolver
-        var field_map = std.StringHashMap(reg.Enum.Value).init(self.allocator);
-        defer field_map.deinit();
+        self.field_map.clear();
 
         for (base_enum.fields) |field| {
-            _ = try field_map.put(field.name, field.value);
+            _ = try self.field_map.put(field.name, field.value);
         }
 
         // Assume that if a field name clobbers, the value is the same
         for (extensions.value.items) |field| {
-            _ = try field_map.put(field.name, field.value);
+            _ = try self.field_map.put(field.name, field.value);
         }
 
-        const new_fields = try self.reg_arena.alloc(reg.Enum.Field, field_map.count());
+        const new_fields = try self.reg_arena.alloc(reg.Enum.Field, self.field_map.count());
 
-        var it = field_map.iterator();
+        var it = self.field_map.iterator();
         for (new_fields) |*field| {
             const kv = it.next().?;
             field.* = .{
