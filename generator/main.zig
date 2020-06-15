@@ -141,4 +141,3 @@ test "main" {
 
 // TODO: Fix not all enums being parsed.
 // TODO: Fix not all struct fields being marked as optional properly.
-// TODO: Sort enum fields.

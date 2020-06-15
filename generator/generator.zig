@@ -25,14 +25,14 @@ fn cmpFeatureLevels(a: FeatureLevel, b: FeatureLevel) std.math.Order {
 const DeclarationResolver = struct {
     const DeclarationSet = std.StringHashMap(void);
     const EnumExtensionMap = std.StringHashMap(std.ArrayList(reg.Enum.Field));
-    const FieldMap = std.StringHashMap(reg.Enum.Value);
+    const FieldSet = std.StringHashMap(void);
 
     allocator: *Allocator,
     reg_arena: *Allocator,
     registry: *reg.Registry,
     declarations: DeclarationSet,
     enum_extensions: EnumExtensionMap,
-    field_map: FieldMap,
+    field_set: FieldSet,
 
     fn init(allocator: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) DeclarationResolver {
         return .{
@@ -41,7 +41,7 @@ const DeclarationResolver = struct {
             .registry = registry,
             .declarations = DeclarationSet.init(allocator),
             .enum_extensions = EnumExtensionMap.init(allocator),
-            .field_map = FieldMap.init(allocator),
+            .field_set = FieldSet.init(allocator),
         };
     }
 
@@ -51,7 +51,7 @@ const DeclarationResolver = struct {
             kv.value.deinit();
         }
 
-        self.field_map.deinit();
+        self.field_set.deinit();
         self.enum_extensions.deinit();
         self.declarations.deinit();
     }
@@ -83,31 +83,32 @@ const DeclarationResolver = struct {
         // If there are no extensions for this enum, assume its valid.
         const extensions = self.enum_extensions.get(name) orelse return;
 
-        self.field_map.clear();
+        self.field_set.clear();
+
+        const n_fields_upper_bound = base_enum.fields.len + extensions.value.items.len;
+        const new_fields = try self.reg_arena.alloc(reg.Enum.Field, n_fields_upper_bound);
+        var i: usize = 0;
 
         for (base_enum.fields) |field| {
-            _ = try self.field_map.put(field.name, field.value);
+            const existing = try self.field_set.put(field.name, {});
+            if (existing == null) {
+                new_fields[i] = field;
+                i += 1;
+            }
         }
 
         // Assume that if a field name clobbers, the value is the same
         for (extensions.value.items) |field| {
-            _ = try self.field_map.put(field.name, field.value);
-        }
-
-        const new_fields = try self.reg_arena.alloc(reg.Enum.Field, self.field_map.count());
-
-        var it = self.field_map.iterator();
-        for (new_fields) |*field| {
-            const kv = it.next().?;
-            field.* = .{
-                .name = kv.key,
-                .value = kv.value,
-            };
+            const existing = try self.field_set.put(field.name, {});
+            if (existing == null) {
+                new_fields[i] = field;
+                i += 1;
+            }
         }
 
         // Existing base_enum.fields was allocatued by `self.reg_arena`, so
         // it gets cleaned up whenever that is deinited.
-        base_enum.fields = new_fields;
+        base_enum.fields = self.reg_arena.shrink(new_fields, i);
     }
 
     fn resolve(self: *DeclarationResolver) !void {
