@@ -1,6 +1,7 @@
 const std = @import("std");
 const reg = @import("registry.zig");
 const xml = @import("xml.zig");
+const renderRegistry = @import("render.zig").render;
 const parseXml = @import("registry/parse.zig").parseXml;
 const Allocator = std.mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
@@ -167,10 +168,14 @@ pub const Generator = struct {
         self.registry_arena.deinit();
     }
 
-    // Solve registry.declarations according to registry.extensions and registry.features
+    // Solve `registry.declarations` according to `registry.extensions` and `registry.features`.
     pub fn resolveDeclarations(self: *Generator) !void {
         var resolver = DeclarationResolver.init(self.gpa, &self.registry_arena.allocator, &self.registry);
         defer resolver.deinit();
         try resolver.resolve();
+    }
+
+    pub fn render(self: *Generator, out_stream: var) !void {
+        try renderRegistry(out_stream, self.gpa, &self.registry);
     }
 };

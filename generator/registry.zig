@@ -20,6 +20,7 @@ pub const DeclarationType = union(enum) {
     alias: Alias,
     foreign: Foreign,
     typedef: TypeInfo,
+    opaque,
 };
 
 pub const Alias = struct {
@@ -52,7 +53,6 @@ pub const TypeInfo = union(enum) {
     command_ptr: Command,
     pointer: Pointer,
     array: Array,
-    opaque,
 };
 
 pub const Container = struct {
@@ -72,7 +72,7 @@ pub const Enum = struct {
         bit_vector: i32, // Combined flags & some vendor IDs
         int: i32,
         alias: struct {
-            alias_name: []const u8,
+            name: []const u8,
             is_compat_alias: bool,
         }
     };

@@ -122,15 +122,13 @@ pub fn main() !void {
     const spec = try xml.parse(allocator, source);
     defer spec.deinit();
 
-    // const result = try parseXml(std.heap.page_allocator, spec.root);
-    // defer result.deinit();
-
-    // dumpRegistry(result.registry);
-
     var gen = try vkgen.Generator.init(allocator, spec.root);
     defer gen.deinit();
 
     try gen.resolveDeclarations();
+
+    const stdout = std.io.getStdOut().writer();
+    try gen.render(stdout);
 
     std.debug.warn("Total declarations: {}\n", .{gen.registry.decls.len});
     std.debug.warn("Total memory usage: {} KiB\n", .{@divTrunc(prof_alloc.max_usage, 1024)});
@@ -140,3 +138,7 @@ test "main" {
     _ = @import("xml.zig");
     _ = @import("registry/c-parse.zig");
 }
+
+// TODO: Fix not all enums being parsed.
+// TODO: Fix not all struct fields being marked as optional properly.
+// TODO: Sort enum fields.

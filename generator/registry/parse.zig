@@ -151,7 +151,7 @@ fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration 
         // macros, which is why this part is not built into the xml/c parser.
         return registry.Declaration{
             .name = name,
-            .decl_type = .{.typedef = .{.opaque = {}}},
+            .decl_type = .{.opaque = {}},
         };
     }
 }
@@ -302,7 +302,7 @@ fn parseEnumField(field: *xml.Element) !registry.Enum.Field {
         } else if (field.getAttribute("bitpos")) |bitpos| {
             break :blk .{.bitpos = try std.fmt.parseInt(u5, bitpos, 10)};
         } else if (field.getAttribute("alias")) |alias| {
-            break :blk .{.alias = .{.alias_name = alias, .is_compat_alias = is_compat_alias}};
+            break :blk .{.alias = .{.name = alias, .is_compat_alias = is_compat_alias}};
         } else {
             return error.InvalidRegistry;
         }
