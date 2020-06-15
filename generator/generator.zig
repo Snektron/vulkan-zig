@@ -132,22 +132,22 @@ const DeclarationResolver = struct {
             }
         }
 
-        // Swap-remove all declarations that are not required.
-        // Some declarations may exist in `self.declarations` that do not exit in
-        // `self.registry.decls`, these are mostly macros and other stuff not parsed.
-        var i: usize = 0;
-        var count = self.registry.decls.len;
-        while (i < count) {
-            const decl = self.registry.decls[i];
+        // Remove all declarations that are not required.
+        //  Some declarations may exist in `self.declarations` that do not exit in
+        // `self.registry.decls`, these are mostly macros and other stuff not pa
+        var read_index: usize = 0;
+        var write_index: usize = 0;
+        while (read_index < self.registry.decls.len) {
+            const decl = self.registry.decls[read_index];
             if (self.declarations.contains(decl.name)) {
-                i += 1;
-            } else {
-                count -= 1;
-                self.registry.decls[i] = self.registry.decls[count];
+                self.registry.decls[write_index] = decl;
+                write_index += 1;
             }
+
+            read_index += 1;
         }
 
-        self.registry.decls = self.reg_arena.shrink(self.registry.decls, count);
+        self.registry.decls = self.reg_arena.shrink(self.registry.decls, write_index);
     }
 };
 
