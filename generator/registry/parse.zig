@@ -60,8 +60,6 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
                 break :blk try parseForeigntype(ty);
             };
 
-            // Enums are handled later, in parseEnums. This also has the effect of filtering
-            // out any enums which have no elements, and should be unused by other parts of the API.
             if (mem.eql(u8, category, "bitmask")) {
                 break :blk try parseBitmaskType(ty);
             } else if (mem.eql(u8, category, "handle")) {
@@ -74,6 +72,8 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
                 break :blk try parseContainer(allocator, ty, true);
             } else if (mem.eql(u8, category, "funcpointer")) {
                 break :blk try parseFuncPointer(allocator, ty);
+            } else if (mem.eql(u8, category, "enum")) {
+                break :blk (try parseEnumAlias(allocator, ty)) orelse continue;
             }
 
             continue;
@@ -232,6 +232,18 @@ fn parsePointerMeta(type_info: *registry.TypeInfo, elem: *xml.Element) !void {
             current_type_info = current_type_info.pointer.child;
         }
     }
+}
+
+fn parseEnumAlias(allocator: *Allocator, elem: *xml.Element) !?registry.Declaration {
+    if (elem.getAttribute("alias")) |alias| {
+        const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{.alias = .{.name = alias, .target = .other_type}},
+        };
+    }
+
+    return null;
 }
 
 fn parseEnums(allocator: *Allocator, out: []registry.Declaration, root: *xml.Element) !usize {

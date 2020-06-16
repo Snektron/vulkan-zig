@@ -139,5 +139,4 @@ test "main" {
     _ = @import("registry/c-parse.zig");
 }
 
-// TODO: Fix not all enums being parsed.
 // TODO: Fix not all struct fields being marked as optional properly.
