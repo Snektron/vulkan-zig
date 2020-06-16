@@ -449,7 +449,7 @@ fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool
         type_info = .{
             .pointer = .{
                 .is_const = is_const or first_const,
-                .is_optional = false, // set elsewhere
+                .is_optional = true, // set elsewhere
                 .size = .one, // set elsewhere
                 .child = child,
             },

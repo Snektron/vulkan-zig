@@ -233,13 +233,30 @@ fn Renderer(comptime WriterType: type) type {
             for (container.fields) |field| {
                 try self.writeIdentifierWithCase(.snake, field.name);
                 try self.writer.writeAll(": ");
-                try self.renderTypeInfo(field.field_type);
-                // TODO: Generate struct defaults
-                // TODO: Deal with packed structs
-                try self.writer.writeAll(", ");
+                if (field.bits) |bits| {
+                    try self.writer.print(" u{},", .{bits});
+                    if (field.field_type != .name or builtin_types.get(field.field_type.name) == null) {
+                        try self.writer.writeAll("// ");
+                        try self.renderTypeInfo(field.field_type);
+                        try self.writer.writeByte('\n');
+                    }
+                } else {
+                    try self.renderTypeInfo(field.field_type);
+                    try self.renderContainerDefaultField(name, field);
+                    try self.writer.writeAll(", ");
+                }
             }
 
             try self.writer.writeAll("};\n");
+        }
+
+        fn renderContainerDefaultField(self: *Self, name: []const u8, field: reg.Container.Field) !void {
+            if (mem.eql(u8, field.name, "pNext")) {
+                try self.writer.writeAll(" = null");
+            } else if (mem.eql(u8, field.name, "sType")) {
+                try self.writer.writeAll(" = .");
+                try self.writeIdentifierWithCase(.snake, util.trimVkNamespace(name));
+            }
         }
 
         fn renderEnumeration(self: *Self, name: []const u8, enumeration: reg.Enum) !void {
