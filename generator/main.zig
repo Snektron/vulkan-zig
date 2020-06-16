@@ -138,5 +138,3 @@ test "main" {
     _ = @import("xml.zig");
     _ = @import("registry/c-parse.zig");
 }
-
-// TODO: Fix not all struct fields being marked as optional properly.

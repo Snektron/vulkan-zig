@@ -116,9 +116,79 @@ fn Renderer(comptime WriterType: type) type {
         fn render(self: *Self) !void {
             try self.writer.writeAll(preamble);
 
+            for (self.registry.api_constants) |api_constant| {
+                try self.renderApiConstant(api_constant);
+            }
+
             for (self.registry.decls) |decl| {
                try self.renderDecl(decl);
             }
+        }
+
+        fn renderApiConstant(self: *Self, api_constant: reg.ApiConstant) !void {
+            try self.writer.writeAll("const ");
+            try self.writeIdentifier(util.trimVkNamespace(api_constant.name));
+            try self.writer.writeAll(" = ");
+
+            if (api_constant.value == .alias) {
+                try self.writeIdentifier(util.trimVkNamespace(api_constant.value.alias));
+                try self.writer.writeAll(";\n");
+                return;
+            }
+
+            const expr = api_constant.value.expr;
+            const adjusted_expr = if (expr.len > 2 and expr[0] == '(' and expr[expr.len - 1] == ')')
+                    expr[1 .. expr.len - 1]
+                else
+                    expr;
+
+            var tokenizer = cparse.CTokenizer{.source = adjusted_expr};
+            var peeked: ?cparse.Token = null;
+            while (true) {
+                const tok = peeked orelse (try tokenizer.next()) orelse break;
+                peeked = null;
+
+                switch (tok.id) {
+                    .lparen, .rparen, .tilde, .minus, .id => {
+                        try self.writer.writeAll(tok.text);
+                        continue;
+                    },
+                    .int => {},
+                    else => return error.InvalidApiConstant,
+                }
+
+                const suffix = (try tokenizer.next()) orelse {
+                    try self.writer.writeAll(tok.text);
+                    break;
+                };
+
+                switch (suffix.id) {
+                    .id => {
+                        if (mem.eql(u8, suffix.text, "ULL")) {
+                            try self.writer.print("@as(u64, {})", .{tok.text});
+                        } else if (mem.eql(u8, suffix.text, "U")) {
+                            try self.writer.print("@as(u32, {})", .{tok.text});
+                        } else {
+                            return error.InvalidApiConstant;
+                        }
+                    },
+                    .dot => {
+                        const decimal = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
+
+                        try self.writer.print("@as(f32, {}.{})", .{tok.text, decimal.text});
+                        const f = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
+                        if (f.id != .id or !mem.eql(u8, f.text, "f")) {
+                            return error.InvalidApiConstant;
+                        }
+                    },
+                    else => {
+                        try self.writer.writeAll(tok.text);
+                        peeked = suffix;
+                    },
+                }
+            }
+
+            try self.writer.writeAll(";\n");
         }
 
         fn renderTypeInfo(self: *Self, type_info: reg.TypeInfo) RenderTypeInfoError!void {
@@ -192,7 +262,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeByte('[');
             switch (array.size) {
                 .int => |size| try self.writer.print("{}", .{size}),
-                .alias => |alias| try self.writeIdentifier(alias[3..]), //TODO: Check proper VK_ prefix
+                .alias => |alias| try self.writeIdentifier(util.trimVkNamespace(alias)),
             }
             try self.writer.writeByte(']');
             try self.renderTypeInfo(array.child.*);

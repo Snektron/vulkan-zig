@@ -7,7 +7,7 @@ const testing = std.testing;
 const ArraySize = registry.Array.ArraySize;
 const TypeInfo = registry.TypeInfo;
 
-const Token = struct {
+pub const Token = struct {
     id: Id,
     text: []const u8,
 
@@ -21,6 +21,9 @@ const Token = struct {
         comma,
         semicolon,
         colon,
+        minus,
+        tilde,
+        dot,
         lparen,
         rparen,
         lbracket,
@@ -32,7 +35,7 @@ const Token = struct {
     };
 };
 
-const CTokenizer = struct {
+pub const CTokenizer = struct {
     source: []const u8,
     offset: usize = 0,
 
@@ -100,7 +103,7 @@ const CTokenizer = struct {
         };
     }
 
-    fn next(self: *CTokenizer) !?Token {
+    pub fn next(self: *CTokenizer) !?Token {
         while (true) {
             switch (self.peek() orelse return null) {
                 ' ', '\t', '\n', '\r' => _ = self.consumeNoEof(),
@@ -117,6 +120,9 @@ const CTokenizer = struct {
             ',' => id = .comma,
             ';' => id = .semicolon,
             ':' => id = .colon,
+            '-' => id = .minus,
+            '~' => id = .tilde,
+            '.' => id = .dot,
             '[' => id = .lbracket,
             ']' => id = .rbracket,
             '(' => id = .lparen,

@@ -1,7 +1,7 @@
 const std = @import("std");
 const registry = @import("../registry.zig");
 const xml = @import("../xml.zig");
-const xmlc = @import("c-parse.zig");
+const cparse = @import("c-parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -144,8 +144,8 @@ fn parseHandleType(ty: *xml.Element) !registry.Declaration {
 fn parseBaseType(allocator: *Allocator, ty: *xml.Element) !registry.Declaration {
     const name = ty.getCharData("name") orelse return error.InvalidRegistry;
     if (ty.getCharData("type")) |_| {
-        var tok = xmlc.XmlCTokenizer.init(ty);
-        return try xmlc.parseTypedef(allocator, &tok);
+        var tok = cparse.XmlCTokenizer.init(ty);
+        return try cparse.parseTypedef(allocator, &tok);
     } else {
         // Either ANativeWindow, AHardwareBuffer or CAMetalLayer. The latter has a lot of
         // macros, which is why this part is not built into the xml/c parser.
@@ -171,8 +171,8 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     var i: usize = 0;
     var it = ty.findChildrenByTag("member");
     while (it.next()) |member| {
-        var xctok = xmlc.XmlCTokenizer.init(member);
-        members[i] = try xmlc.parseMember(allocator, &xctok);
+        var xctok = cparse.XmlCTokenizer.init(member);
+        members[i] = try cparse.parseMember(allocator, &xctok);
         try parsePointerMeta(&members[i].field_type, member);
         i += 1;
     }
@@ -189,8 +189,8 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
 }
 
 fn parseFuncPointer(allocator: *Allocator, ty: *xml.Element) !registry.Declaration {
-    var xctok = xmlc.XmlCTokenizer.init(ty);
-    return try xmlc.parseTypedef(allocator, &xctok);
+    var xctok = cparse.XmlCTokenizer.init(ty);
+    return try cparse.parseTypedef(allocator, &xctok);
 }
 
 fn lenToPointerSize(len: []const u8) registry.Pointer.PointerSize {
@@ -362,16 +362,16 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
     }
 
     const proto = elem.findChildByTag("proto") orelse return error.InvalidRegistry;
-    var proto_xctok = xmlc.XmlCTokenizer.init(proto);
-    const command_decl = try xmlc.parseParamOrProto(allocator, &proto_xctok);
+    var proto_xctok = cparse.XmlCTokenizer.init(proto);
+    const command_decl = try cparse.parseParamOrProto(allocator, &proto_xctok);
 
     var params = try allocator.alloc(registry.Command.Param, elem.children.count());
 
     var i: usize = 0;
     var it = elem.findChildrenByTag("param");
     while (it.next()) |param| {
-        var xctok = xmlc.XmlCTokenizer.init(param);
-        const decl = try xmlc.parseParamOrProto(allocator, &xctok);
+        var xctok = cparse.XmlCTokenizer.init(param);
+        const decl = try cparse.parseParamOrProto(allocator, &xctok);
         params[i] = .{.name = decl.name, .param_type = decl.decl_type.typedef};
         try parsePointerMeta(&params[i].param_type, param);
         i += 1;
