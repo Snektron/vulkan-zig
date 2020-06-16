@@ -1,6 +1,7 @@
 const std = @import("std");
 const reg = @import("registry.zig");
 const util = @import("render/util.zig");
+const cparse = @import("registry/c-parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
@@ -272,11 +273,13 @@ fn Renderer(comptime WriterType: type) type {
             switch (decl.decl_type) {
                 .container => |container| try self.renderContainer(decl.name, container),
                 .enumeration => |enumeration| try self.renderEnumeration(decl.name, enumeration),
+                .bitmask => {},
+                .handle => |handle| try self.renderHandle(decl.name, handle),
+                .command => {},
                 .alias => |alias| try self.renderAlias(decl.name, alias),
-                .opaque => try self.renderOpaque(decl.name),
                 .foreign => |foreign| try self.renderForeign(decl.name, foreign),
                 .typedef => |type_info| try self.renderTypedef(decl.name, type_info),
-                else => {}, // unhandled for now
+                .opaque => try self.renderOpaque(decl.name),
             }
         }
 
@@ -365,9 +368,17 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("};\n");
         }
 
+        fn renderHandle(self: *Self, name: []const u8, handle: reg.Handle) !void {
+            const backing_type: []const u8 = if (handle.is_dispatchable) "usize" else "u64";
+
+            try self.writer.writeAll("const ");
+            try self.renderTypeName(name);
+            try self.writer.print(" = extern enum({}) {{null_handle = 0, _}};\n", .{backing_type});
+        }
+
         fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
             if (alias.target == .other_command) {
-                return; // Skip these for now
+                return; // TODO: Decide on how to tackle commands
             }
 
             try self.writer.writeAll("const ");
