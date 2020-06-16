@@ -6,28 +6,43 @@ const Allocator = mem.Allocator;
 
 const preamble =
     \\const std = @import("std");
+    \\const root = @import("root");
     \\
     ;
 
-const BuiltinType = struct {
-    c_name: []const u8,
-    zig_name: []const u8
-};
+const builtin_types = std.ComptimeStringMap([]const u8, .{
+    .{"char", @typeName(u8)},
+    .{"float", @typeName(f32)},
+    .{"double", @typeName(f64)},
+    .{"uint8_t", @typeName(u8)},
+    .{"uint16_t", @typeName(u16)},
+    .{"uint32_t", @typeName(u32)},
+    .{"uint64_t", @typeName(u64)},
+    .{"int32_t", @typeName(i32)},
+    .{"int64_t", @typeName(i64)},
+    .{"size_t", @typeName(usize)},
+    .{"int", @typeName(c_int)},
+});
 
-const builtin_types = [_]BuiltinType{
-    .{.c_name = "void", .zig_name = @typeName(void)},
-    .{.c_name = "char", .zig_name = @typeName(u8)},
-    .{.c_name = "float", .zig_name = @typeName(f32)},
-    .{.c_name = "double", .zig_name = @typeName(f64)},
-    .{.c_name = "uint8_t", .zig_name = @typeName(u8)},
-    .{.c_name = "uint16_t", .zig_name = @typeName(u16)},
-    .{.c_name = "uint32_t", .zig_name = @typeName(u32)},
-    .{.c_name = "uint64_t", .zig_name = @typeName(u64)},
-    .{.c_name = "int32_t", .zig_name = @typeName(i32)},
-    .{.c_name = "int64_t", .zig_name = @typeName(i64)},
-    .{.c_name = "size_t", .zig_name = @typeName(usize)},
-    .{.c_name = "int", .zig_name = @typeName(c_int)},
-};
+const foreign_types = std.ComptimeStringMap([]const u8, .{
+    .{"Display", "@Type(.Opaque)"},
+    .{"VisualID", @typeName(c_uint)},
+    .{"Window", @typeName(c_ulong)},
+    .{"RROutput", @typeName(c_ulong)},
+    .{"wl_display", "@Type(.Opaque)"},
+    .{"wl_surface", "@Type(.Opaque)"},
+    .{"HINSTANCE", "std.os.HINSTANCE"},
+    .{"HWND", "*@Type(.Opaque)"},
+    .{"HMONITOR", "*@Type(.Opaque)"},
+    .{"HANDLE", "std.os.HANDLE"},
+    .{"SECURITY_ATTRIBUTES", "std.os.SECURITY_ATTRIBUTES"},
+    .{"DWORD", "std.os.DWORD"},
+    .{"LPCWSTR", "std.os.LPCWSTR"},
+    .{"xcb_connection_t", "@Type(.Opaque)"},
+    .{"xcb_visualid_t", @typeName(u32)},
+    .{"xcb_window_t", @typeName(u32)},
+    .{"zx_handle_t", @typeName(u32)},
+});
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
     if (lhs.len != rhs.len) {
@@ -116,14 +131,10 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderTypeName(self: *Self, name: []const u8) !void {
-            for (builtin_types) |builtin_type| {
-                if (mem.eql(u8, name, builtin_type.c_name)) {
-                    try self.writer.writeAll(builtin_type.zig_name);
-                    return;
-                }
+            if (builtin_types.get(name)) |zig_name| {
+                try self.writer.writeAll(zig_name);
+                return;
             }
-
-            // TODO: Handle foreign types
 
             if (mem.startsWith(u8, name, "vk")) {
                 // Function type, always render with the exact same text for linking purposes.
@@ -193,6 +204,7 @@ fn Renderer(comptime WriterType: type) type {
                 .enumeration => |enumeration| try self.renderEnumeration(decl.name, enumeration),
                 .alias => |alias| try self.renderAlias(decl.name, alias),
                 .opaque => try self.renderOpaque(decl.name),
+                .foreign => |foreign| try self.renderForeign(decl.name, foreign),
                 .typedef => |type_info| try self.renderTypedef(decl.name, type_info),
                 else => {}, // unhandled for now
             }
@@ -244,7 +256,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field.name));
 
                 switch (field.value) {
-                    .int => |int| try self.writer.print("= {}, ", .{int}),
+                    .int => |int| try self.writer.print(" = {}, ", .{int}),
                     .bitpos => |pos| try self.writer.print(" = 1 << {}, ", .{pos}),
                     .bit_vector => |value| try self.writer.print(" = 0x{X}, ", .{value}),
                     .alias => unreachable,
@@ -267,6 +279,10 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
+            if (alias.target == .other_command) {
+                return; // Skip these for now
+            }
+
             try self.writer.writeAll("const ");
             try self.renderTypeName(name);
             try self.writer.writeAll(" = ");
@@ -278,6 +294,25 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("const ");
             try self.renderTypeName(name);
             try self.writer.writeAll(" = @Type(.Opaque);\n");
+        }
+
+        fn renderForeign(self: *Self, name: []const u8, foreign: reg.Foreign) !void {
+            if (mem.eql(u8, foreign.depends, "vk_platform")) {
+                return; // Skip built-in types, they are handled differently
+            }
+
+            try self.writer.writeAll("const ");
+            try self.writeIdentifier(name);
+            try self.writer.print(" = if (@hasDecl(root, \"{}\")) root.", .{name});
+            try self.writeIdentifier(name);
+            try self.writer.writeAll(" else ");
+
+            if (foreign_types.get(name)) |default| {
+                try self.writer.writeAll(default);
+                try self.writer.writeAll(";\n");
+            } else {
+                try self.writer.print("@compileError(\"Missing type definition of '{}'\");\n", .{name});
+            }
         }
 
         fn renderTypedef(self: *Self, name: []const u8, type_info: reg.TypeInfo) !void {

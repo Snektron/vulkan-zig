@@ -139,7 +139,7 @@ const DeclarationResolver = struct {
         var write_index: usize = 0;
         while (read_index < self.registry.decls.len) {
             const decl = self.registry.decls[read_index];
-            if (self.declarations.contains(decl.name)) {
+            if (decl.decl_type == .foreign or self.declarations.contains(decl.name)) {
                 self.registry.decls[write_index] = decl;
                 write_index += 1;
             }
