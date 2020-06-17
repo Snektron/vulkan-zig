@@ -7,11 +7,24 @@ const Allocator = mem.Allocator;
 
 const preamble =
     \\const std = @import("std");
+    \\const builtin = @import("builtin");
     \\const root = @import("root");
+    \\
+    \\pub const vulkan_call_conv: builtin.CallingConvention = if (builtin.os.tag == .windows)
+    \\        .Stdcall
+    \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and builtin.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
+    \\        // On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
+    \\        // calling convention, i.e. float parameters are passed in registers. This
+    \\        // is true even if the rest of the application passes floats on the stack,
+    \\        // as it does by default when compiling for the armeabi-v7a NDK ABI.
+    \\        .AAPCSVFP
+    \\    else
+    \\        .C;
     \\
     ;
 
 const builtin_types = std.ComptimeStringMap([]const u8, .{
+    .{"void", @typeName(void)},
     .{"char", @typeName(u8)},
     .{"float", @typeName(f32)},
     .{"double", @typeName(f64)},
@@ -175,8 +188,8 @@ fn Renderer(comptime WriterType: type) type {
                     },
                     .dot => {
                         const decimal = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
-
                         try self.writer.print("@as(f32, {}.{})", .{tok.text, decimal.text});
+
                         const f = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
                         if (f.id != .id or !mem.eql(u8, f.text, "f")) {
                             return error.InvalidApiConstant;
@@ -232,16 +245,19 @@ fn Renderer(comptime WriterType: type) type {
                 try self.renderTypeInfo(param.param_type);
                 try self.writer.writeAll(", ");
             }
-            try self.writer.writeAll(") ");
+            try self.writer.writeAll(") callconv(vulkan_call_conv)");
             try self.renderTypeInfo(command_ptr.return_type.*);
         }
 
         fn renderPointer(self: *Self, pointer: reg.Pointer) !void {
+            const child_is_void = pointer.child.* == .name and mem.eql(u8, pointer.child.name, "void");
+
             if (pointer.is_optional) {
                 try self.writer.writeByte('?');
             }
 
-            switch (pointer.size) {
+            const size = if (child_is_void) .one else pointer.size;
+            switch (size) {
                 .one => try self.writer.writeByte('*'),
                 .many => try self.writer.writeAll("[*]"),
                 .zero_terminated => try self.writer.writeAll("[*:0]"),
@@ -251,8 +267,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll("const ");
             }
 
-            // Special case: void pointers
-            if (pointer.child.* == .name and mem.eql(u8, pointer.child.name, "void")) {
+            if (child_is_void) {
                 try self.writer.writeAll("c_void");
             } else {
                 try self.renderTypeInfo(pointer.child.*);
