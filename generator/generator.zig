@@ -155,30 +155,30 @@ const DeclarationResolver = struct {
 
 pub const Generator = struct {
     gpa: *Allocator,
-    registry_arena: std.heap.ArenaAllocator,
+    reg_arena: std.heap.ArenaAllocator,
     registry: reg.Registry,
 
     pub fn init(allocator: *Allocator, spec: *xml.Element) !Generator {
         const result = try parseXml(allocator, spec);
         return Generator{
             .gpa = allocator,
-            .registry_arena = result.arena,
+            .reg_arena = result.arena,
             .registry = result.registry,
         };
     }
 
     pub fn deinit(self: Generator) void {
-        self.registry_arena.deinit();
+        self.reg_arena.deinit();
     }
 
     // Solve `registry.declarations` according to `registry.extensions` and `registry.features`.
     pub fn resolveDeclarations(self: *Generator) !void {
-        var resolver = DeclarationResolver.init(self.gpa, &self.registry_arena.allocator, &self.registry);
+        var resolver = DeclarationResolver.init(self.gpa, &self.reg_arena.allocator, &self.registry);
         defer resolver.deinit();
         try resolver.resolve();
     }
 
     pub fn render(self: *Generator, out_stream: var) !void {
-        try renderRegistry(out_stream, self.gpa, &self.registry);
+        try renderRegistry(out_stream, &self.reg_arena.allocator, &self.registry);
     }
 };

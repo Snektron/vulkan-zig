@@ -9,7 +9,6 @@ const preamble =
     \\const std = @import("std");
     \\const builtin = @import("builtin");
     \\const root = @import("root");
-    \\
     \\pub const vulkan_call_conv: builtin.CallingConvention = if (builtin.os.tag == .windows)
     \\        .Stdcall
     \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and builtin.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
@@ -80,6 +79,15 @@ fn Renderer(comptime WriterType: type) type {
             OutOfMemory,
         };
 
+        const BitflagName = struct {
+            /// Name without FlagBits, so VkSurfaceTransformFlagBitsKHR
+            /// becomes VkSurfaceTransform
+            base_name: []const u8,
+
+            /// Optional tag of the flag
+            tag: ?[]const u8,
+        };
+
         writer: WriterType,
         allocator: *Allocator,
         registry: *const reg.Registry,
@@ -107,11 +115,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn extractEnumFieldName(self: Self, enum_name: []const u8, field_name: []const u8) ![]const u8 {
-            const tag = util.getAuthorTag(enum_name, self.registry.tags);
-            const adjusted_enum_name = if (tag) |name|
-                    enum_name[0 .. enum_name.len - name.len]
-                else
-                    enum_name;
+            const adjusted_enum_name = util.stripAuthorTag(enum_name, self.registry.tags);
 
             var enum_it = util.SegmentIterator.init(adjusted_enum_name);
             var field_it = util.SegmentIterator.init(field_name);
@@ -125,6 +129,20 @@ fn Renderer(comptime WriterType: type) type {
                     return rest;
                 }
             }
+        }
+
+        fn exctractBitflagName(self: Self, name: []const u8) ?BitflagName {
+            const tag = util.getAuthorTag(name, self.registry.tags);
+            const base_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
+
+            if (!mem.endsWith(u8, base_name, "FlagBits")) {
+                return null;
+            }
+
+            return BitflagName{
+                .base_name = base_name[0 .. base_name.len - "FlagBits".len],
+                .tag = tag,
+            };
         }
 
         fn render(self: *Self) !void {
@@ -218,9 +236,13 @@ fn Renderer(comptime WriterType: type) type {
             if (builtin_types.get(name)) |zig_name| {
                 try self.writer.writeAll(zig_name);
                 return;
-            }
-
-            if (mem.startsWith(u8, name, "vk")) {
+            } else if (self.exctractBitflagName(name)) |bitflag_name| {
+                try self.writer.print("{}Flags{}", .{
+                    util.trimVkNamespace(bitflag_name.base_name),
+                    @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
+                });
+                return;
+            } else if (mem.startsWith(u8, name, "vk")) {
                 // Function type, always render with the exact same text for linking purposes.
                 try self.writeIdentifier(name);
                 return;
@@ -288,7 +310,7 @@ fn Renderer(comptime WriterType: type) type {
             switch (decl.decl_type) {
                 .container => |container| try self.renderContainer(decl.name, container),
                 .enumeration => |enumeration| try self.renderEnumeration(decl.name, enumeration),
-                .bitmask => {},
+                .bitmask => |bitmask| try self.renderBitmask(decl.name, bitmask),
                 .handle => |handle| try self.renderHandle(decl.name, handle),
                 .command => {},
                 .alias => |alias| try self.renderAlias(decl.name, alias),
@@ -348,7 +370,11 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderEnumeration(self: *Self, name: []const u8, enumeration: reg.Enum) !void {
-            // TODO: Handle bitmasks
+            if (enumeration.is_bitmask) {
+                try self.renderBitmaskBits(name, enumeration);
+                return;
+            }
+
             try self.writer.writeAll("const ");
             try self.renderTypeName(name);
             try self.writer.writeAll(" = extern enum {");
@@ -383,6 +409,51 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("};\n");
         }
 
+        fn renderBitmaskBits(self: *Self, name: []const u8, bits: reg.Enum) !void {
+            try self.writer.writeAll("const ");
+            try self.renderTypeName(name);
+            try self.writer.writeAll(" = packed struct {");
+
+            var flags_by_bitpos = [_]?[]const u8{null} ** 32;
+            for (bits.fields) |field| {
+                if (field.value == .bitpos) {
+                    flags_by_bitpos[field.value.bitpos] = field.name;
+                }
+            }
+
+            for (flags_by_bitpos) |opt_flag_name, bitpos| {
+                if (opt_flag_name) |flag_name| {
+                    try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, flag_name));
+                } else {
+                    try self.writer.print("__reserved_bit_{}", .{bitpos});
+                }
+
+                try self.writer.writeAll(": bool ");
+                    if (bitpos == 0) { // Force alignment to integer boundaries
+                        try self.writer.writeAll("align(@alignOf(u32)) ");
+                    }
+                    try self.writer.writeAll("= false, ");
+            }
+
+            try self.writer.writeAll("};\n");
+        }
+
+        fn renderBitmask(self: *Self, name: []const u8, bitmask: reg.Bitmask) !void {
+            if (bitmask.bits_enum == null) {
+                // The bits structure is generated by renderBitmaskBits, but that wont
+                // output flags with no associated bits type.
+
+                try self.writer.writeAll("const ");
+                try self.renderTypeName(name);
+                try self.writer.writeAll(
+                    \\ = packed struct {
+                    \\__reserved_bits: u32 = 0,
+                    \\};
+                    \\
+                );
+            }
+        }
+
         fn renderHandle(self: *Self, name: []const u8, handle: reg.Handle) !void {
             const backing_type: []const u8 = if (handle.is_dispatchable) "usize" else "u64";
 
@@ -394,6 +465,8 @@ fn Renderer(comptime WriterType: type) type {
         fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
             if (alias.target == .other_command) {
                 return; // TODO: Decide on how to tackle commands
+            } else if (self.exctractBitflagName(name) != null) {
+                return; // Don't make aliases of the bitflag names, as those are replaced by just the flags type
             }
 
             try self.writer.writeAll("const ");

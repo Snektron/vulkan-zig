@@ -86,6 +86,14 @@ pub fn getAuthorTag(id: []const u8, tags: []const reg.Tag) ?[]const u8 {
     return null;
 }
 
+pub fn stripAuthorTag(id: []const u8, tags: []const reg.Tag) []const u8 {
+    if (getAuthorTag(id, tags)) |tag| {
+        return id[0 .. id.len - tag.len];
+    }
+
+    return id;
+}
+
 pub const SegmentIterator = struct {
     text: []const u8,
     offset: usize,
@@ -218,6 +226,7 @@ pub const IdRenderer = struct {
     pub fn render(self: *IdRenderer, out: var, case_style: CaseStyle, id: []const u8) !void {
         const tag = getAuthorTag(id, self.tags);
         const adjusted_id = if (tag) |name| id[0 .. id.len - name.len] else id;
+
         self.text_cache.items.len = 0;
 
         switch (case_style) {
