@@ -155,6 +155,8 @@ fn Renderer(comptime WriterType: type) type {
             for (self.registry.decls) |decl| {
                try self.renderDecl(decl);
             }
+
+            try self.renderCommandPtrs();
         }
 
         fn renderApiConstant(self: *Self, api_constant: reg.ApiConstant) !void {
@@ -226,7 +228,7 @@ fn Renderer(comptime WriterType: type) type {
         fn renderTypeInfo(self: *Self, type_info: reg.TypeInfo) RenderTypeInfoError!void {
             switch (type_info) {
                 .name => |name| try self.renderTypeName(name),
-                .command_ptr => |command_ptr| try self.renderCommandPtr(command_ptr),
+                .command_ptr => |command_ptr| try self.renderCommandPtr(command_ptr, true),
                 .pointer => |pointer| try self.renderPointer(pointer),
                 .array => |array| try self.renderArray(array),
             }
@@ -259,8 +261,11 @@ fn Renderer(comptime WriterType: type) type {
             try self.writeIdentifier(name);
         }
 
-        fn renderCommandPtr(self: *Self, command_ptr: reg.Command) !void {
-            try self.writer.writeAll("?fn(");
+        fn renderCommandPtr(self: *Self, command_ptr: reg.Command, optional: bool) !void {
+            if (optional) {
+                try self.writer.writeByte('?');
+            }
+            try self.writer.writeAll("fn(");
             for (command_ptr.params) |param| {
                 try self.writeIdentifierWithCase(.snake, param.name);
                 try self.writer.writeAll(": ");
@@ -464,9 +469,10 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
             if (alias.target == .other_command) {
-                return; // TODO: Decide on how to tackle commands
+                return;
             } else if (self.exctractBitflagName(name) != null) {
-                return; // Don't make aliases of the bitflag names, as those are replaced by just the flags type
+                // Don't make aliases of the bitflag names, as those are replaced by just the flags type
+                return;
             }
 
             try self.writer.writeAll("const ");
@@ -507,6 +513,41 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(" = ");
             try self.renderTypeInfo(type_info);
             try self.writer.writeAll(";\n");
+        }
+
+        fn renderCommandPtrs(self: *Self) !void {
+            for (self.registry.decls) |decl| {
+                if (decl.decl_type != .command) {
+                    continue;
+                }
+
+                try self.writer.print("const PFN_{} = ", .{decl.name});
+                try self.renderCommandPtr(decl.decl_type.command, false);
+                try self.writer.writeAll(";\n");
+            }
+
+            try self.writer.writeAll(
+                \\const commands = struct {
+                \\    const CommandInfo = struct {
+                \\        Pfn: type,
+                \\        link_name: [:0]const u8,
+                \\    };
+                \\
+            );
+            for (self.registry.decls) |decl| {
+                if (decl.decl_type != .command) {
+                    continue;
+                }
+
+                try self.writer.writeAll("const ");
+                try self.renderTypeName(decl.name);
+                try self.writer.print(
+                    " = CommandInfo{{ .Pfn = PFN_{}, .link_name = \"{}\" }};\n",
+                    .{decl.name, decl.name}
+                );
+            }
+
+            try self.writer.writeAll("};\n");
         }
     };
 }
