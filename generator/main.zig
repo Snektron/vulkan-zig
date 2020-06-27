@@ -76,8 +76,8 @@ const ProfilingAllocator = struct {
     fn init(parent_allocator: *Allocator) ProfilingAllocator {
         return ProfilingAllocator{
             .allocator = Allocator{
-                .reallocFn = realloc,
-                .shrinkFn = shrink,
+                .allocFn = alloc,
+                .resizeFn = resize,
             },
             .parent_allocator = parent_allocator,
             .max_usage = 0,
@@ -85,19 +85,26 @@ const ProfilingAllocator = struct {
         };
     }
 
-    fn realloc(allocator: *Allocator, old_mem: []u8, old_align: u29, new_size: usize, new_align: u29) ![]u8 {
+    fn alloc(allocator: *Allocator, len: usize, ptr_align: u29, len_align: u29) ![]u8 {
         const self = @fieldParentPtr(ProfilingAllocator, "allocator", allocator);
-        self.current_usage = self.current_usage - old_mem.len + new_size;
+        const buf = try self.parent_allocator.allocFn(self.parent_allocator, len, ptr_align, len_align);
+        self.current_usage += buf.len;
         if (self.current_usage > self.max_usage) {
             self.max_usage = self.current_usage;
         }
 
-        return self.parent_allocator.reallocFn(self.parent_allocator, old_mem, old_align, new_size, new_align);
+        return buf;
     }
 
-    fn shrink(allocator: *Allocator, old_mem: []u8, old_align: u29, new_size: usize, new_align: u29) []u8 {
+    fn resize(allocator: *Allocator, buf: []u8, new_len: usize, len_align: u29) !usize {
         const self = @fieldParentPtr(ProfilingAllocator, "allocator", allocator);
-        return self.parent_allocator.shrinkFn(self.parent_allocator, old_mem, old_align, new_size, new_align);
+        const actual_new_len = try self.parent_allocator.resizeFn(self.parent_allocator, buf, new_len, len_align);
+        self.current_usage = self.current_usage - buf.len + actual_new_len;
+        if (self.current_usage > self.max_usage) {
+            self.max_usage = self.current_usage;
+        }
+
+        return actual_new_len;
     }
 };
 
