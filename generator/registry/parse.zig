@@ -173,18 +173,31 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     while (it.next()) |member| {
         var xctok = cparse.XmlCTokenizer.init(member);
         members[i] = try cparse.parseMember(allocator, &xctok);
-        try parsePointerMeta(&members[i].field_type, member);
         i += 1;
+    }
+
+    members = allocator.shrink(members, i);
+    const decl_type = registry.DeclarationType{
+        .container = .{
+            .fields = members,
+            .is_union = is_union,
+        }
+    };
+
+    it = ty.findChildrenByTag("member");
+    for (members) |*member| {
+        const member_elem = it.next().?;
+        try parsePointerMeta(decl_type, &member.field_type, member_elem);
+
+        // pNext isn't properly marked as optional, so just manually override it,
+        if (mem.eql(u8, member.name, "pNext")) {
+            member.field_type.pointer.is_optional = true;
+        }
     }
 
     return registry.Declaration{
         .name = name,
-        .decl_type = .{
-            .container = .{
-                .fields = allocator.shrink(members, i),
-                .is_union = is_union,
-            }
-        },
+        .decl_type = decl_type,
     };
 }
 
@@ -193,7 +206,27 @@ fn parseFuncPointer(allocator: *Allocator, ty: *xml.Element) !registry.Declarati
     return try cparse.parseTypedef(allocator, &xctok);
 }
 
-fn lenToPointerSize(len: []const u8) registry.Pointer.PointerSize {
+fn lenToPointerSize(decl_type: registry.DeclarationType, len: []const u8) registry.Pointer.PointerSize {
+    switch (decl_type) {
+        .command => |command| {
+            for (command.params) |*param| {
+                if (mem.eql(u8, param.name, len)) {
+                    param.is_buffer_len = true;
+                    return .{.other_field = param.name};
+                }
+            }
+        },
+        .container => |container| {
+            for (container.fields) |*field| {
+                if (mem.eql(u8, field.name, len)) {
+                    field.is_buffer_len = true;
+                    return .{.other_field = field.name};
+                }
+            }
+        },
+        else => {},
+    }
+
     if (mem.eql(u8, len, "null-terminated")) {
         return .zero_terminated;
     } else {
@@ -201,12 +234,13 @@ fn lenToPointerSize(len: []const u8) registry.Pointer.PointerSize {
     }
 }
 
-fn parsePointerMeta(type_info: *registry.TypeInfo, elem: *xml.Element) !void {
+fn parsePointerMeta(decl_type: registry.DeclarationType, type_info: *registry.TypeInfo, elem: *xml.Element) !void {
     if (elem.getAttribute("len")) |lens| {
         var it = mem.split(lens, ",");
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
-            const size = if (it.next()) |len_str| lenToPointerSize(len_str) else .one;
+            // TODO: Check altlen
+            const size = if (it.next()) |len_str| lenToPointerSize(decl_type, len_str) else .one;
             current_type_info.pointer.size = size;
             current_type_info = current_type_info.pointer.child;
         }
@@ -372,8 +406,11 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
     while (it.next()) |param| {
         var xctok = cparse.XmlCTokenizer.init(param);
         const decl = try cparse.parseParamOrProto(allocator, &xctok);
-        params[i] = .{.name = decl.name, .param_type = decl.decl_type.typedef};
-        try parsePointerMeta(&params[i].param_type, param);
+        params[i] = .{
+            .name = decl.name,
+            .param_type = decl.decl_type.typedef,
+            .is_buffer_len = false,
+        };
         i += 1;
     }
 
@@ -390,16 +427,25 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
         else
             &[_][]const u8{};
 
+    params = allocator.shrink(params, i);
+    var decl_type = registry.DeclarationType{
+        .command = .{
+            .params = params,
+            .return_type = return_type,
+            .success_codes = success_codes,
+            .error_codes = error_codes,
+        }
+    };
+
+    it = elem.findChildrenByTag("param");
+    for (params) |*param| {
+        const param_elem = it.next().?;
+        try parsePointerMeta(decl_type, &param.param_type, param_elem);
+    }
+
     return registry.Declaration{
         .name = command_decl.name,
-        .decl_type = .{
-            .command = .{
-                .params = allocator.shrink(params, i),
-                .return_type = return_type,
-                .success_codes = success_codes,
-                .error_codes = error_codes,
-            }
-        }
+        .decl_type = decl_type,
     };
 }
 

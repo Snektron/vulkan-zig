@@ -246,6 +246,7 @@ pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Conta
         .name = decl.name orelse return error.MissingTypeIdentifier,
         .field_type = decl.decl_type,
         .bits = null,
+        .is_buffer_len = false,
     };
 
     if (try xctok.peek()) |tok| {
@@ -404,6 +405,7 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
     try params.append(.{
         .name = first_param.name.?,
         .param_type = first_param.decl_type,
+        .is_buffer_len = false,
     });
 
     while (true) {
@@ -417,6 +419,7 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
         try params.append(.{
             .name = decl.name orelse return error.MissingTypeIdentifier,
             .param_type = decl.decl_type,
+            .is_buffer_len = false,
         });
     }
 
@@ -455,7 +458,7 @@ fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool
         type_info = .{
             .pointer = .{
                 .is_const = is_const or first_const,
-                .is_optional = true, // set elsewhere
+                .is_optional = false, // set elsewhere
                 .size = .one, // set elsewhere
                 .child = child,
             },

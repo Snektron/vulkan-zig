@@ -60,6 +60,7 @@ pub const Container = struct {
         name: []const u8,
         field_type: TypeInfo,
         bits: ?usize,
+        is_buffer_len: bool,
     };
 
     fields: []Field,
@@ -99,6 +100,7 @@ pub const Command = struct {
     pub const Param = struct {
         name: []const u8,
         param_type: TypeInfo,
+        is_buffer_len: bool,
     };
 
     params: []Param,
@@ -108,9 +110,10 @@ pub const Command = struct {
 };
 
 pub const Pointer = struct {
-    pub const PointerSize = enum {
+    pub const PointerSize = union(enum) {
         one,
-        many, // The length is given by some expression
+        many, // The length is given by some complex expression, possibly involving another field
+        other_field: []const u8, // The length is given by some other field or parameter
         zero_terminated
     };
 
