@@ -223,7 +223,17 @@ pub const IdRenderer = struct {
         }
     }
 
-    pub fn render(self: *IdRenderer, out: var, case_style: CaseStyle, id: []const u8) !void {
+    pub fn render(self: IdRenderer, out: var, id: []const u8) !void {
+        try writeIdentifier(out, id);
+    }
+
+    pub fn renderFmt(self: *IdRenderer, out: var, comptime fmt: []const u8, args: var) !void {
+        self.text_cache.items.len = 0;
+        try std.fmt.format(self.text_cache.writer(), fmt, args);
+        try writeIdentifier(out, self.text_cache.items);
+    }
+
+    pub fn renderWithCase(self: *IdRenderer, out: var, case_style: CaseStyle, id: []const u8) !void {
         const tag = getAuthorTag(id, self.tags);
         const adjusted_id = if (tag) |name| id[0 .. id.len - name.len] else id;
 

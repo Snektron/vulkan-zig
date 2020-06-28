@@ -19,6 +19,38 @@ const preamble =
     \\        .AAPCSVFP
     \\    else
     \\        .C;
+    \\pub fn FlagsMixin(comptime FlagsType: type) type {
+    \\    return struct {
+    \\        pub const IntType = Flags;
+    \\        pub fn toInt(self: FlagsType) IntType {
+    \\            return @bitCast(IntType, self);
+    \\        }
+    \\
+    \\        pub fn fromInt(flags: IntType) FlagsType {
+    \\            return @bitCast(FlagsType, flags);
+    \\        }
+    \\
+    \\        pub fn merge(lhs: FlagsType, rhs: FlagsType) FlagsType {
+    \\            return fromInt(toInt(lhs) | toInt(rhs));
+    \\        }
+    \\
+    \\        pub fn intersect(lhs: FlagsType, rhs: FlagsType) FlagsType {
+    \\            return fromInt(toInt(lhs) & toInt(rhs));
+    \\        }
+    \\
+    \\        pub fn complement(self: FlagsType) FlagsType {
+    \\            return fromInt(~toInt(lhs));
+    \\        }
+    \\
+    \\        pub fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {
+    \\            return fromInt(toInt(lhs) & toInt(rhs.complement()));
+    \\        }
+    \\
+    \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) FlagsType {
+    \\            return toInt(merge(lhs, rhs)) == toInt(rhs);
+    \\        }
+    \\    };
+    \\}
     \\
     ;
 
@@ -97,6 +129,15 @@ fn Renderer(comptime WriterType: type) type {
             other,
         };
 
+        const ReturnValue = struct {
+            name: []const u8,
+            return_value_type: reg.TypeInfo,
+            origin: enum {
+                parameter,
+                inner_return_value,
+            },
+        };
+
         writer: WriterType,
         allocator: *Allocator,
         registry: *const reg.Registry,
@@ -116,11 +157,15 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn writeIdentifier(self: Self, id: []const u8) !void {
-            try util.writeIdentifier(self.writer, id);
+            try self.id_renderer.render(self.writer, id);
         }
 
         fn writeIdentifierWithCase(self: *Self, case: util.CaseStyle, id: []const u8) !void {
-            try self.id_renderer.render(self.writer, case, id);
+            try self.id_renderer.renderWithCase(self.writer, case, id);
+        }
+
+        fn writeIdentifierFmt(self: *Self, comptime fmt: []const u8, args: var) !void {
+            try self.id_renderer.renderFmt(self.writer, fmt, args);
         }
 
         fn extractEnumFieldName(self: Self, enum_name: []const u8, field_name: []const u8) ![]const u8 {
@@ -165,8 +210,16 @@ fn Renderer(comptime WriterType: type) type {
                         return .mut_buffer_len;
                     }
 
-                    const child_is_void = ptr.child.* == .name and mem.eql(u8, ptr.child.name, "void");
-                    if (!child_is_void and ptr.size == .one and !ptr.is_optional) {
+                    if (ptr.child.* == .name) {
+                        const child_name = ptr.child.name;
+                        if (mem.eql(u8, child_name, "void")) {
+                            return .other;
+                        } else if (builtin_types.get(child_name) == null and util.trimVkNamespace(child_name).ptr == child_name.ptr) {
+                            return .other; // External type
+                        }
+                    }
+
+                    if (ptr.size == .one and !ptr.is_optional) {
                         if (ptr.is_const) {
                             return .in_pointer;
                         } else {
@@ -284,7 +337,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(zig_name);
                 return;
             } else if (self.extractBitflagName(name)) |bitflag_name| {
-                try self.writer.print("{}Flags{}", .{
+                try self.writeIdentifierFmt("{}Flags{}", .{
                     util.trimVkNamespace(bitflag_name.base_name),
                     @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
                 });
@@ -314,7 +367,22 @@ fn Renderer(comptime WriterType: type) type {
             for (command_ptr.params) |param| {
                 try self.writeIdentifierWithCase(.snake, param.name);
                 try self.writer.writeAll(": ");
-                try self.renderTypeInfo(param.param_type);
+
+                blk: {
+                    if (param.param_type == .name) {
+                        if (self.extractBitflagName(param.param_type.name)) |bitflag_name| {
+                            try self.writeIdentifierFmt("{}Flags{}", .{
+                                util.trimVkNamespace(bitflag_name.base_name),
+                                @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
+                            });
+                            try self.writer.writeAll(".IntType");
+                            break :blk;
+                        }
+                    }
+
+                    try self.renderTypeInfo(param.param_type);
+                }
+
                 try self.writer.writeAll(", ");
             }
             try self.writer.writeAll(") callconv(vulkan_call_conv)");
@@ -434,7 +502,7 @@ fn Renderer(comptime WriterType: type) type {
                     continue;
                 }
 
-                try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field.name));
+                try self.renderEnumFieldName(name, field.name);
 
                 switch (field.value) {
                     .int => |int| try self.writer.print(" = {}, ", .{int}),
@@ -450,42 +518,10 @@ fn Renderer(comptime WriterType: type) type {
                 }
 
                 try self.writer.writeAll("pub const ");
-                try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field.name));
+                try self.renderEnumFieldName(name, field.name);
                 try self.writer.writeAll(" = ");
-                try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field.value.alias.name));
+                try self.renderEnumFieldName(name, field.value.alias.name);
                 try self.writer.writeAll(";");
-            }
-
-            try self.writer.writeAll("};\n");
-
-            if (mem.eql(u8, name, "VkResult")) {
-                try self.renderResultErrorSet(enumeration);
-            }
-        }
-
-        fn renderResultAsError(self: *Self, name: []const u8) !void {
-            const error_prefix = "VK_ERROR_";
-            if (!mem.startsWith(u8, name, error_prefix)) {
-                return error.NotErrorResult;
-            }
-
-            try self.writeIdentifierWithCase(.title, name[error_prefix.len ..]);
-        }
-
-        fn renderResultErrorSet(self: *Self, enumeration: reg.Enum) !void {
-            try self.writer.writeAll("pub const Error = error{\n");
-            const error_prefix = "VK_ERROR_";
-            for (enumeration.fields) |field| {
-                if (field.value != .int) {
-                    continue;
-                }
-
-                self.renderResultAsError(field.name) catch |err| switch (err) {
-                    error.NotErrorResult => continue,
-                    else => |narrowed| return narrowed
-                };
-
-                try self.writer.writeAll(",\n");
             }
 
             try self.writer.writeAll("};\n");
@@ -505,19 +541,20 @@ fn Renderer(comptime WriterType: type) type {
 
             for (flags_by_bitpos) |opt_flag_name, bitpos| {
                 if (opt_flag_name) |flag_name| {
-                    try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, flag_name));
+                    try self.renderEnumFieldName(name, flag_name);
                 } else {
-                    try self.writer.print("__reserved_bit_{}", .{bitpos});
+                    try self.writer.print("_reserved_bit_{}", .{bitpos});
                 }
 
                 try self.writer.writeAll(": bool ");
                     if (bitpos == 0) { // Force alignment to integer boundaries
-                        try self.writer.writeAll("align(@alignOf(u32)) ");
+                        try self.writer.writeAll("align(@alignOf(Flags)) ");
                     }
                     try self.writer.writeAll("= false, ");
             }
-
-            try self.writer.writeAll("};\n");
+            try self.writer.writeAll("pub usingnamespace FlagsMixin(");
+            try self.renderTypeName(name);
+            try self.writer.writeAll(");\n};\n");
         }
 
         fn renderBitmask(self: *Self, name: []const u8, bitmask: reg.Bitmask) !void {
@@ -529,7 +566,12 @@ fn Renderer(comptime WriterType: type) type {
                 try self.renderTypeName(name);
                 try self.writer.writeAll(
                     \\ = packed struct {
-                    \\__reserved_bits: u32 = 0,
+                    \\_reserved_bits: Flags = 0,
+                    \\pub usingnamespace FlagsMixin(
+                );
+                try self.renderTypeName(name);
+                try self.writer.writeAll(
+                    \\);
                     \\};
                     \\
                 );
@@ -598,7 +640,9 @@ fn Renderer(comptime WriterType: type) type {
                     continue;
                 }
 
-                try self.writer.print("const PFN_{} = ", .{decl.name});
+                try self.writer.writeAll("const ");
+                try self.writeIdentifierFmt("PFN_{}", .{decl.name});
+                try self.writer.writeAll(" = ");
                 try self.renderCommandPtr(decl.decl_type.command, false);
                 try self.writer.writeAll(";\n");
             }
@@ -643,7 +687,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("};}\n");
         }
 
-        fn inPointerAdjustedName(name: []const u8) []const u8 {
+        fn derefName(name: []const u8) []const u8 {
             var it = util.SegmentIterator.init(name);
             return if (mem.eql(u8, it.next().?, "p"))
                     name[1..]
@@ -651,7 +695,7 @@ fn Renderer(comptime WriterType: type) type {
                     name;
         }
 
-        fn renderWrapperPrototype(self: *Self, name: []const u8, command: reg.Command) !void {
+        fn renderWrapperPrototype(self: *Self, name: []const u8, command: reg.Command, returns: []const ReturnValue) !void {
             try self.writer.writeAll("pub fn ");
             try self.writeIdentifierWithCase(.camel, util.trimVkNamespace(name));
             try self.writer.writeAll("(self: Self, ");
@@ -660,11 +704,11 @@ fn Renderer(comptime WriterType: type) type {
                 switch (try self.classifyParam(param)) {
                     .in_pointer => {
                         // Remove one pointer level
-                        try self.writeIdentifierWithCase(.snake, inPointerAdjustedName(param.name));
+                        try self.writeIdentifierWithCase(.snake, derefName(param.name));
                         try self.writer.writeAll(": ");
                         try self.renderTypeInfo(param.param_type.pointer.child.*);
                     },
-                    .out_pointer => continue, // Return vaPlue
+                    .out_pointer => continue, // Return value
                     .bitflags, // Special stuff handled in renderWrapperCall
                     .buffer_len,
                     .mut_buffer_len,
@@ -679,10 +723,23 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll(") ");
+
+            if (command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult")) {
+                try self.renderErrorSet(command.error_codes);
+                try self.writer.writeByte('!');
+            }
+
+            if (returns.len == 1) {
+                try self.renderTypeInfo(returns[0].return_value_type);
+            } else if (returns.len > 1) {
+                try self.renderReturnStructName(name);
+            } else {
+                try self.writer.writeAll("void");
+            }
         }
 
-        fn renderWrapperCall(self: *Self, name: []const u8, command: reg.Command) !void {
-            try self.writer.writeAll("return self.");
+        fn renderWrapperCall(self: *Self, name: []const u8, command: reg.Command, returns: []const ReturnValue) !void {
+            try self.writer.writeAll("self.");
             try self.writeIdentifier(name);
             try self.writer.writeAll("(");
 
@@ -690,11 +747,14 @@ fn Renderer(comptime WriterType: type) type {
                 switch (try self.classifyParam(param)) {
                     .in_pointer => {
                         try self.writer.writeByte('&');
-                        try self.writeIdentifierWithCase(.snake, inPointerAdjustedName(param.name));
+                        try self.writeIdentifierWithCase(.snake, derefName(param.name));
                     },
                     .out_pointer => {
                         try self.writer.writeByte('&');
-                        try self.writeIdentifierWithCase(.snake, param.name);
+                        if (returns.len > 1) {
+                            try self.writer.writeAll("return_values.");
+                        }
+                        try self.writeIdentifierWithCase(.snake, derefName(param.name));
                     },
                     .bitflags => {
                         try self.writeIdentifierWithCase(.snake, param.name);
@@ -707,84 +767,181 @@ fn Renderer(comptime WriterType: type) type {
 
                 try self.writer.writeAll(", ");
             }
+            try self.writer.writeAll(")");
         }
 
-        fn extractReturns(self: *Self, command: reg.Command) !reg.Container {
-            var returns = std.ArrayList(reg.Container.Field).init(self.allocator);
+        fn extractReturns(self: *Self, command: reg.Command) ![]const ReturnValue {
+            var returns = std.ArrayList(ReturnValue).init(self.allocator);
 
-            // if (command.return_type.* == .name) {
-            //     const return_name = command.return_type.name;
-            //     if (!mem.eql(u8, return_name, "void") and !mem.eql(u8, command.return_type.name))
-            // }
+            if (command.return_type.* == .name) {
+                const return_name = command.return_type.name;
+                if (!mem.eql(u8, return_name, "void") and !mem.eql(u8, return_name, "VkResult")) {
+                    try returns.append(.{
+                        .name = "return_value",
+                        .return_value_type = command.return_type.*,
+                        .origin = .inner_return_value,
+                    });
+                }
+            }
 
-            if (command.success_codes.len > 0) {
+            if (command.success_codes.len > 1) {
                 if (command.return_type.* != .name or !mem.eql(u8, command.return_type.name, "VkResult")) {
                     return error.InvalidRegistry;
                 }
 
                 try returns.append(.{
                     .name = "result",
-                    .field_type = command.return_type.*,
-                    .bits = null,
-                    .is_buffer_len = false,
+                    .return_value_type = command.return_type.*,
+                    .origin = .inner_return_value,
                 });
+            } else if (command.success_codes.len == 1 and !mem.eql(u8, command.success_codes[0], "VK_SUCCESS")) {
+                return error.InvalidRegistry;
             }
 
             for (command.params) |param| {
                 if ((try self.classifyParam(param)) == .out_pointer) {
                     try returns.append(.{
-                        .name = param.name,
-                        .field_type = param.param_type,
-                        .bits = null,
-                        .is_buffer_len = param.is_buffer_len,
+                        .name = derefName(param.name),
+                        .return_value_type = param.param_type.pointer.child.*,
+                        .origin = .parameter,
                     });
                 }
             }
 
-            return reg.Container{
-                .fields = returns.toOwnedSlice(),
-                .is_union = false,
-            };
+            return returns.toOwnedSlice();
+        }
+
+        fn renderReturnStructName(self: *Self, command_name: []const u8) !void {
+            try self.writeIdentifierFmt("{}Result", .{util.trimVkNamespace(command_name)});
+        }
+
+        fn renderReturnStruct(self: *Self, command_name: []const u8, returns: []const ReturnValue) !void {
+            try self.writer.writeAll("const ");
+            try self.renderReturnStructName(command_name);
+            try self.writer.writeAll(" = struct {\n");
+            for (returns) |ret| {
+                try self.writeIdentifierWithCase(.snake, ret.name);
+                try self.writer.writeAll(": ");
+                try self.renderTypeInfo(ret.return_value_type);
+                try self.writer.writeAll(", ");
+
+            }
+            try self.writer.writeAll("};\n");
         }
 
         fn renderWrapper(self: *Self, name: []const u8, command: reg.Command) !void {
-            // const returns = try self.extractReturns(command);
-            // const return_struct_name = if (returns.fields.len > 1)
-            //         try std.fmt.allocPrint(self.allocator, "{}Result", .{name})
-            //     else
-            //         null;
-            // defer if (return_struct_name) |rsn| self.sfa.allocator.free(rsn);
+            const returns_vk_result = command.return_type.* == .name
+                and mem.eql(u8, command.return_type.name, "VkResult");
+            const returns_void = command.return_type.* == .name
+                and mem.eql(u8, command.return_type.name, "void");
 
+            const returns = try self.extractReturns(command);
 
-            // if (self.returns.items.len > 1) {
+            if (returns.len > 1) {
+                try self.renderReturnStruct(name, returns);
+            }
 
-            // }
+            try self.renderWrapperPrototype(name, command, returns);
 
-            try self.renderWrapperPrototype(name, command);
+            if (returns.len == 1 and returns[0].origin == .inner_return_value) {
+                try self.writer.writeAll("{\n\n");
 
-            // if (command.error_codes.len != 0) {
-            //     try self.renderErrorSet(command.error_codes);
-            //     try self.writer.writeByte('!');
-            // }
+                if (returns_vk_result) {
+                    try self.writer.writeAll("const result = ");
+                    try self.renderWrapperCall(name, command, returns);
+                    try self.writer.writeAll(";\n");
 
-            try self.renderTypeInfo(command.return_type.*);
+                    try self.renderErrorSwitch("result", command);
+                    try self.writer.writeAll("return result;\n");
+                } else {
+                    try self.writer.writeAll("return ");
+                    try self.renderWrapperCall(name, command, returns);
+                    try self.writer.writeAll(";\n");
+                }
+
+                try self.writer.writeAll("\n}\n");
+                return;
+            }
+
             try self.writer.writeAll("{\n");
-            try self.renderWrapperCall(name, command);
-            try self.writer.writeAll(");\n}\n");
+            if (returns.len == 1) {
+                try self.writer.writeAll("var ");
+                try self.writeIdentifierWithCase(.snake, returns[0].name);
+                try self.writer.writeAll(" = undefined;\n");
+            } else if (returns.len > 1) {
+                try self.writer.writeAll("var return_values: ");
+                try self.renderReturnStructName(name);
+                try self.writer.writeAll(" = undefined;\n");
+            }
+
+            if (returns_vk_result) {
+                try self.writer.writeAll("const result = ");
+                try self.renderWrapperCall(name, command, returns);
+                try self.writer.writeAll(";\n");
+
+                try self.renderErrorSwitch("result", command);
+                if (command.success_codes.len > 1) {
+                    try self.writer.writeAll("return_values.result = result;\n");
+                }
+            } else {
+                if (!returns_void) {
+                    try self.writer.writeAll("return_values.return_value = ");
+                }
+                try self.renderWrapperCall(name, command, returns);
+                try self.writer.writeAll(";\n");
+            }
+
+            if (returns.len == 1) {
+                try self.writer.writeAll("return ");
+                try self.writeIdentifierWithCase(.snake, returns[0].name);
+                try self.writer.writeAll(";\n");
+            } else if (returns.len > 1) {
+                try self.writer.writeAll("return return_values;\n");
+            }
+
+            try self.writer.writeAll("}\n");
+        }
+
+        fn renderErrorSwitch(self: *Self, result_var: []const u8, command: reg.Command) !void {
+            try self.writer.writeAll("switch (");
+            try self.writeIdentifier(result_var);
+            try self.writer.writeAll(") {\n");
+
+            for (command.success_codes) |success| {
+                try self.writer.writeByte('.');
+                try self.renderEnumFieldName("VkResult", success);
+                try self.writer.writeAll(" => {},");
+            }
+
+            for (command.error_codes) |err| {
+                try self.writer.writeByte('.');
+                try self.renderEnumFieldName("VkResult", err);
+                try self.writer.writeAll(" => return error.");
+                try self.renderResultAsErrorName(err);
+                try self.writer.writeAll(", ");
+            }
+
+            try self.writer.writeAll("else => return error.Unknown,}\n");
         }
 
         fn renderErrorSet(self: *Self, errors: []const []const u8) !void {
             try self.writer.writeAll("error{");
             for (errors) |name| {
-                self.renderResultAsError(name) catch |err| switch (err) {
-                    // Apparently some commands return a non-error code as error code
-                    error.NotErrorResult => continue,
-                    else => |narrowed| return narrowed
-                };
-
+                try self.renderResultAsErrorName(name);
                 try self.writer.writeAll(", ");
             }
-            try self.writer.writeAll("}");
+            try self.writer.writeAll("Unkown, }");
+        }
+
+        fn renderResultAsErrorName(self: *Self, name: []const u8) !void {
+            const error_prefix = "VK_ERROR_";
+            if (mem.startsWith(u8, name, error_prefix)) {
+                try self.writeIdentifierWithCase(.title, name[error_prefix.len ..]);
+            } else {
+                // Apparently some commands (VkAcquireProfilingLockInfoKHR) return
+                // success codes as error...
+                try self.writeIdentifierWithCase(.title, util.trimVkNamespace(name));
+            }
         }
     };
 }
