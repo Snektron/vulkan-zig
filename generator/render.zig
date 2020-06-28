@@ -487,6 +487,10 @@ fn Renderer(comptime WriterType: type) type {
             }
         }
 
+        fn renderEnumFieldName(self: *Self, name: []const u8, field_name: []const u8) !void {
+            try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field_name));
+        }
+
         fn renderEnumeration(self: *Self, name: []const u8, enumeration: reg.Enum) !void {
             if (enumeration.is_bitmask) {
                 try self.renderBitmaskBits(name, enumeration);
