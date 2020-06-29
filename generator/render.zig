@@ -254,6 +254,7 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.renderCommandPtrs();
+            try self.renderExtensionInfo();
             try self.renderWrappers();
         }
 
@@ -654,29 +655,24 @@ fn Renderer(comptime WriterType: type) type {
                 try self.renderCommandPtr(decl.decl_type.command, false);
                 try self.writer.writeAll(";\n");
             }
+        }
 
-            // try self.writer.writeAll(
-            //     \\const commands = struct {
-            //     \\    const CommandInfo = struct {
-            //     \\        Pfn: type,
-            //     \\        link_name: [:0]const u8,
-            //     \\    };
-            //     \\
-            // );
-            // for (self.registry.decls) |decl| {
-            //     if (decl.decl_type != .command) {
-            //         continue;
-            //     }
-
-            //     try self.writer.writeAll("const ");
-            //     try self.renderTypeName(decl.name);
-            //     try self.writer.print(
-            //         " = CommandInfo{{ .Pfn = PFN_{}, .link_name = \"{}\" }};\n",
-            //         .{decl.name, decl.name}
-            //     );
-            // }
-
-            // try self.writer.writeAll("};\n");
+        fn renderExtensionInfo(self: *Self) !void {
+            try self.writer.writeAll(
+                \\pub const extension_info = struct {
+                \\    const Info = struct {
+                \\        name: []const u8,
+                \\        version: u32,
+                \\    };
+            );
+            for (self.registry.extensions) |ext| {
+                try self.writer.writeAll("pub const ");
+                try self.writeIdentifierWithCase(.snake, util.trimVkNamespace(ext.name));
+                try self.writer.writeAll("= Info {\n");
+                try self.writer.print(".name = \"{}\", .version = {},", .{ext.name, ext.version});
+                try self.writer.writeAll("};\n");
+            }
+            try self.writer.writeAll("};\n");
         }
 
         fn renderWrappers(self: *Self) !void {
