@@ -732,12 +732,6 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !registry.Exte
     var it = extension.findChildrenByTag("require");
     while (it.next()) |require| {
         requires[i] = try parseRequire(allocator, require, number);
-
-        // If the required feature level has been set explicitly, keep it.
-        if (requires[i].required_feature_level == null) {
-            requires[i].required_feature_level = requires_core;
-        }
-
         i += 1;
     }
 
@@ -749,6 +743,7 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !registry.Exte
         .depends = depends,
         .promoted_to = promoted_to,
         .platform = platform,
+        .required_feature_level = requires_core,
         .requires = allocator.shrink(requires, i)
     };
 }

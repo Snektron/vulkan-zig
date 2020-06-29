@@ -281,8 +281,12 @@ fn Renderer(comptime WriterType: type) type {
                 peeked = null;
 
                 switch (tok.id) {
-                    .lparen, .rparen, .tilde, .minus, .id => {
+                    .lparen, .rparen, .tilde, .minus => {
                         try self.writer.writeAll(tok.text);
+                        continue;
+                    },
+                    .id => {
+                        try self.writeIdentifier(util.trimVkNamespace(api_constant.value.alias));
                         continue;
                     },
                     .int => {},

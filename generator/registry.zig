@@ -162,6 +162,7 @@ pub const Extension = struct {
     depends: []const []const u8, // Other extensions
     promoted_to: Promotion,
     platform: ?[]const u8,
+    required_feature_level: ?FeatureLevel,
     requires: []Require,
 };
 

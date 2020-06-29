@@ -120,24 +120,12 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFileZ(std.os.argv[1], .{});
     defer file.close();
 
-    const size = try file.seekableStream().getEndPos();
-    const source = try allocator.alloc(u8, size);
-    defer allocator.free(source);
-
-    _ = try file.inStream().read(source);
-
-    const spec = try xml.parse(allocator, source);
-    defer spec.deinit();
-
-    var gen = try vkgen.Generator.init(allocator, spec.root);
-    defer gen.deinit();
-
-    try gen.resolveDeclarations();
-
     const stdout = std.io.getStdOut().writer();
-    try gen.render(stdout);
+    try vkgen.generate(&prof_alloc.allocator, file.reader(), stdout, .{
+        .feature_level = .{.major = 1, .minor = 0},
+        .extensions = .all,
+    });
 
-    std.debug.warn("Total declarations: {}\n", .{gen.registry.decls.len});
     std.debug.warn("Total memory usage: {} KiB\n", .{@divTrunc(prof_alloc.max_usage, 1024)});
 }
 
