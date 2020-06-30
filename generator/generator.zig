@@ -175,6 +175,7 @@ pub const Generator = struct {
         for (self.registry.extensions) |ext| {
             if (ext.promoted_to == .none) {
                 self.registry.extensions[write_index] = ext;
+                write_index += 1;
             }
         }
         self.registry.extensions.len = write_index;
