@@ -204,7 +204,6 @@ pub fn generate(allocator: *Allocator, xml_reader: var, writer: var) !void {
     defer gen.deinit();
 
     gen.removePromotedExtensions();
-
     try gen.resolveDeclarations();
     try gen.render(writer);
 }

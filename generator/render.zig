@@ -25,31 +25,37 @@ const preamble =
     \\        pub fn toInt(self: FlagsType) IntType {
     \\            return @bitCast(IntType, self);
     \\        }
-    \\
     \\        pub fn fromInt(flags: IntType) FlagsType {
     \\            return @bitCast(FlagsType, flags);
     \\        }
-    \\
     \\        pub fn merge(lhs: FlagsType, rhs: FlagsType) FlagsType {
     \\            return fromInt(toInt(lhs) | toInt(rhs));
     \\        }
-    \\
     \\        pub fn intersect(lhs: FlagsType, rhs: FlagsType) FlagsType {
     \\            return fromInt(toInt(lhs) & toInt(rhs));
     \\        }
-    \\
     \\        pub fn complement(self: FlagsType) FlagsType {
     \\            return fromInt(~toInt(lhs));
     \\        }
-    \\
     \\        pub fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {
     \\            return fromInt(toInt(lhs) & toInt(rhs.complement()));
     \\        }
-    \\
     \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) FlagsType {
     \\            return toInt(merge(lhs, rhs)) == toInt(rhs);
     \\        }
     \\    };
+    \\}
+    \\pub fn makeVersion(major: u10, minor: u10, patch: u12) u32 {
+    \\    return (@as(u32, major) << 22) | (@as(u32, minor) << 12) | patch;
+    \\}
+    \\pub fn versionMajor(version: u32) u10 {
+    \\    return @truncate(u10, version >> 22);
+    \\}
+    \\pub fn versionMinor(version: u32) u10 {
+    \\    return @truncate(u10, version >> 12);
+    \\}
+    \\pub fn versionPatch(version: u32) u12 {
+    \\    return @truncate(u12, version);
     \\}
     \\
     ;
@@ -260,16 +266,27 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderApiConstant(self: *Self, api_constant: reg.ApiConstant) !void {
             try self.writer.writeAll("const ");
-            try self.writeIdentifier(util.trimVkNamespace(api_constant.name));
+            try self.renderName(api_constant.name);
             try self.writer.writeAll(" = ");
 
-            if (api_constant.value == .alias) {
-                try self.writeIdentifier(util.trimVkNamespace(api_constant.value.alias));
-                try self.writer.writeAll(";\n");
-                return;
+            switch (api_constant.value) {
+                .expr => |expr| try self.renderApiConstantExpr(expr),
+                .version => |version| {
+                    try self.writer.writeAll("makeVersion(");
+                    for (version) |part, i| {
+                        if (i != 0) {
+                            try self.writer.writeAll(", ");
+                        }
+                        try self.renderApiConstantExpr(part);
+                    }
+                    try self.writer.writeAll(")");
+                },
             }
 
-            const expr = api_constant.value.expr;
+            try self.writer.writeAll(";\n");
+        }
+
+        fn renderApiConstantExpr(self: *Self, expr: []const u8) !void {
             const adjusted_expr = if (expr.len > 2 and expr[0] == '(' and expr[expr.len - 1] == ')')
                     expr[1 .. expr.len - 1]
                 else
@@ -287,7 +304,7 @@ fn Renderer(comptime WriterType: type) type {
                         continue;
                     },
                     .id => {
-                        try self.writeIdentifier(util.trimVkNamespace(api_constant.value.alias));
+                        try self.renderName(tok.text);
                         continue;
                     },
                     .int => {},
@@ -324,20 +341,18 @@ fn Renderer(comptime WriterType: type) type {
                     },
                 }
             }
-
-            try self.writer.writeAll(";\n");
         }
 
         fn renderTypeInfo(self: *Self, type_info: reg.TypeInfo) RenderTypeInfoError!void {
             switch (type_info) {
-                .name => |name| try self.renderTypeName(name),
+                .name => |name| try self.renderName(name),
                 .command_ptr => |command_ptr| try self.renderCommandPtr(command_ptr, true),
                 .pointer => |pointer| try self.renderPointer(pointer),
                 .array => |array| try self.renderArray(array),
             }
         }
 
-        fn renderTypeName(self: *Self, name: []const u8) !void {
+        fn renderName(self: *Self, name: []const u8) !void {
             if (builtin_types.get(name)) |zig_name| {
                 try self.writer.writeAll(zig_name);
                 return;
@@ -358,6 +373,10 @@ fn Renderer(comptime WriterType: type) type {
             } else if (mem.startsWith(u8, name, "PFN_vk")) {
                 // Function pointer type, render using same name for now
                 try self.writeIdentifier(name);
+                return;
+            } else if (mem.startsWith(u8, name, "VK_")) {
+                // Constants
+                try self.writeIdentifier(name[3..]);
                 return;
             }
 
@@ -423,7 +442,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeByte('[');
             switch (array.size) {
                 .int => |size| try self.writer.print("{}", .{size}),
-                .alias => |alias| try self.writeIdentifier(util.trimVkNamespace(alias)),
+                .alias => |alias| try self.renderName(alias),
             }
             try self.writer.writeByte(']');
             try self.renderTypeInfo(array.child.*);
@@ -445,7 +464,7 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderContainer(self: *Self, name: []const u8, container: reg.Container) !void {
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(" = ");
 
             for (container.fields) |field| {
@@ -503,7 +522,7 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(" = extern enum {");
 
             for (enumeration.fields) |field| {
@@ -538,7 +557,7 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderBitmaskBits(self: *Self, name: []const u8, bits: reg.Enum) !void {
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(" = packed struct {");
 
             if (bits.fields.len == 0) {
@@ -566,7 +585,7 @@ fn Renderer(comptime WriterType: type) type {
                 }
             }
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(");\n};\n");
         }
 
@@ -576,13 +595,13 @@ fn Renderer(comptime WriterType: type) type {
                 // output flags with no associated bits type.
 
                 try self.writer.writeAll("const ");
-                try self.renderTypeName(name);
+                try self.renderName(name);
                 try self.writer.writeAll(
                     \\ = packed struct {
                     \\_reserved_bits: Flags = 0,
                     \\pub usingnamespace FlagsMixin(
                 );
-                try self.renderTypeName(name);
+                try self.renderName(name);
                 try self.writer.writeAll(
                     \\);
                     \\};
@@ -595,7 +614,7 @@ fn Renderer(comptime WriterType: type) type {
             const backing_type: []const u8 = if (handle.is_dispatchable) "usize" else "u64";
 
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.print(" = extern enum({}) {{null_handle = 0, _}};\n", .{backing_type});
         }
 
@@ -608,15 +627,15 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(" = ");
-            try self.renderTypeName(alias.name);
+            try self.renderName(alias.name);
             try self.writer.writeAll(";\n");
         }
 
         fn renderOpaque(self: *Self, name: []const u8) !void {
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(" = @Type(.Opaque);\n");
         }
 
@@ -641,7 +660,7 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderTypedef(self: *Self, name: []const u8, type_info: reg.TypeInfo) !void {
             try self.writer.writeAll("const ");
-            try self.renderTypeName(name);
+            try self.renderName(name);
             try self.writer.writeAll(" = ");
             try self.renderTypeInfo(type_info);
             try self.writer.writeAll(";\n");
@@ -875,6 +894,8 @@ fn Renderer(comptime WriterType: type) type {
             if (returns.len == 1) {
                 try self.writer.writeAll("var ");
                 try self.writeIdentifierWithCase(.snake, returns[0].name);
+                try self.writer.writeAll(": ");
+                try self.renderTypeInfo(returns[0].return_value_type);
                 try self.writer.writeAll(" = undefined;\n");
             } else if (returns.len > 1) {
                 try self.writer.writeAll("var return_values: ");

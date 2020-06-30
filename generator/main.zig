@@ -110,7 +110,7 @@ const ProfilingAllocator = struct {
 
 pub fn main() !void {
     if (std.os.argv.len <= 1) {
-        std.debug.warn("Usage: vulkan-zig-gen <path-to-vk.xml>\n", .{});
+        std.debug.print("Usage: vulkan-zig-gen <path-to-vk.xml>\n", .{});
         return;
     }
 
@@ -123,7 +123,7 @@ pub fn main() !void {
     const stdout = std.io.getStdOut().writer();
     try vkgen.generate(&prof_alloc.allocator, file.reader(), stdout);
 
-    std.debug.warn("Total memory usage: {} KiB\n", .{@divTrunc(prof_alloc.max_usage, 1024)});
+    std.debug.print("Total memory usage: {} KiB\n", .{@divTrunc(prof_alloc.max_usage, 1024)});
 }
 
 test "main" {

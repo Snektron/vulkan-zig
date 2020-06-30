@@ -24,6 +24,7 @@ pub const Token = struct {
         minus,
         tilde,
         dot,
+        hash,
         lparen,
         rparen,
         lbracket,
@@ -38,6 +39,7 @@ pub const Token = struct {
 pub const CTokenizer = struct {
     source: []const u8,
     offset: usize = 0,
+    in_comment: bool = false,
 
     fn peek(self: CTokenizer) ?u8 {
         return if (self.offset < self.source.len) self.source[self.offset] else null;
@@ -88,7 +90,6 @@ pub const CTokenizer = struct {
         const start = self.offset;
         _ = self.consumeNoEof();
 
-        // TODO: 123ABC is now legal
         while (true) {
             const c = self.peek() orelse break;
             switch (c) {
@@ -103,15 +104,29 @@ pub const CTokenizer = struct {
         };
     }
 
-    pub fn next(self: *CTokenizer) !?Token {
+    fn skipws(self: *CTokenizer) void {
         while (true) {
-            switch (self.peek() orelse return null) {
+            switch (self.peek() orelse break) {
                 ' ', '\t', '\n', '\r' => _ = self.consumeNoEof(),
                 else => break,
             }
         }
+    }
 
-        const c = self.peek().?;
+    pub fn next(self: *CTokenizer) !?Token {
+        self.skipws();
+        if (mem.startsWith(u8, self.source[self.offset ..], "//") or self.in_comment) {
+            const end = mem.indexOfScalarPos(u8, self.source, self.offset, '\n') orelse {
+                self.offset = self.source.len;
+                self.in_comment = true;
+                return null;
+            };
+            self.in_comment = false;
+            self.offset = end + 1;
+        }
+        self.skipws();
+
+        const c = self.peek() orelse return null;
         var id: Token.Id = undefined;
         switch (c) {
             'A'...'Z', 'a'...'z', '_' => return self.keyword(),
@@ -123,6 +138,7 @@ pub const CTokenizer = struct {
             '-' => id = .minus,
             '~' => id = .tilde,
             '.' => id = .dot,
+            '#' => id = .hash,
             '[' => id = .lbracket,
             ']' => id = .rbracket,
             '(' => id = .lparen,
@@ -176,20 +192,23 @@ pub const XmlCTokenizer = struct {
             return token;
         }
 
+        var in_comment: bool = false;
+
         while (true) {
             if (self.ctok) |*ctok| {
                 if (try ctok.next()) |tok| {
                     return tok;
                 }
+                in_comment = ctok.in_comment;
             }
 
             self.ctok = null;
 
             if (self.it.next()) |child| {
                 switch (child.*) {
-                    .CharData => |cdata| self.ctok = CTokenizer{.source = cdata},
-                    .Comment => {},
-                    .Element => |elem| if (try elemToToken(elem)) |tok| return tok,
+                    .CharData => |cdata| self.ctok = CTokenizer{.source = cdata, .in_comment = in_comment},
+                    .Comment => {}, // xml comment
+                    .Element => |elem| if (!in_comment) if (try elemToToken(elem)) |tok| return tok,
                 }
             } else {
                 return null;
@@ -198,7 +217,7 @@ pub const XmlCTokenizer = struct {
     }
 
     fn nextNoEof(self: *XmlCTokenizer) !Token {
-        return (try self.next()) orelse return error.InvalidSyntax;
+        return (try self.next()) orelse return error.UnexpectedEof;
     }
 
     fn peek(self: *XmlCTokenizer) !?Token {
@@ -211,7 +230,7 @@ pub const XmlCTokenizer = struct {
     }
 
     fn peekNoEof(self: *XmlCTokenizer) !Token {
-        return (try self.peek()) orelse return error.InvalidSyntax;
+        return (try self.peek()) orelse return error.UnexpectedEof;
     }
 
     fn expect(self: *XmlCTokenizer, id: Token.Id) !Token {
@@ -491,6 +510,36 @@ fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
     return size;
 }
 
+pub fn parseVersion(xctok: *XmlCTokenizer) ![3][]const u8 {
+    _ = try xctok.expect(.hash);
+    const define = try xctok.expect(.id);
+    if (!mem.eql(u8, define.text, "define")) {
+        return error.InvalidVersion;
+    }
+
+    const name = try xctok.expect(.name);
+    const vk_make_version = try xctok.expect(.type_name);
+    if (!mem.eql(u8, vk_make_version.text, "VK_MAKE_VERSION")) {
+        return error.NotVersion;
+    }
+
+    _ = try xctok.expect(.lparen);
+    var version: [3][]const u8 = undefined;
+    for (version) |*part, i| {
+        if (i != 0) {
+            _ = try xctok.expect(.comma);
+        }
+
+        const tok = try xctok.nextNoEof();
+        switch (tok.id) {
+            .id, .int => part.* = tok.text,
+            else => return error.UnexpectedToken,
+        }
+    }
+    _ = try xctok.expect(.rparen);
+    return version;
+}
+
 fn testTokenizer(tokenizer: var, expected_tokens: []const Token) void {
     for (expected_tokens) |expected| {
         const tok = (tokenizer.next() catch unreachable).?;
@@ -503,7 +552,7 @@ fn testTokenizer(tokenizer: var, expected_tokens: []const Token) void {
 
 test "CTokenizer" {
     var ctok = CTokenizer {
-        .source = "typedef ([const)]** VKAPI_PTR 123,;aaaa"
+        .source = \\typedef ([const)]** VKAPI_PTR 123,;aaaa
     };
 
     testTokenizer(
@@ -529,7 +578,9 @@ test "CTokenizer" {
 test "XmlCTokenizer" {
     const document = try xml.parse(
         testing.allocator,
-        "<root>typedef void (VKAPI_PTR *<name>PFN_vkVoidFunction</name>)(void);</root>"
+        \\<root>// comment <name>commented name</name> <type>commented type</type> trailing
+        \\    typedef void (VKAPI_PTR *<name>PFN_vkVoidFunction</name>)(void);
+        \\</root>
     );
     defer document.deinit();
 
@@ -556,7 +607,11 @@ test "XmlCTokenizer" {
 test "parseTypedef" {
     const document = try xml.parse(
         testing.allocator,
-        "<root>typedef const struct <type>Python</type>* pythons[4];</root>"
+        \\<root> // comment <name>commented name</name> trailing
+        \\    typedef const struct <type>Python</type>* pythons[4];
+        \\ // more comments
+        \\</root>
+        \\
     );
     defer document.deinit();
 
@@ -567,12 +622,9 @@ test "parseTypedef" {
     const decl = try parseTypedef(&arena.allocator, &xctok);
 
     testing.expectEqualSlices(u8, "pythons", decl.name);
-    testing.expectEqual(TypeInfo.array, decl.decl_type);
-    testing.expectEqual(ArraySize{.int = 4}, decl.decl_type.array.size);
-    const array_child = decl.decl_type.array.child.*;
-    testing.expectEqual(TypeInfo.pointer, array_child);
-    const ptr = array_child.pointer;
+    const array = decl.decl_type.typedef.array;
+    testing.expectEqual(ArraySize{.int = 4}, array.size);
+    const ptr = array.child.pointer;
     testing.expectEqual(true, ptr.is_const);
-    testing.expectEqual(TypeInfo.alias, ptr.child.*);
-    testing.expectEqualSlices(u8, "Python", ptr.child.alias);
+    testing.expectEqualSlices(u8, "Python", ptr.child.name);
 }

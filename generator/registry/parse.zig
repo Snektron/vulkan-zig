@@ -462,27 +462,72 @@ fn parseApiConstants(allocator: *Allocator, root: *xml.Element) ![]registry.ApiC
         return error.InvalidRegistry;
     };
 
-    const constants = try allocator.alloc(registry.ApiConstant, enums.children.count());
+    var types = root.findChildByTag("types") orelse return error.InvalidRegistry;
+    const n_defines = blk: {
+        var n_defines: usize = 0;
+        var it = types.findChildrenByTag("type");
+        while (it.next()) |ty| {
+            if (ty.getAttribute("category")) |category| {
+                if (mem.eql(u8, category, "define")) {
+                    n_defines += 1;
+                }
+            }
+        }
+        break :blk n_defines;
+    };
+
+    const constants = try allocator.alloc(registry.ApiConstant, enums.children.count() + n_defines);
 
     var i: usize = 0;
     var it = enums.findChildrenByTag("enum");
     while (it.next()) |constant| {
-        const value = if (constant.getAttribute("value")) |expr|
-                registry.ApiConstant.Value{.expr = expr}
+        const expr = if (constant.getAttribute("value")) |expr|
+                expr
             else if (constant.getAttribute("alias")) |alias|
-                registry.ApiConstant.Value{.alias = alias}
+                alias
             else
                 return error.InvalidRegistry;
 
         constants[i] = .{
             .name = constant.getAttribute("name") orelse return error.InvalidRegistry,
-            .value = value,
+            .value = .{.expr = expr},
         };
 
         i += 1;
     }
 
+    i += try parseDefines(types, constants[i..]);
     return allocator.shrink(constants, i);
+}
+
+fn parseDefines(types: *xml.Element, out: []registry.ApiConstant) !usize {
+    var i: usize = 0;
+    var it = types.findChildrenByTag("type");
+    while (it.next()) |ty| {
+        const category = ty.getAttribute("category") orelse continue;
+        if (!mem.eql(u8, category, "define")) {
+            continue;
+        }
+
+        const name = ty.getCharData("name") orelse continue;
+        if (mem.eql(u8, name, "VK_HEADER_VERSION")) {
+            out[i] = .{
+                .name = name,
+                .value = .{.expr = mem.trim(u8, ty.children.at(2).CharData, " ")},
+            };
+        } else {
+            var xctok = cparse.XmlCTokenizer.init(ty);
+            out[i] = .{
+                .name = name,
+                .value = .{
+                    .version = cparse.parseVersion(&xctok) catch continue
+                },
+            };
+        }
+        i += 1;
+    }
+
+    return i;
 }
 
 fn parseTags(allocator: *Allocator, root: *xml.Element) ![]registry.Tag {
