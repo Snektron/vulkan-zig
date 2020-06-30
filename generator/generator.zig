@@ -170,108 +170,11 @@ pub const Generator = struct {
         self.reg_arena.deinit();
     }
 
-    fn filterFeatureLevel(self: *Generator, feature_level: FeatureLevel) void {
-        var write_index: usize = 0;
-        for (self.registry.features) |feature| {
-            if (cmpFeatureLevels(feature.level, feature_level).compare(.lte)) {
-                self.registry.features[write_index] = feature;
-                write_index += 1;
-            }
-        }
-        self.registry.features.len = write_index;
-    }
-
-    fn filterExtensions(self: *Generator, feature_level: FeatureLevel, filter: ExtensionFilter) !void {
-        switch (filter) {
-            .all => {
-                var write_index: usize = 0;
-                for (self.registry.extensions) |ext| {
-                    const keep = if (ext.required_feature_level) |required_level|
-                            cmpFeatureLevels(required_level, feature_level).compare(.lte)
-                        else
-                            true;
-                    if (keep) {
-                        self.registry.extensions[write_index] = ext;
-                        write_index += 1;
-                    }
-                }
-                self.registry.extensions.len = write_index;
-            },
-            .none => self.registry.extensions.len = 0,
-            .include => |include| {
-                try self.filterExtensionsInclude(include);
-            }
-        }
-
-        for (self.registry.extensions) |*ext| {
-            if (ext.required_feature_level) |required_level| {
-                if (cmpFeatureLevels(required_level, feature_level).compare(.gt)) {
-                    return error.FeatureLevelTooLow;
-                }
-            }
-
-            var write_index: usize = 0;
-            for (ext.requires) |req| {
-                const keep = if (req.required_feature_level) |required_level|
-                        cmpFeatureLevels(required_level, feature_level).compare(.lte)
-                    else
-                        true;
-
-                if (keep) {
-                    ext.requires[write_index] = req;
-                    write_index += 1;
-                }
-            }
-
-            ext.requires.len = write_index;
-        }
-    }
-
-    fn filterExtensionsInclude(self: *Generator, include: []const []const u8) !void {
-        if (include.len == 0) {
-            return;
-        }
-
-        const Entry = struct {
-            ext: *const reg.Extension,
-            seen: bool,
-        };
-
-        var extensions = std.StringHashMap(Entry).init(self.gpa);
-        defer extensions.deinit();
-
-        try extensions.ensureCapacity(self.registry.extensions.len);
-        for (self.registry.extensions) |*ext| {
-            _ = try extensions.put(ext.name, .{.ext = ext, .seen = false});
-        }
-
-        var queue = std.fifo.LinearFifo(*const reg.Extension, .Dynamic).init(self.gpa);
-        defer queue.deinit();
-
-        for (include) |ext_name| {
-            const kv = extensions.get(ext_name) orelse return error.MissingExtension;
-            if (!kv.value.seen) {
-                kv.value.seen = true;
-                try queue.writeItem(kv.value.ext);
-            }
-        }
-
-        while (queue.readItem()) |ext| {
-            for (ext.depends) |dep| {
-                const kv = extensions.get(dep) orelse return error.MissingExtension;
-                if (!kv.value.seen) {
-                    kv.value.seen = true;
-                    try queue.writeItem(kv.value.ext);
-                }
-            }
-        }
-
+    fn removePromotedExtensions(self: *Generator) void {
         var write_index: usize = 0;
         for (self.registry.extensions) |ext| {
-            const kv = extensions.getValue(ext.name).?;
-            if (kv.seen) {
+            if (ext.promoted_to == .none) {
                 self.registry.extensions[write_index] = ext;
-                write_index += 1;
             }
         }
         self.registry.extensions.len = write_index;
@@ -289,21 +192,7 @@ pub const Generator = struct {
     }
 };
 
-pub const ExtensionFilter = union(enum) {
-    /// All extensions are included, according to Options.feature_level
-    all,
-    /// No extensions are included
-    none,
-    /// Exactly these extensions are included, along with their dependencies
-    include: []const []const u8,
-};
-
-pub const Options = struct {
-    feature_level: FeatureLevel,
-    extensions: ExtensionFilter,
-};
-
-pub fn generate(allocator: *Allocator, xml_reader: var, writer: var, opts: Options) !void {
+pub fn generate(allocator: *Allocator, xml_reader: var, writer: var) !void {
     const source = try xml_reader.readAllAlloc(allocator, std.math.maxInt(usize));
     defer allocator.free(source);
 
@@ -313,8 +202,7 @@ pub fn generate(allocator: *Allocator, xml_reader: var, writer: var, opts: Optio
     var gen = try Generator.init(allocator, spec.root);
     defer gen.deinit();
 
-    gen.filterFeatureLevel(opts.feature_level);
-    try gen.filterExtensions(opts.feature_level, opts.extensions);
+    gen.removePromotedExtensions();
 
     try gen.resolveDeclarations();
     try gen.render(writer);

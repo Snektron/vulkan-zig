@@ -121,10 +121,7 @@ pub fn main() !void {
     defer file.close();
 
     const stdout = std.io.getStdOut().writer();
-    try vkgen.generate(&prof_alloc.allocator, file.reader(), stdout, .{
-        .feature_level = .{.major = 1, .minor = 0},
-        .extensions = .all,
-    });
+    try vkgen.generate(&prof_alloc.allocator, file.reader(), stdout);
 
     std.debug.warn("Total memory usage: {} KiB\n", .{@divTrunc(prof_alloc.max_usage, 1024)});
 }
