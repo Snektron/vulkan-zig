@@ -140,8 +140,7 @@ const DeclarationResolver = struct {
         while (read_index < self.registry.decls.len) {
             const decl = self.registry.decls[read_index];
             const is_required = self.declarations.contains(decl.name);
-            const is_empty_enum = decl.decl_type == .enumeration and decl.decl_type.enumeration.fields.len == 0;
-            if (decl.decl_type == .foreign or (is_required and !is_empty_enum)) {
+            if (decl.decl_type == .foreign or is_required) {
                 self.registry.decls[write_index] = decl;
                 write_index += 1;
             }

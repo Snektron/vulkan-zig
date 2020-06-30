@@ -541,25 +541,29 @@ fn Renderer(comptime WriterType: type) type {
             try self.renderTypeName(name);
             try self.writer.writeAll(" = packed struct {");
 
-            var flags_by_bitpos = [_]?[]const u8{null} ** 32;
-            for (bits.fields) |field| {
-                if (field.value == .bitpos) {
-                    flags_by_bitpos[field.value.bitpos] = field.name;
-                }
-            }
-
-            for (flags_by_bitpos) |opt_flag_name, bitpos| {
-                if (opt_flag_name) |flag_name| {
-                    try self.renderEnumFieldName(name, flag_name);
-                } else {
-                    try self.writer.print("_reserved_bit_{}", .{bitpos});
-                }
-
-                try self.writer.writeAll(": bool ");
-                    if (bitpos == 0) { // Force alignment to integer boundaries
-                        try self.writer.writeAll("align(@alignOf(Flags)) ");
+            if (bits.fields.len == 0) {
+                try self.writer.writeAll("_reserved_bits: Flags = 0,");
+            } else {
+                var flags_by_bitpos = [_]?[]const u8{null} ** 32;
+                for (bits.fields) |field| {
+                    if (field.value == .bitpos) {
+                        flags_by_bitpos[field.value.bitpos] = field.name;
                     }
-                    try self.writer.writeAll("= false, ");
+                }
+
+                for (flags_by_bitpos) |opt_flag_name, bitpos| {
+                    if (opt_flag_name) |flag_name| {
+                        try self.renderEnumFieldName(name, flag_name);
+                    } else {
+                        try self.writer.print("_reserved_bit_{}", .{bitpos});
+                    }
+
+                    try self.writer.writeAll(": bool ");
+                        if (bitpos == 0) { // Force alignment to integer boundaries
+                            try self.writer.writeAll("align(@alignOf(Flags)) ");
+                        }
+                        try self.writer.writeAll("= false, ");
+                }
             }
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
             try self.renderTypeName(name);
