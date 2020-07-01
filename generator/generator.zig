@@ -193,11 +193,8 @@ pub const Generator = struct {
     }
 };
 
-pub fn generate(allocator: *Allocator, xml_reader: var, writer: var) !void {
-    const source = try xml_reader.readAllAlloc(allocator, std.math.maxInt(usize));
-    defer allocator.free(source);
-
-    const spec = try xml.parse(allocator, source);
+pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: var) !void {
+    const spec = try xml.parse(allocator, spec_xml);
     defer spec.deinit();
 
     var gen = try Generator.init(allocator, spec.root);
@@ -206,4 +203,9 @@ pub fn generate(allocator: *Allocator, xml_reader: var, writer: var) !void {
     gen.removePromotedExtensions();
     try gen.resolveDeclarations();
     try gen.render(writer);
+}
+
+test "main" {
+    _ = @import("xml.zig");
+    _ = @import("registry/c-parse.zig");
 }

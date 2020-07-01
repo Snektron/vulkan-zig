@@ -120,13 +120,11 @@ pub fn main() !void {
     const file = try std.fs.cwd().openFileZ(std.os.argv[1], .{});
     defer file.close();
 
+    const spec = try file.reader().readAllAlloc(allocator, std.math.maxInt(usize));
+    defer allocator.free(spec);
+
     const stdout = std.io.getStdOut().writer();
-    try vkgen.generate(&prof_alloc.allocator, file.reader(), stdout);
+    try vkgen.generate(allocator, spec, stdout);
 
     std.debug.print("Total memory usage: {} KiB\n", .{@divTrunc(prof_alloc.max_usage, 1024)});
-}
-
-test "main" {
-    _ = @import("xml.zig");
-    _ = @import("registry/c-parse.zig");
 }
