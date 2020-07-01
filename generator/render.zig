@@ -298,7 +298,7 @@ fn Renderer(comptime WriterType: type) type {
                 const tok = peeked orelse (try tokenizer.next()) orelse break;
                 peeked = null;
 
-                switch (tok.id) {
+                switch (tok.kind) {
                     .lparen, .rparen, .tilde, .minus => {
                         try self.writer.writeAll(tok.text);
                         continue;
@@ -316,7 +316,7 @@ fn Renderer(comptime WriterType: type) type {
                     break;
                 };
 
-                switch (suffix.id) {
+                switch (suffix.kind) {
                     .id => {
                         if (mem.eql(u8, suffix.text, "ULL")) {
                             try self.writer.print("@as(u64, {})", .{tok.text});
@@ -331,7 +331,7 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writer.print("@as(f32, {}.{})", .{tok.text, decimal.text});
 
                         const f = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
-                        if (f.id != .id or !mem.eql(u8, f.text, "f")) {
+                        if (f.kind != .id or !mem.eql(u8, f.text, "f")) {
                             return error.InvalidApiConstant;
                         }
                     },
@@ -371,8 +371,9 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writeIdentifier(name[2..]);
                 return;
             } else if (mem.startsWith(u8, name, "PFN_vk")) {
-                // Function pointer type, render using same name for now
-                try self.writeIdentifier(name);
+                // Function pointer type, strip off the PFN_vk part. Note that this function
+                // is only called to render the typedeffed function pointers like vkVoidFunction
+                try self.writeIdentifier(name[6..]);
                 return;
             } else if (mem.startsWith(u8, name, "VK_")) {
                 // Constants
@@ -666,6 +667,10 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(";\n");
         }
 
+        fn renderCommandPtrName(self: *Self, name: []const u8) !void {
+            try self.writeIdentifierFmt("{}Fn", .{util.trimVkNamespace(name)});
+        }
+
         fn renderCommandPtrs(self: *Self) !void {
             for (self.registry.decls) |decl| {
                 if (decl.decl_type != .command) {
@@ -673,7 +678,7 @@ fn Renderer(comptime WriterType: type) type {
                 }
 
                 try self.writer.writeAll("pub const ");
-                try self.writeIdentifierFmt("PFN_{}", .{decl.name});
+                try self.renderCommandPtrName(decl.name);
                 try self.writer.writeAll(" = ");
                 try self.renderCommandPtr(decl.decl_type.command, false);
                 try self.writer.writeAll(";\n");

@@ -8,10 +8,10 @@ const ArraySize = registry.Array.ArraySize;
 const TypeInfo = registry.TypeInfo;
 
 pub const Token = struct {
-    id: Id,
+    kind: Kind,
     text: []const u8,
 
-    const Id = enum {
+    const Kind = enum {
         id, // Any id thats not a keyword
         name, // Vulkan <name>...</name>
         type_name, // Vulkan <type>...</type>
@@ -72,18 +72,18 @@ pub const CTokenizer = struct {
 
         const token_text = self.source[start .. self.offset];
 
-        const id = if (mem.eql(u8, token_text, "typedef"))
-                Token.Id.kw_typedef
+        const kind = if (mem.eql(u8, token_text, "typedef"))
+                Token.Kind.kw_typedef
             else if (mem.eql(u8, token_text, "const"))
-                Token.Id.kw_const
+                Token.Kind.kw_const
             else if (mem.eql(u8, token_text, "VKAPI_PTR"))
-                Token.Id.kw_vkapi_ptr
+                Token.Kind.kw_vkapi_ptr
             else if (mem.eql(u8, token_text, "struct"))
-                Token.Id.kw_struct
+                Token.Kind.kw_struct
             else
-                Token.Id.id;
+                Token.Kind.id;
 
-        return .{.id = id, .text = token_text};
+        return .{.kind = kind, .text = token_text};
     }
 
     fn int(self: *CTokenizer) Token {
@@ -99,7 +99,7 @@ pub const CTokenizer = struct {
         }
 
         return .{
-            .id = .int,
+            .kind = .int,
             .text = self.source[start .. self.offset],
         };
     }
@@ -127,29 +127,29 @@ pub const CTokenizer = struct {
         self.skipws();
 
         const c = self.peek() orelse return null;
-        var id: Token.Id = undefined;
+        var kind: Token.Kind = undefined;
         switch (c) {
             'A'...'Z', 'a'...'z', '_' => return self.keyword(),
             '0'...'9' => return self.int(),
-            '*' => id = .star,
-            ',' => id = .comma,
-            ';' => id = .semicolon,
-            ':' => id = .colon,
-            '-' => id = .minus,
-            '~' => id = .tilde,
-            '.' => id = .dot,
-            '#' => id = .hash,
-            '[' => id = .lbracket,
-            ']' => id = .rbracket,
-            '(' => id = .lparen,
-            ')' => id = .rparen,
+            '*' => kind = .star,
+            ',' => kind = .comma,
+            ';' => kind = .semicolon,
+            ':' => kind = .colon,
+            '-' => kind = .minus,
+            '~' => kind = .tilde,
+            '.' => kind = .dot,
+            '#' => kind = .hash,
+            '[' => kind = .lbracket,
+            ']' => kind = .rbracket,
+            '(' => kind = .lparen,
+            ')' => kind = .rparen,
             else => return error.UnexpectedCharacter
         }
 
         const start = self.offset;
         _ = self.consumeNoEof();
         return Token{
-            .id = id,
+            .kind = kind,
             .text = self.source[start .. self.offset]
         };
     }
@@ -173,11 +173,11 @@ pub const XmlCTokenizer = struct {
 
         const text = elem.children.at(0).CharData;
         if (mem.eql(u8, elem.tag, "type")) {
-            return Token{.id = .type_name, .text = text};
+            return Token{.kind = .type_name, .text = text};
         } else if (mem.eql(u8, elem.tag, "enum")) {
-            return Token{.id = .enum_name, .text = text};
+            return Token{.kind = .enum_name, .text = text};
         } else if (mem.eql(u8, elem.tag, "name")) {
-            return Token{.id = .name, .text = text};
+            return Token{.kind = .name, .text = text};
         } else if (mem.eql(u8, elem.tag, "comment")) {
             return null;
         } else {
@@ -233,9 +233,9 @@ pub const XmlCTokenizer = struct {
         return (try self.peek()) orelse return error.UnexpectedEof;
     }
 
-    fn expect(self: *XmlCTokenizer, id: Token.Id) !Token {
+    fn expect(self: *XmlCTokenizer, kind: Token.Kind) !Token {
         const tok = (try self.next()) orelse return error.UnexpectedEof;
-        if (tok.id != id) {
+        if (tok.kind != kind) {
             return error.UnexpectedToken;
         }
 
@@ -269,7 +269,7 @@ pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Conta
     };
 
     if (try xctok.peek()) |tok| {
-        if (tok.id != .colon) {
+        if (tok.kind != .colon) {
             return error.InvalidSyntax;
         }
 
@@ -321,16 +321,16 @@ pub const ParseError = error{
 fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Declaration {
     // Parse declaration constness
     var tok = try xctok.nextNoEof();
-    const inner_is_const = tok.id == .kw_const;
+    const inner_is_const = tok.kind == .kw_const;
     if (inner_is_const) {
         tok = try xctok.nextNoEof();
     }
 
-    if (tok.id == .kw_struct) {
+    if (tok.kind == .kw_struct) {
         tok = try xctok.nextNoEof();
     }
     // Parse type name
-    if (tok.id != .type_name and tok.id != .id) return error.InvalidSyntax;
+    if (tok.kind != .type_name and tok.kind != .id) return error.InvalidSyntax;
     const type_name = tok.text;
 
     var type_info = TypeInfo{.name = type_name};
@@ -346,7 +346,7 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Dec
 
     const name = blk: {
         const name_tok = (try xctok.peek()) orelse break :blk null;
-        if (name_tok.id == .id or name_tok.id == .name) {
+        if (name_tok.kind == .id or name_tok.kind == .name) {
             _ = try xctok.nextNoEof();
             break :blk name_tok.text;
         } else {
@@ -382,7 +382,7 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Dec
 // FNPTRSUFFIX = kw_vkapi_ptr '*' name' ')' '(' ('void' | (DECLARATION (',' DECLARATION)*)?) ')'
 fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: TypeInfo) !?Declaration {
     const lparen = try xctok.peek();
-    if (lparen == null or lparen.?.id != .lparen) {
+    if (lparen == null or lparen.?.kind != .lparen) {
         return null;
     }
     _ = try xctok.nextNoEof();
@@ -428,7 +428,7 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
     });
 
     while (true) {
-        switch ((try xctok.peekNoEof()).id) {
+        switch ((try xctok.peekNoEof()).kind) {
             .rparen => break,
             .comma => _ = try xctok.nextNoEof(),
             else => return error.InvalidSyntax,
@@ -457,13 +457,13 @@ fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool
         var is_const = first_const;
         first_const = false;
 
-        if (tok.id == .kw_const) {
+        if (tok.kind == .kw_const) {
             is_const = true;
             _ = try xctok.nextNoEof();
             tok = (try xctok.peek()) orelse return type_info;
         }
 
-        if (tok.id != .star) {
+        if (tok.kind != .star) {
             // if `is_const` is true at this point, there was a trailing const,
             // and the declaration itself is const.
             return type_info;
@@ -488,14 +488,14 @@ fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool
 // ARRAY_DECLARATOR = '[' (int | enum_name) ']'
 fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
     const lbracket = try xctok.peek();
-    if (lbracket == null or lbracket.?.id != .lbracket) {
+    if (lbracket == null or lbracket.?.kind != .lbracket) {
         return null;
     }
 
     _ = try xctok.nextNoEof();
 
     const size_tok = try xctok.nextNoEof();
-    const size: ArraySize = switch (size_tok.id) {
+    const size: ArraySize = switch (size_tok.kind) {
         .int => .{
             .int = std.fmt.parseInt(usize, size_tok.text, 10) catch |err| switch (err) {
                 error.Overflow => return error.Overflow,
@@ -531,7 +531,7 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![3][]const u8 {
         }
 
         const tok = try xctok.nextNoEof();
-        switch (tok.id) {
+        switch (tok.kind) {
             .id, .int => part.* = tok.text,
             else => return error.UnexpectedToken,
         }
@@ -543,7 +543,7 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![3][]const u8 {
 fn testTokenizer(tokenizer: var, expected_tokens: []const Token) void {
     for (expected_tokens) |expected| {
         const tok = (tokenizer.next() catch unreachable).?;
-        testing.expectEqual(expected.id, tok.id);
+        testing.expectEqual(expected.kind, tok.kind);
         testing.expectEqualSlices(u8, expected.text, tok.text);
     }
 
@@ -558,19 +558,19 @@ test "CTokenizer" {
     testTokenizer(
         &ctok,
         &[_]Token{
-            .{.id = .kw_typedef, .text = "typedef"},
-            .{.id = .lparen, .text = "("},
-            .{.id = .lbracket, .text = "["},
-            .{.id = .kw_const, .text = "const"},
-            .{.id = .rparen, .text = ")"},
-            .{.id = .rbracket, .text = "]"},
-            .{.id = .star, .text = "*"},
-            .{.id = .star, .text = "*"},
-            .{.id = .kw_vkapi_ptr, .text = "VKAPI_PTR"},
-            .{.id = .int, .text = "123"},
-            .{.id = .comma, .text = ","},
-            .{.id = .semicolon, .text = ";"},
-            .{.id = .id, .text = "aaaa"},
+            .{.kind = .kw_typedef, .text = "typedef"},
+            .{.kind = .lparen, .text = "("},
+            .{.kind = .lbracket, .text = "["},
+            .{.kind = .kw_const, .text = "const"},
+            .{.kind = .rparen, .text = ")"},
+            .{.kind = .rbracket, .text = "]"},
+            .{.kind = .star, .text = "*"},
+            .{.kind = .star, .text = "*"},
+            .{.kind = .kw_vkapi_ptr, .text = "VKAPI_PTR"},
+            .{.kind = .int, .text = "123"},
+            .{.kind = .comma, .text = ","},
+            .{.kind = .semicolon, .text = ";"},
+            .{.kind = .id, .text = "aaaa"},
         }
     );
 }
@@ -589,17 +589,17 @@ test "XmlCTokenizer" {
     testTokenizer(
         &xctok,
         &[_]Token{
-            .{.id = .kw_typedef, .text = "typedef"},
-            .{.id = .id, .text = "void"},
-            .{.id = .lparen, .text = "("},
-            .{.id = .kw_vkapi_ptr, .text = "VKAPI_PTR"},
-            .{.id = .star, .text = "*"},
-            .{.id = .name, .text = "PFN_vkVoidFunction"},
-            .{.id = .rparen, .text = ")"},
-            .{.id = .lparen, .text = "("},
-            .{.id = .id, .text = "void"},
-            .{.id = .rparen, .text = ")"},
-            .{.id = .semicolon, .text = ";"},
+            .{.kind = .kw_typedef, .text = "typedef"},
+            .{.kind = .id, .text = "void"},
+            .{.kind = .lparen, .text = "("},
+            .{.kind = .kw_vkapi_ptr, .text = "VKAPI_PTR"},
+            .{.kind = .star, .text = "*"},
+            .{.kind = .name, .text = "PFN_vkVoidFunction"},
+            .{.kind = .rparen, .text = ")"},
+            .{.kind = .lparen, .text = "("},
+            .{.kind = .id, .text = "void"},
+            .{.kind = .rparen, .text = ")"},
+            .{.kind = .semicolon, .text = ";"},
         }
     );
 }
