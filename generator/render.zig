@@ -144,6 +144,12 @@ fn Renderer(comptime WriterType: type) type {
             },
         };
 
+        const CommandDispatchType = enum {
+            base,
+            instance,
+            device,
+        };
+
         writer: WriterType,
         allocator: *Allocator,
         registry: *const reg.Registry,
@@ -246,6 +252,38 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             return .other;
+        }
+
+        fn classifyCommandDispatch(self: Self, name: []const u8, command: reg.Command) CommandDispatchType {
+            const device_handles = std.ComptimeStringMap(void, .{
+                .{"VkDevice", {}},
+                .{"VkCommandBuffer", {}},
+                .{"VkQueue", {}},
+            });
+
+            const override_functions = std.ComptimeStringMap(CommandDispatchType, .{
+                .{"vkGetInstanceProcAddr", .base},
+                .{"vkCreateInstance", .base},
+                .{"vkEnumerateInstanceLayerProperties", .base},
+                .{"vkEnumerateInstanceExtensionProperties", .base},
+                .{"vkEnumerateInstanceVersion", .base},
+                .{"vkGetDeviceProcAddr", .instance},
+            });
+
+            if (override_functions.get(name)) |dispatch_type| {
+                return dispatch_type;
+            }
+
+            switch (command.params[0].param_type) {
+                .name => |first_param_type_name| {
+                    if (device_handles.get(first_param_type_name)) |_| {
+                        return .device;
+                    }
+                },
+                else => {},
+            }
+
+            return .instance;
         }
 
         fn render(self: *Self) !void {
@@ -704,15 +742,25 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrappers(self: *Self) !void {
-            try self.writer.writeAll(
-                \\pub fn Wrapper(comptime Self: type) type {
-                \\    return struct {
+            try self.renderWrappersOfDispatchType("BaseWrapper", .base);
+            try self.renderWrappersOfDispatchType("InstanceWrapper", .instance);
+            try self.renderWrappersOfDispatchType("DeviceWrapper", .device);
+        }
+
+        fn renderWrappersOfDispatchType(self: *Self, name: []const u8, dispatch_type: CommandDispatchType) !void {
+            try self.writer.print(
+                \\pub fn {}(comptime Self: type) type {{
+                \\    return struct {{
                 \\
+                , .{name}
             );
 
             for (self.registry.decls) |decl| {
                 if (decl.decl_type == .command) {
-                    try self.renderWrapper(decl.name, decl.decl_type.command);
+                    const command = decl.decl_type.command;
+                    if (self.classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                        try self.renderWrapper(decl.name, decl.decl_type.command);
+                    }
                 }
             }
 
