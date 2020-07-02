@@ -46,6 +46,15 @@ const DeviceDispatch = struct {
     vkResetFences: vk.PfnResetFences,
     vkQueueSubmit: vk.PfnQueueSubmit,
     vkQueuePresentKHR: vk.PfnQueuePresentKHR,
+    vkCreateCommandPool: vk.PfnCreateCommandPool,
+    vkDestroyCommandPool: vk.PfnDestroyCommandPool,
+    vkAllocateCommandBuffers: vk.PfnAllocateCommandBuffers,
+    vkFreeCommandBuffers: vk.PfnFreeCommandBuffers,
+    vkBeginCommandBuffer: vk.PfnBeginCommandBuffer,
+    vkCmdClearColorImage: vk.PfnCmdClearColorImage,
+    vkEndCommandBuffer: vk.PfnEndCommandBuffer,
+    vkQueueWaitIdle: vk.PfnQueueWaitIdle,
+    vkCmdPipelineBarrier: vk.PfnCmdPipelineBarrier,
     usingnamespace vk.DeviceWrapper(@This());
 };
 

@@ -211,6 +211,13 @@ fn Renderer(comptime WriterType: type) type {
             };
         }
 
+        fn isFlags(self: Self, name: []const u8) bool {
+            const tag = util.getAuthorTag(name, self.registry.tags);
+            const base_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
+
+            return mem.endsWith(u8, base_name, "Flags");
+        }
+
         fn classifyParam(self: Self, param: reg.Command.Param) !ParamType {
             switch (param.param_type) {
                 .pointer => |ptr| {
@@ -240,7 +247,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 },
                 .name => |name| {
-                    if (self.extractBitflagName(param.param_type.name) != null) {
+                    if (self.extractBitflagName(param.param_type.name) != null or self.isFlags(param.param_type.name)) {
                         return .bitflags;
                     }
                 },
@@ -438,6 +445,10 @@ fn Renderer(comptime WriterType: type) type {
                                 util.trimVkNamespace(bitflag_name.base_name),
                                 @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
                             });
+                            try self.writer.writeAll(".IntType");
+                            break :blk;
+                        } else if (self.isFlags(param.param_type.name)) {
+                            try self.renderTypeInfo(param.param_type);
                             try self.writer.writeAll(".IntType");
                             break :blk;
                         }
@@ -870,7 +881,7 @@ fn Renderer(comptime WriterType: type) type {
                     },
                     .bitflags => {
                         try self.writeIdentifierWithCase(.snake, param.name);
-                        try self.writer.writeAll(".toInt()"); // TODO: Generate wrapper
+                        try self.writer.writeAll(".toInt()");
                     },
                     .buffer_len, .mut_buffer_len, .other => {
                         try self.writeIdentifierWithCase(.snake, param.name);

@@ -100,7 +100,7 @@ pub const Swapchain = struct {
         self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
     }
 
-    pub fn recreate(self: *Swapchain, new_extent: vk.Extnet2D) !void {
+    pub fn recreate(self: *Swapchain, new_extent: vk.Extent2D) !void {
         const gc = self.gc;
         const allocator = self.allocator;
         const old_handle = self.handle;
@@ -142,22 +142,22 @@ pub const Swapchain = struct {
 
         // Step 2: Submit the command buffer
         const wait_stage = [_]vk.PipelineStageFlags{.{.top_of_pipe_bit = true}};
-        try self.gc.vkd.queueSubmit(self.gc.graphics_queue.handle, 1, .{
+        try self.gc.vkd.queueSubmit(self.gc.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &current.image_acquired),
             .p_wait_dst_stage_mask = &wait_stage,
             .command_buffer_count = 1,
-            .p_command_buffers = @ptrCast([*]const CommandBuffer, &cmdbuf),
+            .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
             .signal_semaphore_count = 1,
             .p_signal_semaphores = @ptrCast([*]const vk.Semaphore, &current.render_finished),
-        }, current_swap_image.frame_fence);
+        }}, current.frame_fence);
 
         // Step 3: Present the current frame
         _ = try self.gc.vkd.queuePresentKHR(self.gc.present_queue.handle, .{
             .wait_semaphore_count = 1,
-            .p_signal_semaphores = @ptrCast([*]const vk.Semaphore, &current.render_finished),
+            .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &current.render_finished),
             .swapchain_count = 1,
-            .p_swapchains = @ptrCast([*]const vk.Swapchain, &self.handle),
+            .p_swapchains = @ptrCast([*]const vk.SwapchainKHR, &self.handle),
             .p_image_indices = @ptrCast([*]const u32, &self.image_index),
             .p_results = null,
         });
@@ -174,9 +174,10 @@ pub const Swapchain = struct {
         std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
         self.image_index = result.image_index;
 
-        return switch (result) {
+        return switch (result.result) {
             .success => .optimal,
             .suboptimal_khr => .suboptimal,
+            else => unreachable,
         };
     }
 };
