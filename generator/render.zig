@@ -40,8 +40,8 @@ const preamble =
     \\        pub fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {
     \\            return fromInt(toInt(lhs) & toInt(rhs.complement()));
     \\        }
-    \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) FlagsType {
-    \\            return toInt(merge(lhs, rhs)) == toInt(rhs);
+    \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) bool {
+    \\            return toInt(intersect(lhs, rhs)) == toInt(rhs);
     \\        }
     \\    };
     \\}
@@ -409,9 +409,9 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writeIdentifier(name[2..]);
                 return;
             } else if (mem.startsWith(u8, name, "PFN_vk")) {
-                // Function pointer type, strip off the PFN_vk part. Note that this function
-                // is only called to render the typedeffed function pointers like vkVoidFunction
-                try self.writeIdentifier(name[6..]);
+                // Function pointer type, strip off the PFN_vk part and replace it with Pfn. Note that
+                // this function is only called to render the typedeffed function pointers like vkVoidFunction
+                try self.writeIdentifierFmt("Pfn{}", .{name[6..]});
                 return;
             } else if (mem.startsWith(u8, name, "VK_")) {
                 // Constants
@@ -706,7 +706,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderCommandPtrName(self: *Self, name: []const u8) !void {
-            try self.writeIdentifierFmt("{}Fn", .{util.trimVkNamespace(name)});
+            try self.writeIdentifierFmt("Pfn{}", .{util.trimVkNamespace(name)});
         }
 
         fn renderCommandPtrs(self: *Self) !void {
@@ -727,7 +727,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(
                 \\pub const extension_info = struct {
                 \\    const Info = struct {
-                \\        name: []const u8,
+                \\        name: [:0]const u8,
                 \\        version: u32,
                 \\    };
             );
@@ -755,6 +755,8 @@ fn Renderer(comptime WriterType: type) type {
                 , .{name}
             );
 
+            try self.renderWrapperLoader(dispatch_type);
+
             for (self.registry.decls) |decl| {
                 if (decl.decl_type == .command) {
                     const command = decl.decl_type.command;
@@ -765,6 +767,36 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll("};}\n");
+        }
+
+        fn renderWrapperLoader(self: *Self, dispatch_type: CommandDispatchType) !void {
+            const params = switch (dispatch_type) {
+                .base => "loader: PfnGetInstanceProcAddr",
+                .instance => "instance: Instance, loader: PfnGetInstanceProcAddr",
+                .device => "device: Device, loader: PfnGetDeviceProcAddr",
+            };
+
+            const loader_first_param = switch (dispatch_type) {
+                .base => ".null_handle, ",
+                .instance => "instance, ",
+                .device => "device, ",
+            };
+
+            @setEvalBranchQuota(2000);
+
+            try self.writer.print(
+                \\pub fn load({}) !Self {{
+                \\    var self: Self = undefined;
+                \\    inline for (std.meta.fields(Self)) |field| {{
+                \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
+                \\        const cmd_ptr = loader({}name) orelse return error.InvalidCommand;
+                \\        @field(self, field.name) = @ptrCast(field.field_type, cmd_ptr);
+                \\    }}
+                \\    return self;
+                \\}}
+                \\
+                , .{params, loader_first_param}
+            );
         }
 
         fn derefName(name: []const u8) []const u8 {
@@ -1012,7 +1044,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.renderResultAsErrorName(name);
                 try self.writer.writeAll(", ");
             }
-            try self.writer.writeAll("Unkown, }");
+            try self.writer.writeAll("Unknown, }");
         }
 
         fn renderResultAsErrorName(self: *Self, name: []const u8) !void {

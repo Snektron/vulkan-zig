@@ -27,9 +27,11 @@ pub fn build(b: *Builder) void {
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();
+    exe.linkSystemLibrary("c");
+    exe.linkSystemLibrary("glfw");
 
     const vk_path = generateVk(b);
     const fmt_step = b.addFmt(&[_][]const u8{vk_path});
     exe.step.dependOn(&fmt_step.step);
-    exe.addPackagePath("vk", vk_path);
+    exe.addPackagePath("vulkan", vk_path);
 }
