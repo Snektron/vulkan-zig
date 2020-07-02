@@ -21,6 +21,7 @@ const InstanceDispatch = struct {
     vkEnumerateDeviceExtensionProperties: vk.PfnEnumerateDeviceExtensionProperties,
     vkGetPhysicalDeviceSurfaceFormatsKHR: vk.PfnGetPhysicalDeviceSurfaceFormatsKHR,
     vkGetPhysicalDeviceSurfacePresentModesKHR: vk.PfnGetPhysicalDeviceSurfacePresentModesKHR,
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR: vk.PfnGetPhysicalDeviceSurfaceCapabilitiesKHR,
     vkGetPhysicalDeviceQueueFamilyProperties: vk.PfnGetPhysicalDeviceQueueFamilyProperties,
     vkGetPhysicalDeviceSurfaceSupportKHR: vk.PfnGetPhysicalDeviceSurfaceSupportKHR,
     vkGetDeviceProcAddr: vk.PfnGetDeviceProcAddr,
@@ -30,6 +31,21 @@ const InstanceDispatch = struct {
 const DeviceDispatch = struct {
     vkDestroyDevice: vk.PfnDestroyDevice,
     vkGetDeviceQueue: vk.PfnGetDeviceQueue,
+    vkCreateSemaphore: vk.PfnCreateSemaphore,
+    vkCreateFence: vk.PfnCreateFence,
+    vkCreateImageView: vk.PfnCreateImageView,
+    vkDestroyImageView: vk.PfnDestroyImageView,
+    vkDestroySemaphore: vk.PfnDestroySemaphore,
+    vkDestroyFence: vk.PfnDestroyFence,
+    vkGetSwapchainImagesKHR: vk.PfnGetSwapchainImagesKHR,
+    vkCreateSwapchainKHR: vk.PfnCreateSwapchainKHR,
+    vkDestroySwapchainKHR: vk.PfnDestroySwapchainKHR,
+    vkAcquireNextImageKHR: vk.PfnAcquireNextImageKHR,
+    vkDeviceWaitIdle: vk.PfnDeviceWaitIdle,
+    vkWaitForFences: vk.PfnWaitForFences,
+    vkResetFences: vk.PfnResetFences,
+    vkQueueSubmit: vk.PfnQueueSubmit,
+    vkQueuePresentKHR: vk.PfnQueuePresentKHR,
     usingnamespace vk.DeviceWrapper(@This());
 };
 
@@ -85,6 +101,11 @@ pub const GraphicsContext = struct {
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         self.vki.destroyInstance(self.instance, null);
+    }
+
+    pub fn deviceName(self: GraphicsContext) []const u8 {
+        const len = std.mem.indexOfScalar(u8, &self.props.device_name, 0).?;
+        return self.props.device_name[0 .. len];
     }
 };
 
