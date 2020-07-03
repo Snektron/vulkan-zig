@@ -23,15 +23,20 @@ pub fn build(b: *Builder) void {
 
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
-    const exe = b.addExecutable("example", "examples/main.zig");
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
-    exe.install();
-    exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("glfw");
+    const example_exe = b.addExecutable("example", "examples/main.zig");
+    example_exe.setTarget(target);
+    example_exe.setBuildMode(mode);
+    example_exe.install();
+    example_exe.linkSystemLibrary("c");
+    example_exe.linkSystemLibrary("glfw");
 
     const vk_path = generateVk(b);
     const fmt_step = b.addFmt(&[_][]const u8{vk_path});
-    exe.step.dependOn(&fmt_step.step);
-    exe.addPackagePath("vulkan", vk_path);
+    example_exe.step.dependOn(&fmt_step.step);
+    example_exe.addPackagePath("vulkan", vk_path);
+
+    const example_run_cmd = example_exe.run();
+    example_run_cmd.step.dependOn(b.getInstallStep());
+    const example_run_step = b.step("run-example", "Run the example");
+    example_run_step.dependOn(&example_run_cmd.step);
 }
