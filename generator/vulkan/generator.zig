@@ -1,8 +1,8 @@
 const std = @import("std");
 const reg = @import("registry.zig");
-const xml = @import("xml.zig");
+const xml = @import("../xml.zig");
 const renderRegistry = @import("render.zig").render;
-const parseXml = @import("registry/parse.zig").parseXml;
+const parseXml = @import("parse.zig").parseXml;
 const Allocator = std.mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
@@ -203,9 +203,4 @@ pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: var) !void 
     gen.removePromotedExtensions();
     try gen.resolveDeclarations();
     try gen.render(writer);
-}
-
-test "main" {
-    _ = @import("xml.zig");
-    _ = @import("registry/c-parse.zig");
 }

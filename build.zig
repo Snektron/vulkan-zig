@@ -1,5 +1,5 @@
 const std = @import("std");
-const vkgen = @import("generator/generator.zig");
+const vkgen = @import("generator/index.zig");
 const Builder = std.build.Builder;
 const FmtStep = std.build.FmtStep;
 
@@ -12,14 +12,14 @@ pub fn generateVk(b: *Builder) []const u8 {
 
     const output_file = std.fs.cwd().createFile(output, .{}) catch unreachable;
     defer output_file.close();
-    vkgen.generate(b.allocator, spec, output_file.writer()) catch unreachable;
+    vkgen.generateVk(b.allocator, spec, output_file.writer()) catch unreachable;
 
     return output;
 }
 
 pub fn build(b: *Builder) void {
     var test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&b.addTest("generator/generator.zig").step);
+    test_step.dependOn(&b.addTest("generator/index.zig").step);
 
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();

@@ -1,5 +1,5 @@
 const std = @import("std");
-const registry = @import("../registry.zig");
+const registry = @import("registry.zig");
 const xml = @import("../xml.zig");
 const cparse = @import("c-parse.zig");
 const mem = std.mem;

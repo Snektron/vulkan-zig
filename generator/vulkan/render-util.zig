@@ -1,5 +1,5 @@
 const std = @import("std");
-const reg = @import("../registry.zig");
+const reg = @import("registry.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 

@@ -1,7 +1,7 @@
 const std = @import("std");
 const reg = @import("registry.zig");
-const util = @import("render/util.zig");
-const cparse = @import("registry/c-parse.zig");
+const util = @import("render-util.zig");
+const cparse = @import("c-parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
