@@ -64,6 +64,11 @@ pub const Swapchain = struct {
         }, null);
         errdefer gc.vkd.destroySwapchainKHR(gc.dev, handle, null);
 
+        if (old_handle != .null_handle) {
+            // Apparently, the old swapchain handle still needs to be destroyed after recreating.
+            gc.vkd.destroySwapchainKHR(gc.dev, old_handle, null);
+        }
+
         const swap_images = try initSwapchainImages(gc, handle, surface_format.format, allocator);
         errdefer for (swap_images) |si| si.deinit(gc);
 
