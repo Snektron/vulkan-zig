@@ -89,14 +89,14 @@ pub const Swapchain = struct {
         };
     }
 
-    fn deinitExceptSwapchain(self: Swapchain) void {
+    fn deinitExceptSwapchain(self: Swapchain) !void {
+        _ = try self.gc.vkd.queueWaitIdle(self.gc.present_queue.handle);
         for (self.swap_images) |si| si.deinit(self.gc);
         self.gc.vkd.destroySemaphore(self.gc.dev, self.next_image_acquired, null);
     }
 
     pub fn deinit(self: Swapchain) void {
-        self.gc.vkd.deviceWaitIdle(self.gc.dev) catch return;
-        self.deinitExceptSwapchain();
+        self.deinitExceptSwapchain() catch return;
         self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
     }
 
@@ -104,7 +104,7 @@ pub const Swapchain = struct {
         const gc = self.gc;
         const allocator = self.allocator;
         const old_handle = self.handle;
-        self.deinitExceptSwapchain();
+        try self.deinitExceptSwapchain();
         self.* = try initRecycle(gc, allocator, new_extent, old_handle);
     }
 

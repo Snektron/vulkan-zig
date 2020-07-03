@@ -71,16 +71,24 @@ pub const GraphicsContext = struct {
     graphics_queue: Queue,
     present_queue: Queue,
 
-    pub fn init(allocator: *Allocator, app_info: *const vk.ApplicationInfo, window: *c.GLFWwindow) !GraphicsContext {
+    pub fn init(allocator: *Allocator, app_name: [*:0]const u8, window: *c.GLFWwindow) !GraphicsContext {
         var self: GraphicsContext = undefined;
         self.vkb = try BaseDispatch.load(c.glfwGetInstanceProcAddress);
 
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);
 
+        const app_info = vk.ApplicationInfo{
+            .p_application_name = app_name,
+            .application_version = vk.makeVersion(0, 0, 0),
+            .p_engine_name = app_name,
+            .engine_version = vk.makeVersion(0, 0, 0),
+            .api_version = vk.API_VERSION_1_2,
+        };
+
         self.instance = try self.vkb.createInstance(.{
             .flags = .{},
-            .p_application_info = app_info,
+            .p_application_info = &app_info,
             .enabled_layer_count = 0,
             .pp_enabled_layer_names = undefined,
             .enabled_extension_count = glfw_exts_count,

@@ -3,15 +3,9 @@ const vk = @import("vulkan");
 const c = @import("c.zig");
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Swapchain = @import("swapchain.zig").Swapchain;
+const Allocator = std.mem.Allocator;
 
 const app_name = "vulkan-zig example";
-const app_info = vk.ApplicationInfo{
-    .p_application_name = app_name,
-    .application_version = vk.makeVersion(0, 0, 0),
-    .p_engine_name = app_name,
-    .engine_version = vk.makeVersion(0, 0, 0),
-    .api_version = vk.API_VERSION_1_2,
-};
 
 pub fn main() !void {
     if (c.glfwInit() != c.GLFW_TRUE) return error.GlfwInitFailed;
@@ -29,12 +23,14 @@ pub fn main() !void {
     ) orelse return error.WindowInitFailed;
     defer c.glfwDestroyWindow(window);
 
-    const gc = try GraphicsContext.init(std.heap.page_allocator, &app_info, window);
+    const allocator = std.heap.page_allocator;
+
+    const gc = try GraphicsContext.init(allocator, app_name, window);
     defer gc.deinit();
 
     std.debug.print("Using device: {}\n", .{gc.deviceName()});
 
-    var swapchain = try Swapchain.init(&gc, std.heap.page_allocator, extent);
+    var swapchain = try Swapchain.init(&gc, allocator, extent);
     defer swapchain.deinit();
 
     const pool = try gc.vkd.createCommandPool(gc.dev, .{
@@ -43,61 +39,13 @@ pub fn main() !void {
     }, null);
     defer gc.vkd.destroyCommandPool(gc.dev, pool, null);
 
+    var cmdbufs = try createCommandBuffers(&gc, pool, allocator, swapchain);
+    defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
+
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
-        var cmdbuf: vk.CommandBuffer = undefined;
-        try gc.vkd.allocateCommandBuffers(gc.dev, .{
-            .command_pool = pool,
-            .level = .primary,
-            .command_buffer_count = 1,
-        }, @ptrCast([*]vk.CommandBuffer, &cmdbuf));
-        defer gc.vkd.freeCommandBuffers(gc.dev, pool, 1, @ptrCast([*]const vk.CommandBuffer, &cmdbuf));
+        const cmdbuf = cmdbufs[swapchain.image_index];
 
-        try gc.vkd.beginCommandBuffer(cmdbuf, .{
-            .flags = .{.one_time_submit_bit = true},
-            .p_inheritance_info = null,
-        });
-
-        const subresource_range = vk.ImageSubresourceRange{
-            .aspect_mask = .{.color_bit = true},
-            .base_mip_level = 0,
-            .level_count = 1,
-            .base_array_layer = 0,
-            .layer_count = 1,
-        };
-
-        const color = vk.ClearColorValue{.float_32 = .{1, 0, 1, 1}};
-
-        imageTransition(
-            &gc,
-            cmdbuf,
-            swapchain.currentImage(),
-            subresource_range,
-            .{.layout = .@"undefined", .stage = .{.top_of_pipe_bit = true}},
-            .{.layout = .general, .stage = .{.top_of_pipe_bit = true}},
-        );
-
-        gc.vkd.cmdClearColorImage(
-            cmdbuf,
-            swapchain.currentImage(),
-            .general,
-            color,
-            1,
-            @ptrCast([*]const vk.ImageSubresourceRange, &subresource_range),
-        );
-
-        imageTransition(
-            &gc,
-            cmdbuf,
-            swapchain.currentImage(),
-            subresource_range,
-            .{.layout = .general, .stage = .{.top_of_pipe_bit = true}},
-            .{.layout = .present_src_khr, .stage = .{.bottom_of_pipe_bit = true}},
-        );
-
-        try gc.vkd.endCommandBuffer(cmdbuf);
-        const result = swapchain.present(cmdbuf);
-        try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
-        const state = result catch |err| switch (err) {
+        const state = swapchain.present(cmdbuf) catch |err| switch (err) {
             error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
             else => |narrow| return narrow,
         };
@@ -108,11 +56,88 @@ pub fn main() !void {
             c.glfwGetWindowSize(window, &w, &h);
 
             try swapchain.recreate(.{.width = @intCast(u32, w), .height = @intCast(u32, h)});
+
+            destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
+            cmdbufs = try createCommandBuffers(&gc, pool, allocator, swapchain);
         }
 
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
+
+        try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
     }
+}
+
+fn createCommandBuffers(
+    gc: *const GraphicsContext,
+    pool: vk.CommandPool,
+    allocator: *Allocator,
+    swapchain: Swapchain,
+) ![]vk.CommandBuffer {
+    const cmdbufs = try allocator.alloc(vk.CommandBuffer, swapchain.swap_images.len);
+    errdefer allocator.free(cmdbufs);
+
+    try gc.vkd.allocateCommandBuffers(gc.dev, .{
+        .command_pool = pool,
+        .level = .primary,
+        .command_buffer_count = @truncate(u32, cmdbufs.len),
+    }, cmdbufs.ptr);
+    errdefer gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, cmdbufs.len), cmdbufs.ptr);
+
+    const subresource_range = vk.ImageSubresourceRange{
+        .aspect_mask = .{.color_bit = true},
+        .base_mip_level = 0,
+        .level_count = 1,
+        .base_array_layer = 0,
+        .layer_count = 1,
+    };
+
+    const color = vk.ClearColorValue{.float_32 = .{1, 0, 1, 1}};
+
+    for (cmdbufs) |cmdbuf, i| {
+        const image = swapchain.swap_images[i].image;
+
+        try gc.vkd.beginCommandBuffer(cmdbuf, .{
+            .flags = .{},
+            .p_inheritance_info = null,
+        });
+
+        imageTransition(
+            gc,
+            cmdbuf,
+            image,
+            subresource_range,
+            .{.layout = .@"undefined", .stage = .{.top_of_pipe_bit = true}},
+            .{.layout = .general, .stage = .{.top_of_pipe_bit = true}},
+        );
+
+        gc.vkd.cmdClearColorImage(
+            cmdbuf,
+            image,
+            .general,
+            color,
+            1,
+            @ptrCast([*]const vk.ImageSubresourceRange, &subresource_range),
+        );
+
+        imageTransition(
+            gc,
+            cmdbuf,
+            image,
+            subresource_range,
+            .{.layout = .general, .stage = .{.top_of_pipe_bit = true}},
+            .{.layout = .present_src_khr, .stage = .{.bottom_of_pipe_bit = true}},
+        );
+
+        try gc.vkd.endCommandBuffer(cmdbuf);
+    }
+
+    return cmdbufs;
+}
+
+fn destroyCommandBuffers(gc: *const GraphicsContext, pool: vk.CommandPool, allocator: *Allocator, cmdbufs: []vk.CommandBuffer) void {
+    gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, cmdbufs.len), cmdbufs.ptr);
+    allocator.free(cmdbufs);
 }
 
 const ImageState = struct {
