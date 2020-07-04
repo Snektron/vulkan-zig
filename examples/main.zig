@@ -43,11 +43,14 @@ pub fn main() !void {
     }, null);
     defer gc.vkd.destroyPipelineLayout(gc.dev, pipeline_layout, null);
 
-    const render_pass = try createRenderPass(&gc, &swapchain);
+    const render_pass = try createRenderPass(&gc, swapchain);
     defer gc.vkd.destroyRenderPass(gc.dev, render_pass, null);
 
     const pipeline = try createPipeline(&gc, extent, pipeline_layout, render_pass);
     defer gc.vkd.destroyPipeline(gc.dev, pipeline, null);
+
+    var framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+    defer destroyFramebuffers(&gc, allocator, framebuffers);
 
     const pool = try gc.vkd.createCommandPool(gc.dev, .{
         .flags = .{},
@@ -73,6 +76,9 @@ pub fn main() !void {
             extent.width = @intCast(u32, w);
             extent.height = @intCast(u32, h);
             try swapchain.recreate(extent);
+
+            destroyFramebuffers(&gc, allocator, framebuffers);
+            framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
 
             destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
             cmdbufs = try createCommandBuffers(&gc, pool, allocator, swapchain);
@@ -157,7 +163,40 @@ fn destroyCommandBuffers(gc: *const GraphicsContext, pool: vk.CommandPool, alloc
     allocator.free(cmdbufs);
 }
 
-fn createRenderPass(gc: *const GraphicsContext, swapchain: *const Swapchain) !vk.RenderPass {
+fn createFramebuffers(
+    gc: *const GraphicsContext,
+    allocator: *Allocator,
+    render_pass: vk.RenderPass,
+    swapchain: Swapchain
+) ![]vk.Framebuffer {
+    const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
+    errdefer allocator.free(framebuffers);
+
+    var i: usize = 0;
+    errdefer for (framebuffers[0 .. i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+
+    for (framebuffers) |*fb| {
+        fb.* = try gc.vkd.createFramebuffer(gc.dev, .{
+            .flags = .{},
+            .render_pass = render_pass,
+            .attachment_count = 1,
+            .p_attachments = @ptrCast([*]const vk.ImageView, &swapchain.swap_images[i].view),
+            .width = swapchain.extent.width,
+            .height = swapchain.extent.height,
+            .layers = 1,
+        }, null);
+        i += 1;
+    }
+
+    return framebuffers;
+}
+
+fn destroyFramebuffers(gc: *const GraphicsContext, allocator: *Allocator, framebuffers: []const vk.Framebuffer) void {
+    for (framebuffers) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+    allocator.free(framebuffers);
+}
+
+fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
         .format = swapchain.surface_format.format,
