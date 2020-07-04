@@ -85,9 +85,6 @@ pub fn main() !void {
             extent.height = @intCast(u32, h);
             try swapchain.recreate(extent);
 
-            gc.vkd.destroyPipeline(gc.dev, pipeline, null);
-            pipeline = try createPipeline(&gc, extent, pipeline_layout, render_pass);
-
             destroyFramebuffers(&gc, allocator, framebuffers);
             framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
 
@@ -133,11 +130,28 @@ fn createCommandBuffers(
         .color = .{.float_32 = .{0, 0, 0, 1}},
     };
 
+    const viewport = vk.Viewport{
+        .x = 0,
+        .y = 0,
+        .width = @intToFloat(f32, extent.width),
+        .height = @intToFloat(f32, extent.height),
+        .min_depth = 0,
+        .max_depth = 1,
+    };
+
+    const scissor = vk.Rect2D{
+        .offset = .{.x = 0, .y = 0},
+        .extent = extent,
+    };
+
     for (cmdbufs) |cmdbuf, i| {
         try gc.vkd.beginCommandBuffer(cmdbuf, .{
             .flags = .{},
             .p_inheritance_info = null,
         });
+
+        gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &scissor));
 
         gc.vkd.cmdBeginRenderPass(cmdbuf, .{
             .render_pass = render_pass,
@@ -291,26 +305,12 @@ fn createPipeline(
         .primitive_restart_enable = vk.FALSE,
     };
 
-    const viewport = vk.Viewport{
-        .x = 0,
-        .y = 0,
-        .width = @intToFloat(f32, extent.width),
-        .height = @intToFloat(f32, extent.height),
-        .min_depth = 0,
-        .max_depth = 1,
-    };
-
-    const scissor = vk.Rect2D{
-        .offset = .{.x = 0, .y = 0},
-        .extent = extent,
-    };
-
     const pvsci = vk.PipelineViewportStateCreateInfo{
         .flags = .{},
         .viewport_count = 1,
-        .p_viewports = @ptrCast([*]const vk.Viewport, &viewport),
+        .p_viewports = undefined, // set in createCommandBuffers with cmdSetViewport
         .scissor_count = 1,
-        .p_scissors = @ptrCast([*]const vk.Rect2D, &scissor),
+        .p_scissors = undefined, // set in createCommandBuffers with cmdSetScissor
     };
 
     const prsci = vk.PipelineRasterizationStateCreateInfo{
@@ -357,11 +357,11 @@ fn createPipeline(
         .blend_constants = [_]f32{0, 0, 0, 0},
     };
 
-    const dynstate = vk.DynamicState.viewport;
+    const dynstate = [_]vk.DynamicState{.viewport, .scissor};
     const pdsci = vk.PipelineDynamicStateCreateInfo{
         .flags = .{},
-        .dynamic_state_count = 1,
-        .p_dynamic_states = @ptrCast([*]const vk.DynamicState, &dynstate),
+        .dynamic_state_count = dynstate.len,
+        .p_dynamic_states = &dynstate,
     };
 
     const gpci = vk.GraphicsPipelineCreateInfo{
@@ -376,7 +376,7 @@ fn createPipeline(
         .p_multisample_state = &pmsci,
         .p_depth_stencil_state = null,
         .p_color_blend_state = &pcbsci,
-        .p_dynamic_state = null, //&pdsci,
+        .p_dynamic_state = &pdsci,
         .layout = layout,
         .render_pass = render_pass,
         .subpass = 0,
