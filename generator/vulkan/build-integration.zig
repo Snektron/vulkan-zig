@@ -10,16 +10,17 @@ pub const GenerateStep = struct {
     spec_path: []const u8,
     full_out_path: []const u8,
 
-    // relative_out_path is relative to builder.cache_root
-    pub fn init(builder: *Builder, spec_path: []const u8, relative_out_path: []const u8) *GenerateStep {
+    // out_path is relative to builder.cache_root
+    pub fn init(builder: *Builder, spec_path: []const u8, out_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
         self.* = .{
             .step = Step.init(.Custom, "vulkan-generate", builder.allocator, make),
             .builder = builder,
             .spec_path = spec_path,
             .full_out_path = path.join(builder.allocator, &[_][]const u8{
+                self.builder.build_root,
                 builder.cache_root,
-                relative_out_path,
+                out_path,
             }) catch unreachable,
         };
         return self;
@@ -28,16 +29,15 @@ pub const GenerateStep = struct {
     fn make(step: *Step) !void {
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
-
         var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
-        const spec = try std.fs.cwd().readFileAlloc(self.builder.allocator, self.spec_path, std.math.maxInt(usize));
+        const spec = try cwd.readFileAlloc(self.builder.allocator, self.spec_path, std.math.maxInt(usize));
         try generate(self.builder.allocator, spec, out_buffer.writer());
 
         const tree = try std.zig.parse(self.builder.allocator, out_buffer.items);
 
         const dir = path.dirname(self.full_out_path).?;
-        try std.fs.cwd().makePath(dir);
-        const output_file = std.fs.cwd().createFile(self.full_out_path, .{}) catch unreachable;
+        try cwd.makePath(dir);
+        const output_file = cwd.createFile(self.full_out_path, .{}) catch unreachable;
         _ = try std.zig.render(self.builder.allocator, output_file.outStream(), tree);
     }
 };
