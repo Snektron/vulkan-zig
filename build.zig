@@ -1,25 +1,66 @@
 const std = @import("std");
 const vkgen = @import("generator/index.zig");
 const Builder = std.build.Builder;
-const FmtStep = std.build.FmtStep;
+const path = std.fs.path;
 
-pub fn generateVk(b: *Builder) []const u8 {
-    const spec = std.fs.cwd().readFileAlloc(b.allocator, "examples/vk.xml", std.math.maxInt(usize)) catch unreachable;
-    const output = std.fs.path.join(
-        b.allocator,
-        &[_][]const u8{b.cache_root, "vk.zig"},
-    ) catch unreachable;
+const Resources = struct {
+    builder: *Builder,
+    wfs: *std.build.WriteFileStep,
+    data: std.ArrayList(u8),
 
-    const output_file = std.fs.cwd().createFile(output, .{}) catch unreachable;
-    defer output_file.close();
-    vkgen.generateVk(b.allocator, spec, output_file.writer()) catch unreachable;
+    fn init(builder: *Builder) *Resources {
+        const res = builder.allocator.create(Resources) catch unreachable;
+        res.* = .{
+            .builder = builder,
+            .wfs = builder.addWriteFiles(),
+            .data = std.ArrayList(u8).init(builder.allocator),
+        };
+        return res;
+    }
 
-    return output;
-}
+    fn addShader(self: *Resources, shader: []const u8) void {
+        const spv_name = std.mem.join(
+            self.builder.allocator,
+            "",
+            &[_][]const u8{shader, ".spv"},
+        ) catch unreachable;
+        const dst = path.join(
+            self.builder.allocator,
+            &[_][]const u8{self.builder.cache_root, "test.frag.spv"}
+        ) catch unreachable;
+
+        const src = path.join(
+            self.builder.allocator,
+            &[_][]const u8{self.builder.build_root, shader}
+        ) catch unreachable;
+
+        const compile_step = self.builder.addSystemCommand(&[_][]const u8{
+            "glslc",
+            "--target-env=vulkan1.2",
+            src,
+            "-o",
+            dst
+        });
+
+        self.wfs.step.dependOn(&compile_step.step);
+
+        const writer = self.data.writer();
+        writer.print("const @\"{}\" = @embedFile(\"{}\");", .{src, dst}) catch unreachable;
+    }
+
+    fn finalize(self: *Resources) *std.build.WriteFileStep {
+        self.wfs.add("resources.zig", self.data.toOwnedSlice());
+        return self.wfs;
+    }
+};
 
 pub fn build(b: *Builder) void {
     var test_step = b.step("test", "Run all the tests");
     test_step.dependOn(&b.addTest("generator/index.zig").step);
+
+    const res = Resources.init(b);
+    res.addShader("examples/shaders/test.frag");
+    const wfs = res.finalize();
 
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
@@ -29,11 +70,11 @@ pub fn build(b: *Builder) void {
     example_exe.install();
     example_exe.linkSystemLibrary("c");
     example_exe.linkSystemLibrary("glfw");
+    example_exe.step.dependOn(&wfs.step);
 
-    const vk_path = generateVk(b);
-    const fmt_step = b.addFmt(&[_][]const u8{vk_path});
-    example_exe.step.dependOn(&fmt_step.step);
-    example_exe.addPackagePath("vulkan", vk_path);
+    const gen_step = vkgen.VkGenerateStep.init(b, "examples/vk.xml", "vk.zig");
+    example_exe.step.dependOn(&gen_step.step);
+    example_exe.addPackagePath("vulkan", gen_step.full_out_path);
 
     const example_run_cmd = example_exe.run();
     example_run_cmd.step.dependOn(b.getInstallStep());
