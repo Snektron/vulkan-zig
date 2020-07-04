@@ -50,11 +50,7 @@ const DeviceDispatch = struct {
     vkDestroyCommandPool: vk.PfnDestroyCommandPool,
     vkAllocateCommandBuffers: vk.PfnAllocateCommandBuffers,
     vkFreeCommandBuffers: vk.PfnFreeCommandBuffers,
-    vkBeginCommandBuffer: vk.PfnBeginCommandBuffer,
-    vkCmdClearColorImage: vk.PfnCmdClearColorImage,
-    vkEndCommandBuffer: vk.PfnEndCommandBuffer,
     vkQueueWaitIdle: vk.PfnQueueWaitIdle,
-    vkCmdPipelineBarrier: vk.PfnCmdPipelineBarrier,
     vkCreateShaderModule: vk.PfnCreateShaderModule,
     vkDestroyShaderModule: vk.PfnDestroyShaderModule,
     vkCreatePipelineLayout: vk.PfnCreatePipelineLayout,
@@ -65,6 +61,12 @@ const DeviceDispatch = struct {
     vkDestroyPipeline: vk.PfnDestroyPipeline,
     vkCreateFramebuffer: vk.PfnCreateFramebuffer,
     vkDestroyFramebuffer: vk.PfnDestroyFramebuffer,
+    vkBeginCommandBuffer: vk.PfnBeginCommandBuffer,
+    vkEndCommandBuffer: vk.PfnEndCommandBuffer,
+    vkCmdBeginRenderPass: vk.PfnCmdBeginRenderPass,
+    vkCmdEndRenderPass: vk.PfnCmdEndRenderPass,
+    vkCmdBindPipeline: vk.PfnCmdBindPipeline,
+    vkCmdDraw: vk.PfnCmdDraw,
     usingnamespace vk.DeviceWrapper(@This());
 };
 

@@ -46,7 +46,7 @@ pub fn main() !void {
     const render_pass = try createRenderPass(&gc, swapchain);
     defer gc.vkd.destroyRenderPass(gc.dev, render_pass, null);
 
-    const pipeline = try createPipeline(&gc, extent, pipeline_layout, render_pass);
+    var pipeline = try createPipeline(&gc, extent, pipeline_layout, render_pass);
     defer gc.vkd.destroyPipeline(gc.dev, pipeline, null);
 
     var framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
@@ -58,7 +58,15 @@ pub fn main() !void {
     }, null);
     defer gc.vkd.destroyCommandPool(gc.dev, pool, null);
 
-    var cmdbufs = try createCommandBuffers(&gc, pool, allocator, swapchain);
+    var cmdbufs = try createCommandBuffers(
+        &gc,
+        pool,
+        allocator,
+        swapchain.extent,
+        render_pass,
+        pipeline,
+        framebuffers
+    );
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
@@ -77,11 +85,22 @@ pub fn main() !void {
             extent.height = @intCast(u32, h);
             try swapchain.recreate(extent);
 
+            gc.vkd.destroyPipeline(gc.dev, pipeline, null);
+            pipeline = try createPipeline(&gc, extent, pipeline_layout, render_pass);
+
             destroyFramebuffers(&gc, allocator, framebuffers);
             framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
 
             destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
-            cmdbufs = try createCommandBuffers(&gc, pool, allocator, swapchain);
+            cmdbufs = try createCommandBuffers(
+                &gc,
+                pool,
+                allocator,
+                swapchain.extent,
+                render_pass,
+                pipeline,
+                framebuffers
+            );
         }
 
         c.glfwSwapBuffers(window);
@@ -95,9 +114,12 @@ fn createCommandBuffers(
     gc: *const GraphicsContext,
     pool: vk.CommandPool,
     allocator: *Allocator,
-    swapchain: Swapchain,
+    extent: vk.Extent2D,
+    render_pass: vk.RenderPass,
+    pipeline: vk.Pipeline,
+    framebuffers: []vk.Framebuffer,
 ) ![]vk.CommandBuffer {
-    const cmdbufs = try allocator.alloc(vk.CommandBuffer, swapchain.swap_images.len);
+    const cmdbufs = try allocator.alloc(vk.CommandBuffer, framebuffers.len);
     errdefer allocator.free(cmdbufs);
 
     try gc.vkd.allocateCommandBuffers(gc.dev, .{
@@ -107,51 +129,31 @@ fn createCommandBuffers(
     }, cmdbufs.ptr);
     errdefer gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, cmdbufs.len), cmdbufs.ptr);
 
-    const subresource_range = vk.ImageSubresourceRange{
-        .aspect_mask = .{.color_bit = true},
-        .base_mip_level = 0,
-        .level_count = 1,
-        .base_array_layer = 0,
-        .layer_count = 1,
+    const clear = vk.ClearValue{
+        .color = .{.float_32 = .{0, 0, 0, 1}},
     };
 
-    const color = vk.ClearColorValue{.float_32 = .{1, 0, 1, 1}};
-
     for (cmdbufs) |cmdbuf, i| {
-        const image = swapchain.swap_images[i].image;
-
         try gc.vkd.beginCommandBuffer(cmdbuf, .{
             .flags = .{},
             .p_inheritance_info = null,
         });
 
-        imageTransition(
-            gc,
-            cmdbuf,
-            image,
-            subresource_range,
-            .{.layout = .@"undefined", .stage = .{.top_of_pipe_bit = true}},
-            .{.layout = .general, .stage = .{.top_of_pipe_bit = true}},
-        );
+        gc.vkd.cmdBeginRenderPass(cmdbuf, .{
+            .render_pass = render_pass,
+            .framebuffer = framebuffers[i],
+            .render_area = .{
+                .offset = .{.x = 0, .y = 0},
+                .extent = extent,
+            },
+            .clear_value_count = 1,
+            .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
+        }, .@"inline");
 
-        gc.vkd.cmdClearColorImage(
-            cmdbuf,
-            image,
-            .general,
-            color,
-            1,
-            @ptrCast([*]const vk.ImageSubresourceRange, &subresource_range),
-        );
+        gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
+        gc.vkd.cmdDraw(cmdbuf, 3, 1, 0, 0);
 
-        imageTransition(
-            gc,
-            cmdbuf,
-            image,
-            subresource_range,
-            .{.layout = .general, .stage = .{.top_of_pipe_bit = true}},
-            .{.layout = .present_src_khr, .stage = .{.bottom_of_pipe_bit = true}},
-        );
-
+        gc.vkd.cmdEndRenderPass(cmdbuf);
         try gc.vkd.endCommandBuffer(cmdbuf);
     }
 
@@ -374,7 +376,7 @@ fn createPipeline(
         .p_multisample_state = &pmsci,
         .p_depth_stencil_state = null,
         .p_color_blend_state = &pcbsci,
-        .p_dynamic_state = &pdsci,
+        .p_dynamic_state = null, //&pdsci,
         .layout = layout,
         .render_pass = render_pass,
         .subpass = 0,
@@ -391,37 +393,4 @@ fn createPipeline(
         @ptrCast([*]vk.Pipeline, &pipeline),
     );
     return pipeline;
-}
-
-const ImageState = struct {
-    layout: vk.ImageLayout,
-    stage: vk.PipelineStageFlags,
-    access_mask: vk.AccessFlags = .{},
-};
-
-fn imageTransition(
-    gc: *const GraphicsContext,
-    cmdbuf: vk.CommandBuffer,
-    image: vk.Image,
-    subresource_range: vk.ImageSubresourceRange,
-    src: ImageState,
-    dst: ImageState
-) void {
-    const barrier = vk.ImageMemoryBarrier{
-        .src_access_mask = src.access_mask,
-        .dst_access_mask = dst.access_mask,
-        .old_layout = src.layout,
-        .new_layout = dst.layout,
-        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
-        .image = image,
-        .subresource_range = subresource_range,
-    };
-
-    gc.vkd.cmdPipelineBarrier(
-        cmdbuf, src.stage, dst.stage, .{},
-        0, undefined,
-        0, undefined,
-        1, @ptrCast([*]const vk.ImageMemoryBarrier, &barrier)
-    );
 }
