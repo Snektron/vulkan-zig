@@ -15,7 +15,7 @@ pub const ResourceGenStep = struct {
         const self = builder.allocator.create(ResourceGenStep) catch unreachable;
         self.* = .{
             .step = Step.init(.Custom, "resources", builder.allocator, make),
-            .shader_step = vkgen.ShaderCompileStep.init(builder, "glslc"),
+            .shader_step = vkgen.ShaderCompileStep.init(builder, &[_][]const u8{"glslc", "--target-env=vulkan1.2"}),
             .builder = builder,
             .full_out_path = path.join(builder.allocator, &[_][]const u8{
                 self.builder.build_root,
@@ -32,7 +32,7 @@ pub const ResourceGenStep = struct {
     pub fn addShader(self: *ResourceGenStep, name: []const u8, source: []const u8) void {
         self.resources.writer().print(
             "pub const {} = @embedFile(\"{}\");\n",
-            .{name, self.shader_step.add("examples/shaders/test.frag")}
+            .{name, self.shader_step.add(source)}
         ) catch unreachable;
     }
 
@@ -64,7 +64,8 @@ pub fn build(b: *Builder) void {
     example_exe.addPackagePath("vulkan", gen.full_out_path);
 
     const res = ResourceGenStep.init(b, "resources.zig");
-    res.addShader("test_frag", "examples/shaders/test.frag");
+    res.addShader("triangle_vert", "examples/shaders/triangle.vert");
+    res.addShader("triangle_frag", "examples/shaders/triangle.frag");
     example_exe.step.dependOn(&res.step);
     example_exe.addPackagePath("resources", res.full_out_path);
 

@@ -11,15 +11,15 @@ pub const ShaderCompileStep = struct {
 
     step: Step,
     builder: *Builder,
-    glslc_path: []const u8,
+    glslc_cmd: []const []const u8,
     shaders: std.ArrayList(Shader),
 
-    pub fn init(builder: *Builder, glslc_path: []const u8) *ShaderCompileStep {
+    pub fn init(builder: *Builder, glslc_cmd: []const []const u8) *ShaderCompileStep {
         const self = builder.allocator.create(ShaderCompileStep) catch unreachable;
         self.* = .{
             .step = Step.init(.Custom, "shader-compile", builder.allocator, make),
             .builder = builder,
-            .glslc_path = glslc_path,
+            .glslc_cmd = glslc_cmd,
             .shaders = std.ArrayList(Shader).init(builder.allocator),
         };
         return self;
@@ -40,15 +40,18 @@ pub const ShaderCompileStep = struct {
         const self = @fieldParentPtr(ShaderCompileStep, "step", step);
         const cwd = std.fs.cwd();
 
+        const cmd = try self.builder.allocator.alloc([]const u8, self.glslc_cmd.len + 3);
+        for (self.glslc_cmd) |part, i| {
+            cmd[i] = part;
+        }
+        cmd[cmd.len - 2] = "-o";
+
         for (self.shaders.items) |shader| {
             const dir = path.dirname(shader.full_out_path).?;
             try cwd.makePath(dir);
-            try self.builder.spawnChild(&[_][]const u8{
-                self.glslc_path,
-                shader.source_path,
-                "-o",
-                shader.full_out_path,
-            });
+            cmd[cmd.len - 3] = shader.source_path;
+            cmd[cmd.len - 1] = shader.full_out_path;
+            try self.builder.spawnChild(cmd);
         }
     }
 };
