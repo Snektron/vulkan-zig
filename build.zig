@@ -52,25 +52,25 @@ pub fn build(b: *Builder) void {
 
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
-    const example_exe = b.addExecutable("example", "examples/main.zig");
-    example_exe.setTarget(target);
-    example_exe.setBuildMode(mode);
-    example_exe.install();
-    example_exe.linkSystemLibrary("c");
-    example_exe.linkSystemLibrary("glfw");
+    const triangle_exe = b.addExecutable("triangle", "examples/triangle.zig");
+    triangle_exe.setTarget(target);
+    triangle_exe.setBuildMode(mode);
+    triangle_exe.install();
+    triangle_exe.linkSystemLibrary("c");
+    triangle_exe.linkSystemLibrary("glfw");
 
     const gen = vkgen.VkGenerateStep.init(b, "examples/vk.xml", "vk.zig");
-    example_exe.step.dependOn(&gen.step);
-    example_exe.addPackagePath("vulkan", gen.full_out_path);
+    triangle_exe.step.dependOn(&gen.step);
+    triangle_exe.addPackagePath("vulkan", gen.full_out_path);
 
     const res = ResourceGenStep.init(b, "resources.zig");
     res.addShader("triangle_vert", "examples/shaders/triangle.vert");
     res.addShader("triangle_frag", "examples/shaders/triangle.frag");
-    example_exe.step.dependOn(&res.step);
-    example_exe.addPackagePath("resources", res.full_out_path);
+    triangle_exe.step.dependOn(&res.step);
+    triangle_exe.addPackagePath("resources", res.full_out_path);
 
-    const example_run_cmd = example_exe.run();
-    example_run_cmd.step.dependOn(b.getInstallStep());
-    const example_run_step = b.step("run-example", "Run the example");
-    example_run_step.dependOn(&example_run_cmd.step);
+    const triangle_run_cmd = triangle_exe.run();
+    triangle_run_cmd.step.dependOn(b.getInstallStep());
+    const triangle_run_step = b.step("run-triangle", "Run the triangle example");
+    triangle_run_step.dependOn(&triangle_run_cmd.step);
 }
