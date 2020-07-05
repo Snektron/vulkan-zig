@@ -173,10 +173,10 @@ pub const Generator = struct {
     fn removePromotedExtensions(self: *Generator) void {
         var write_index: usize = 0;
         for (self.registry.extensions) |ext| {
-            if (ext.promoted_to == .none) {
+            // if (ext.promoted_to == .none) {
                 self.registry.extensions[write_index] = ext;
                 write_index += 1;
-            }
+            // }
         }
         self.registry.extensions.len = write_index;
     }

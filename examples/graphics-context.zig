@@ -24,6 +24,7 @@ const InstanceDispatch = struct {
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR: vk.PfnGetPhysicalDeviceSurfaceCapabilitiesKHR,
     vkGetPhysicalDeviceQueueFamilyProperties: vk.PfnGetPhysicalDeviceQueueFamilyProperties,
     vkGetPhysicalDeviceSurfaceSupportKHR: vk.PfnGetPhysicalDeviceSurfaceSupportKHR,
+    vkGetPhysicalDeviceMemoryProperties: vk.PfnGetPhysicalDeviceMemoryProperties,
     vkGetDeviceProcAddr: vk.PfnGetDeviceProcAddr,
     usingnamespace vk.InstanceWrapper(@This());
 };
@@ -63,12 +64,21 @@ const DeviceDispatch = struct {
     vkDestroyFramebuffer: vk.PfnDestroyFramebuffer,
     vkBeginCommandBuffer: vk.PfnBeginCommandBuffer,
     vkEndCommandBuffer: vk.PfnEndCommandBuffer,
+    vkAllocateMemory: vk.PfnAllocateMemory,
+    vkFreeMemory: vk.PfnFreeMemory,
+    vkCreateBuffer: vk.PfnCreateBuffer,
+    vkDestroyBuffer: vk.PfnDestroyBuffer,
+    vkGetBufferMemoryRequirements: vk.PfnGetBufferMemoryRequirements,
+    vkMapMemory: vk.PfnMapMemory,
+    vkUnmapMemory: vk.PfnUnmapMemory,
+    vkBindBufferMemory: vk.PfnBindBufferMemory,
     vkCmdBeginRenderPass: vk.PfnCmdBeginRenderPass,
     vkCmdEndRenderPass: vk.PfnCmdEndRenderPass,
     vkCmdBindPipeline: vk.PfnCmdBindPipeline,
     vkCmdDraw: vk.PfnCmdDraw,
     vkCmdSetViewport: vk.PfnCmdSetViewport,
     vkCmdSetScissor: vk.PfnCmdSetScissor,
+    vkCmdBindVertexBuffers: vk.PfnCmdBindVertexBuffers,
     usingnamespace vk.DeviceWrapper(@This());
 };
 
@@ -81,6 +91,8 @@ pub const GraphicsContext = struct {
     surface: vk.SurfaceKHR,
     pdev: vk.PhysicalDevice,
     props: vk.PhysicalDeviceProperties,
+    mem_props: vk.PhysicalDeviceMemoryProperties,
+
     dev: vk.Device,
     graphics_queue: Queue,
     present_queue: Queue,
@@ -125,6 +137,8 @@ pub const GraphicsContext = struct {
         self.graphics_queue = Queue.init(self.vkd, self.dev, candidate.queues.graphics_family);
         self.present_queue = Queue.init(self.vkd, self.dev, candidate.queues.graphics_family);
 
+        self.mem_props = self.vki.getPhysicalDeviceMemoryProperties(self.pdev);
+
         return self;
     }
 
@@ -137,6 +151,23 @@ pub const GraphicsContext = struct {
     pub fn deviceName(self: GraphicsContext) []const u8 {
         const len = std.mem.indexOfScalar(u8, &self.props.device_name, 0).?;
         return self.props.device_name[0 .. len];
+    }
+
+    pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
+        for (self.mem_props.memory_types[0 .. self.mem_props.memory_type_count]) |mem_type, i| {
+            if (memory_type_bits & (@as(u32, 1) << @truncate(u5, i)) != 0 and mem_type.property_flags.contains(flags)) {
+                return @truncate(u32, i);
+            }
+        }
+
+        return error.NoSuitableMemoryType;
+    }
+
+    pub fn allocate(self: GraphicsContext, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
+        return try self.vkd.allocateMemory(self.dev, .{
+            .allocation_size = requirements.size,
+            .memory_type_index = try self.findMemoryTypeIndex(requirements.memory_type_bits, flags),
+        }, null);
     }
 };
 

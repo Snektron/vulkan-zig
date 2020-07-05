@@ -2,11 +2,43 @@ const std = @import("std");
 const vk = @import("vulkan");
 const c = @import("c.zig");
 const resources = @import("resources");
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
+const GraphicsContext = @import("graphics-context.zig").GraphicsContext;
 const Swapchain = @import("swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
 
 const app_name = "vulkan-zig example";
+
+const Vertex = struct {
+    const binding_description = vk.VertexInputBindingDescription{
+        .binding = 0,
+        .stride = @sizeOf(Vertex),
+        .input_rate = .vertex,
+    };
+
+    const attribute_description = [_]vk.VertexInputAttributeDescription{
+        .{
+            .binding = 0,
+            .location = 0,
+            .format = .r32g32_sfloat,
+            .offset = @byteOffsetOf(Vertex, "pos"),
+        },
+        .{
+            .binding = 0,
+            .location = 1,
+            .format = .r32g32b32_sfloat,
+            .offset = @byteOffsetOf(Vertex, "color"),
+        },
+    };
+
+    pos: [2]f32,
+    color: [3]f32,
+};
+
+const vertices = [_]Vertex{
+    .{.pos = .{0, -0.5}, .color = .{1, 0, 0}},
+    .{.pos = .{0.5, 0.5}, .color = .{0, 1, 0}},
+    .{.pos = .{-0.5, 0.5}, .color = .{0, 0, 1}},
+};
 
 pub fn main() !void {
     if (c.glfwInit() != c.GLFW_TRUE) return error.GlfwInitFailed;
@@ -52,6 +84,30 @@ pub fn main() !void {
     var framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
     defer destroyFramebuffers(&gc, allocator, framebuffers);
 
+    const buffer = try gc.vkd.createBuffer(gc.dev, .{
+        .flags = .{},
+        .size = @sizeOf(@TypeOf(vertices)),
+        .usage = .{.vertex_buffer_bit = true},
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = undefined,
+    }, null);
+    defer gc.vkd.destroyBuffer(gc.dev, buffer, null);
+    const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, buffer);
+    const memory = try gc.allocate(mem_reqs, .{.host_visible_bit = true, .host_coherent_bit = true});
+    defer gc.vkd.freeMemory(gc.dev, memory, null);
+    try gc.vkd.bindBufferMemory(gc.dev, buffer, memory, 0);
+
+    {
+        const data = try gc.vkd.mapMemory(gc.dev, memory, 0, vk.WHOLE_SIZE, .{});
+        defer gc.vkd.unmapMemory(gc.dev, memory);
+
+        const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
+        for (vertices) |vertex, i| {
+            gpu_vertices[i] = vertex;
+        }
+    }
+
     const pool = try gc.vkd.createCommandPool(gc.dev, .{
         .flags = .{},
         .queue_family_index = gc.graphics_queue.family,
@@ -62,6 +118,7 @@ pub fn main() !void {
         &gc,
         pool,
         allocator,
+        buffer,
         swapchain.extent,
         render_pass,
         pipeline,
@@ -93,6 +150,7 @@ pub fn main() !void {
                 &gc,
                 pool,
                 allocator,
+                buffer,
                 swapchain.extent,
                 render_pass,
                 pipeline,
@@ -111,6 +169,7 @@ fn createCommandBuffers(
     gc: *const GraphicsContext,
     pool: vk.CommandPool,
     allocator: *Allocator,
+    buffer: vk.Buffer,
     extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     pipeline: vk.Pipeline,
@@ -165,7 +224,9 @@ fn createCommandBuffers(
         }, .@"inline");
 
         gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
-        gc.vkd.cmdDraw(cmdbuf, 3, 1, 0, 0);
+        const offset = [_]vk.DeviceSize{0};
+        gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &buffer), &offset);
+        gc.vkd.cmdDraw(cmdbuf, vertices.len, 1, 0, 0);
 
         gc.vkd.cmdEndRenderPass(cmdbuf);
         try gc.vkd.endCommandBuffer(cmdbuf);
@@ -293,10 +354,10 @@ fn createPipeline(
 
     const pvisci = vk.PipelineVertexInputStateCreateInfo{
         .flags = .{},
-        .vertex_binding_description_count = 0,
-        .p_vertex_binding_descriptions = undefined,
-        .vertex_attribute_description_count = 0,
-        .p_vertex_attribute_descriptions = undefined,
+        .vertex_binding_description_count = 1,
+        .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &Vertex.binding_description),
+        .vertex_attribute_description_count = Vertex.attribute_description.len,
+        .p_vertex_attribute_descriptions = &Vertex.attribute_description,
     };
 
     const piasci = vk.PipelineInputAssemblyStateCreateInfo{

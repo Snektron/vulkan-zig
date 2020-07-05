@@ -597,7 +597,7 @@ fn Renderer(comptime WriterType: type) type {
 
                 try self.writer.writeAll("pub const ");
                 try self.renderEnumFieldName(name, field.name);
-                try self.writer.writeAll(" = ");
+                try self.writer.writeAll(" = .");
                 try self.renderEnumFieldName(name, field.value.alias.name);
                 try self.writer.writeAll(";");
             }
@@ -1033,13 +1033,13 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(") {\n");
 
             for (command.success_codes) |success| {
-                try self.writer.writeByte('.');
+                try self.writer.writeAll("Result.");
                 try self.renderEnumFieldName("VkResult", success);
                 try self.writer.writeAll(" => {},");
             }
 
             for (command.error_codes) |err| {
-                try self.writer.writeByte('.');
+                try self.writer.writeAll("Result.");
                 try self.renderEnumFieldName("VkResult", err);
                 try self.writer.writeAll(" => return error.");
                 try self.renderResultAsErrorName(err);
