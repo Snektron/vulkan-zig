@@ -48,8 +48,7 @@ const DeclarationResolver = struct {
     }
 
     fn deinit(self: *DeclarationResolver) void {
-        var it = self.enum_extensions.iterator();
-        while (it.next()) |entry| {
+        for (self.enum_extensions.items()) |entry| {
             entry.value.deinit();
         }
 
