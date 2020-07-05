@@ -88,7 +88,7 @@ pub fn getAuthorTag(id: []const u8, tags: []const reg.Tag) ?[]const u8 {
 
 pub fn stripAuthorTag(id: []const u8, tags: []const reg.Tag) []const u8 {
     if (getAuthorTag(id, tags)) |tag| {
-        return id[0 .. id.len - tag.len];
+        return mem.trimRight(u8, id[0 .. id.len - tag.len], "_");
     }
 
     return id;

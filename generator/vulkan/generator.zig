@@ -3,7 +3,9 @@ const reg = @import("registry.zig");
 const xml = @import("../xml.zig");
 const renderRegistry = @import("render.zig").render;
 const parseXml = @import("parse.zig").parseXml;
-const Allocator = std.mem.Allocator;
+const util = @import("util.zig");
+const mem = std.mem;
+const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
 fn cmpFeatureLevels(a: FeatureLevel, b: FeatureLevel) std.math.Order {
@@ -27,21 +29,21 @@ const DeclarationResolver = struct {
     const EnumExtensionMap = std.StringHashMap(std.ArrayList(reg.Enum.Field));
     const FieldSet = std.StringHashMap(void);
 
-    allocator: *Allocator,
+    gpa: *Allocator,
     reg_arena: *Allocator,
     registry: *reg.Registry,
     declarations: DeclarationSet,
     enum_extensions: EnumExtensionMap,
     field_set: FieldSet,
 
-    fn init(allocator: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) DeclarationResolver {
+    fn init(gpa: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) DeclarationResolver {
         return .{
-            .allocator = allocator,
+            .gpa = gpa,
             .reg_arena = reg_arena,
             .registry = registry,
-            .declarations = DeclarationSet.init(allocator),
-            .enum_extensions = EnumExtensionMap.init(allocator),
-            .field_set = FieldSet.init(allocator),
+            .declarations = DeclarationSet.init(gpa),
+            .enum_extensions = EnumExtensionMap.init(gpa),
+            .field_set = FieldSet.init(gpa),
         };
     }
 
@@ -59,7 +61,7 @@ const DeclarationResolver = struct {
     fn putEnumExtension(self: *DeclarationResolver, enum_name: []const u8, field: reg.Enum.Field) !void {
         const res = try self.enum_extensions.getOrPut(enum_name);
         if (!res.found_existing) {
-            res.kv.value = std.ArrayList(reg.Enum.Field).init(self.allocator);
+            res.kv.value = std.ArrayList(reg.Enum.Field).init(self.gpa);
         }
 
         try res.kv.value.append(field);
@@ -152,6 +154,132 @@ const DeclarationResolver = struct {
     }
 };
 
+const TagFixerUpper = struct {
+    const NameInfo = struct {
+        tagged_name: ?[]const u8,
+        tagless_name_exists: bool,
+    };
+
+    gpa: *Allocator,
+    registry: *reg.Registry,
+    names: std.StringHashMap(NameInfo),
+
+    fn init(gpa: *Allocator, registry: *reg.Registry) TagFixerUpper {
+        return .{
+            .gpa = gpa,
+            .registry = registry,
+            .names = std.StringHashMap(NameInfo).init(gpa),
+        };
+    }
+
+    fn deinit(self: TagFixerUpper) void {
+        self.names.deinit();
+    }
+
+    fn insertName(self: *TagFixerUpper, name: []const u8) !void {
+        const tagless = util.stripAuthorTag(name, self.registry.tags);
+        const is_tagged = tagless.len != name.len;
+        const result = try self.names.getOrPut(tagless);
+
+        if (result.found_existing) {
+            if (is_tagged) {
+                result.kv.value.tagged_name = name;
+            } else {
+                result.kv.value.tagless_name_exists = true;
+            }
+        } else {
+            result.kv.value = .{
+                .tagged_name = if (is_tagged) name else null,
+                .tagless_name_exists = !is_tagged,
+            };
+        }
+    }
+
+    fn extractNames(self: *TagFixerUpper) !void {
+        for (self.registry.decls) |decl| {
+            try self.insertName(decl.name);
+
+            switch (decl.decl_type) {
+                .enumeration => |enumeration| {
+                    for (enumeration.fields) |field| {
+                        try self.insertName(field.name);
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+
+    fn fixName(self: *TagFixerUpper, name: *[]const u8) !void {
+        const tagless = util.stripAuthorTag(name.*, self.registry.tags);
+        const info = self.names.getValue(tagless) orelse return error.InvalidRegistry;
+        if (info.tagless_name_exists) {
+            name.* = tagless;
+        } else if (info.tagged_name) |tagged| {
+            name.* = tagged;
+        } else {
+            return error.InvalidRegistry;
+        }
+    }
+
+    fn fixCommand(self: *TagFixerUpper, command: *reg.Command) !void {
+        for (command.params) |*param| {
+            try self.fixTypeInfo(&param.param_type);
+        }
+
+        try self.fixTypeInfo(command.return_type);
+        for (command.success_codes) |*code| {
+            try self.fixName(code);
+        }
+
+        for (command.error_codes) |*code| {
+            try self.fixName(code);
+        }
+    }
+
+    fn fixTypeInfo(self: *TagFixerUpper, type_info: *reg.TypeInfo) error{InvalidRegistry}!void {
+        switch (type_info.*) {
+            .name => |*name| try self.fixName(name),
+            .command_ptr => |*command| try self.fixCommand(command),
+            .pointer => |ptr| try self.fixTypeInfo(ptr.child),
+            .array => |arr| try self.fixTypeInfo(arr.child),
+        }
+    }
+
+    fn fixNames(self: *TagFixerUpper) !void {
+        for (self.registry.decls) |*decl| {
+            switch (decl.decl_type) {
+                .container => |*container| {
+                    for (container.fields) |*field| {
+                        try self.fixTypeInfo(&field.field_type);
+                    }
+                },
+                .enumeration => |*enumeration| {
+                    for (enumeration.fields) |*field| {
+                        if (field.value == .alias) {
+                            try self.fixName(&field.value.alias.name);
+                        }
+                    }
+                },
+                .bitmask => |*bitmask| {
+                    if (bitmask.bits_enum) |*bits| {
+                        try self.fixName(bits);
+                    }
+                },
+                .command => |*command| try self.fixCommand(command),
+                .alias => |*alias| try self.fixName(&alias.name),
+                .typedef => |*type_info| try self.fixTypeInfo(type_info),
+                else => {},
+            }
+        }
+    }
+
+    fn fixup(self: *TagFixerUpper) !void {
+        try self.extractNames();
+        try self.fixNames();
+    }
+};
+
 pub const Generator = struct {
     gpa: *Allocator,
     reg_arena: std.heap.ArenaAllocator,
@@ -173,10 +301,10 @@ pub const Generator = struct {
     fn removePromotedExtensions(self: *Generator) void {
         var write_index: usize = 0;
         for (self.registry.extensions) |ext| {
-            // if (ext.promoted_to == .none) {
+            if (ext.promoted_to == .none) {
                 self.registry.extensions[write_index] = ext;
                 write_index += 1;
-            // }
+            }
         }
         self.registry.extensions.len = write_index;
     }
@@ -186,6 +314,12 @@ pub const Generator = struct {
         var resolver = DeclarationResolver.init(self.gpa, &self.reg_arena.allocator, &self.registry);
         defer resolver.deinit();
         try resolver.resolve();
+    }
+
+    fn fixupTags(self: *Generator) !void {
+        var fixer_upper = TagFixerUpper.init(self.gpa, &self.registry);
+        defer fixer_upper.deinit();
+        try fixer_upper.fixup();
     }
 
     fn render(self: *Generator, out_stream: var) !void {
@@ -202,5 +336,6 @@ pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: var) !void 
 
     gen.removePromotedExtensions();
     try gen.resolveDeclarations();
+    try gen.fixupTags();
     try gen.render(writer);
 }

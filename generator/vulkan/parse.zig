@@ -377,7 +377,7 @@ fn parseCommands(allocator: *Allocator, out: []registry.Declaration, commands_el
     return i;
 }
 
-fn splitCommaAlloc(allocator: *Allocator, text: []const u8) ![]const []const u8 {
+fn splitCommaAlloc(allocator: *Allocator, text: []const u8) ![][]const u8 {
     var n_codes: usize = 1;
     for (text) |c| {
         if (c == ',') n_codes += 1;

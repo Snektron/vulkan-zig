@@ -1,6 +1,6 @@
 const std = @import("std");
 const reg = @import("registry.zig");
-const util = @import("render-util.zig");
+const util = @import("util.zig");
 const cparse = @import("c-parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
@@ -1033,13 +1033,13 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(") {\n");
 
             for (command.success_codes) |success| {
-                try self.writer.writeAll("Result.");
+                try self.writer.writeByte('.');
                 try self.renderEnumFieldName("VkResult", success);
                 try self.writer.writeAll(" => {},");
             }
 
             for (command.error_codes) |err| {
-                try self.writer.writeAll("Result.");
+                try self.writer.writeByte('.');
                 try self.renderEnumFieldName("VkResult", err);
                 try self.writer.writeAll(" => return error.");
                 try self.renderResultAsErrorName(err);

@@ -105,8 +105,8 @@ pub const Command = struct {
 
     params: []Param,
     return_type: *TypeInfo,
-    success_codes: []const []const u8,
-    error_codes: []const []const u8,
+    success_codes: [][]const u8,
+    error_codes: [][]const u8,
 };
 
 pub const Pointer = struct {
