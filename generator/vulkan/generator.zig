@@ -47,10 +47,10 @@ const DeclarationResolver = struct {
         };
     }
 
-    fn deinit(self: DeclarationResolver) void {
+    fn deinit(self: *DeclarationResolver) void {
         var it = self.enum_extensions.iterator();
-        while (it.next()) |kv| {
-            kv.value.deinit();
+        while (it.next()) |entry| {
+            entry.value.deinit();
         }
 
         self.field_set.deinit();
@@ -61,10 +61,10 @@ const DeclarationResolver = struct {
     fn putEnumExtension(self: *DeclarationResolver, enum_name: []const u8, field: reg.Enum.Field) !void {
         const res = try self.enum_extensions.getOrPut(enum_name);
         if (!res.found_existing) {
-            res.kv.value = std.ArrayList(reg.Enum.Field).init(self.gpa);
+            res.entry.value = std.ArrayList(reg.Enum.Field).init(self.gpa);
         }
 
-        try res.kv.value.append(field);
+        try res.entry.value.append(field);
     }
 
     fn addRequire(self: *DeclarationResolver, req: reg.Require) !void {
@@ -85,24 +85,24 @@ const DeclarationResolver = struct {
         // If there are no extensions for this enum, assume its valid.
         const extensions = self.enum_extensions.get(name) orelse return;
 
-        self.field_set.clear();
+        self.field_set.clearRetainingCapacity();
 
-        const n_fields_upper_bound = base_enum.fields.len + extensions.value.items.len;
+        const n_fields_upper_bound = base_enum.fields.len + extensions.items.len;
         const new_fields = try self.reg_arena.alloc(reg.Enum.Field, n_fields_upper_bound);
         var i: usize = 0;
 
         for (base_enum.fields) |field| {
-            const existing = try self.field_set.put(field.name, {});
-            if (existing == null) {
+            const res = try self.field_set.getOrPut(field.name);
+            if (!res.found_existing) {
                 new_fields[i] = field;
                 i += 1;
             }
         }
 
         // Assume that if a field name clobbers, the value is the same
-        for (extensions.value.items) |field| {
-            const existing = try self.field_set.put(field.name, {});
-            if (existing == null) {
+        for (extensions.items) |field| {
+            const res = try self.field_set.getOrPut(field.name);
+            if (!res.found_existing) {
                 new_fields[i] = field;
                 i += 1;
             }
@@ -172,7 +172,7 @@ const TagFixerUpper = struct {
         };
     }
 
-    fn deinit(self: TagFixerUpper) void {
+    fn deinit(self: *TagFixerUpper) void {
         self.names.deinit();
     }
 
@@ -183,12 +183,12 @@ const TagFixerUpper = struct {
 
         if (result.found_existing) {
             if (is_tagged) {
-                result.kv.value.tagged_name = name;
+                result.entry.value.tagged_name = name;
             } else {
-                result.kv.value.tagless_name_exists = true;
+                result.entry.value.tagless_name_exists = true;
             }
         } else {
-            result.kv.value = .{
+            result.entry.value = .{
                 .tagged_name = if (is_tagged) name else null,
                 .tagless_name_exists = !is_tagged,
             };
@@ -212,7 +212,7 @@ const TagFixerUpper = struct {
 
     fn fixName(self: *TagFixerUpper, name: *[]const u8) !void {
         const tagless = util.stripAuthorTag(name.*, self.registry.tags);
-        const info = self.names.getValue(tagless) orelse return error.InvalidRegistry;
+        const info = self.names.get(tagless) orelse return error.InvalidRegistry;
         if (info.tagless_name_exists) {
             name.* = tagless;
         } else if (info.tagged_name) |tagged| {
