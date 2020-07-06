@@ -79,6 +79,7 @@ const DeviceDispatch = struct {
     vkCmdSetViewport: vk.PfnCmdSetViewport,
     vkCmdSetScissor: vk.PfnCmdSetScissor,
     vkCmdBindVertexBuffers: vk.PfnCmdBindVertexBuffers,
+    vkCmdCopyBuffer: vk.PfnCmdCopyBuffer,
     usingnamespace vk.DeviceWrapper(@This());
 };
 

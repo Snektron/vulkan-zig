@@ -84,35 +84,27 @@ pub fn main() !void {
     var framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
     defer destroyFramebuffers(&gc, allocator, framebuffers);
 
+    const pool = try gc.vkd.createCommandPool(gc.dev, .{
+        .flags = .{},
+        .queue_family_index = gc.graphics_queue.family,
+    }, null);
+    defer gc.vkd.destroyCommandPool(gc.dev, pool, null);
+
     const buffer = try gc.vkd.createBuffer(gc.dev, .{
         .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
-        .usage = .{.vertex_buffer_bit = true},
+        .usage = .{.transfer_dst_bit = true, .vertex_buffer_bit = true},
         .sharing_mode = .exclusive,
         .queue_family_index_count = 0,
         .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, buffer, null);
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, buffer);
-    const memory = try gc.allocate(mem_reqs, .{.host_visible_bit = true, .host_coherent_bit = true});
+    const memory = try gc.allocate(mem_reqs, .{.device_local_bit = true});
     defer gc.vkd.freeMemory(gc.dev, memory, null);
     try gc.vkd.bindBufferMemory(gc.dev, buffer, memory, 0);
 
-    {
-        const data = try gc.vkd.mapMemory(gc.dev, memory, 0, vk.WHOLE_SIZE, .{});
-        defer gc.vkd.unmapMemory(gc.dev, memory);
-
-        const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
-        for (vertices) |vertex, i| {
-            gpu_vertices[i] = vertex;
-        }
-    }
-
-    const pool = try gc.vkd.createCommandPool(gc.dev, .{
-        .flags = .{},
-        .queue_family_index = gc.graphics_queue.family,
-    }, null);
-    defer gc.vkd.destroyCommandPool(gc.dev, pool, null);
+    try uploadVertices(&gc, pool, buffer, memory);
 
     var cmdbufs = try createCommandBuffers(
         &gc,
@@ -163,6 +155,70 @@ pub fn main() !void {
 
         try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
     }
+}
+
+fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer, memory: vk.DeviceMemory) !void {
+    const staging_buffer = try gc.vkd.createBuffer(gc.dev, .{
+        .flags = .{},
+        .size = @sizeOf(@TypeOf(vertices)),
+        .usage = .{.transfer_src_bit = true},
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = undefined,
+    }, null);
+    defer gc.vkd.destroyBuffer(gc.dev, staging_buffer, null);
+    const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, staging_buffer);
+    const staging_memory = try gc.allocate(mem_reqs, .{.host_visible_bit = true, .host_coherent_bit = true});
+    defer gc.vkd.freeMemory(gc.dev, staging_memory, null);
+    try gc.vkd.bindBufferMemory(gc.dev, staging_buffer, staging_memory, 0);
+
+    {
+        const data = try gc.vkd.mapMemory(gc.dev, staging_memory, 0, vk.WHOLE_SIZE, .{});
+        defer gc.vkd.unmapMemory(gc.dev, staging_memory);
+
+        const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
+        for (vertices) |vertex, i| {
+            gpu_vertices[i] = vertex;
+        }
+    }
+
+    try copyBuffer(gc, pool, buffer, staging_buffer, @sizeOf(@TypeOf(vertices)));
+}
+
+fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, src: vk.Buffer, size: vk.DeviceSize) !void {
+    var cmdbuf: vk.CommandBuffer = undefined;
+    try gc.vkd.allocateCommandBuffers(gc.dev, .{
+        .command_pool = pool,
+        .level = .primary,
+        .command_buffer_count = 1,
+    }, @ptrCast([*]vk.CommandBuffer, &cmdbuf));
+    defer gc.vkd.freeCommandBuffers(gc.dev, pool, 1, @ptrCast([*]const vk.CommandBuffer, &cmdbuf));
+
+    try gc.vkd.beginCommandBuffer(cmdbuf, .{
+        .flags = .{.one_time_submit_bit = true},
+        .p_inheritance_info = null,
+    });
+
+    const region = vk.BufferCopy{
+        .src_offset = 0,
+        .dst_offset = 0,
+        .size = size,
+    };
+    gc.vkd.cmdCopyBuffer(cmdbuf, src, dst, 1, @ptrCast([*]const vk.BufferCopy, &region));
+
+    try gc.vkd.endCommandBuffer(cmdbuf);
+
+    const si = vk.SubmitInfo{
+        .wait_semaphore_count = 0,
+        .p_wait_semaphores = undefined,
+        .p_wait_dst_stage_mask = undefined,
+        .command_buffer_count = 1,
+        .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
+        .signal_semaphore_count = 0,
+        .p_signal_semaphores = undefined,
+    };
+    try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &si), .null_handle);
+    try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
 }
 
 fn createCommandBuffers(
