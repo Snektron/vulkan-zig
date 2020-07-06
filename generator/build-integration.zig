@@ -3,17 +3,30 @@ const path = std.fs.path;
 const Builder = std.build.Builder;
 const Step = std.build.Step;
 
+/// Utility functionality to help with compiling shaders from build.zig.
+/// Invokes glslc (or another shader compiler passed to `init`) for each shader
+/// added via `addShader`.
 pub const ShaderCompileStep = struct {
+    /// Structure representing a shader to be compiled.
     const Shader = struct {
+        /// The path to the shader, relative to the current build root.
         source_path: []const u8,
+
+        /// The full output path where the compiled shader binary is placed.
         full_out_path: []const u8,
     };
 
     step: Step,
     builder: *Builder,
+
+    /// The command and optional arguments used to invoke the shader compiler.
     glslc_cmd: []const []const u8,
+
+    /// List of shaders that are to be compiled.
     shaders: std.ArrayList(Shader),
 
+    /// Create a ShaderCompilerStep for `builder`. When this step is invoked by the build
+    /// system, `<glcl_cmd...> <shader_source> -o <dst_addr>` is invoked for each shader.
     pub fn init(builder: *Builder, glslc_cmd: []const []const u8) *ShaderCompileStep {
         const self = builder.allocator.create(ShaderCompileStep) catch unreachable;
         self.* = .{
@@ -25,6 +38,10 @@ pub const ShaderCompileStep = struct {
         return self;
     }
 
+    /// Add a shader to be compiled. `src` is shader source path, relative to the project root.
+    /// Returns the full path where the compiled binary will be stored upon successful compilation.
+    /// This path can then be used to include the binary into an executable, for example by passing it
+    /// to @embedFile via an additional generated file.
     pub fn add(self: *ShaderCompileStep, src: []const u8) []const u8 {
         const full_out_path = path.join(self.builder.allocator, &[_][]const u8{
             self.builder.build_root,
@@ -36,6 +53,7 @@ pub const ShaderCompileStep = struct {
         return full_out_path;
     }
 
+    /// Internal build function.
     fn make(step: *Step) !void {
         const self = @fieldParentPtr(ShaderCompileStep, "step", step);
         const cwd = std.fs.cwd();

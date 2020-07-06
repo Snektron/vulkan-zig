@@ -326,6 +326,10 @@ pub const Generator = struct {
     }
 };
 
+/// Main function for generating the Vulkan bindings. vk.xml is to be provided via `spec_xml`,
+/// and the resulting binding is written to `writer`. `allocator` will be used to allocate temporary
+/// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
+/// directly.
 pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: var) !void {
     const spec = try xml.parse(allocator, spec_xml);
     defer spec.deinit();

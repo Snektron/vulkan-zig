@@ -4,13 +4,24 @@ const path = std.fs.path;
 const Builder = std.build.Builder;
 const Step = std.build.Step;
 
+/// build.zig integration for Vulkan binding generation. This step can be used to generate
+/// Vulkan bindings at compiletime from vk.xml, by providing the path to vk.xml and the output
+/// path relative to zig-cache. The final file can then be added to the project using
+/// `std.build.Builder.addPackagePath`.
 pub const GenerateStep = struct {
     step: Step,
     builder: *Builder,
+
+    /// The path to vk.xml
     spec_path: []const u8,
+
+    /// The full path where the final generated binding will be placed. When using this step,
+    /// this path should be passed to addPackagePath.
     full_out_path: []const u8,
 
-    // out_path is relative to builder.cache_root
+    /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
+    /// vk.xml, relative to the project root. The generated bindings will be placed at
+    /// `out_path`, which is relative to the zig-cache directory.
     pub fn init(builder: *Builder, spec_path: []const u8, out_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
         self.* = .{
@@ -26,6 +37,10 @@ pub const GenerateStep = struct {
         return self;
     }
 
+    /// Internal build function. This reads `vk.xml`, and passes it to `generate`, which then generates
+    /// the final bindings. The resulting generated bindings are not formatted, which is why an ArrayList
+    /// writer is passed instead of a file writer. This is then formatted into standard formatting
+    /// by parsing it and rendering with `std.zig.parse` and `std.zig.render` respectively.
     fn make(step: *Step) !void {
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
