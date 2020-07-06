@@ -8,22 +8,6 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
-fn cmpFeatureLevels(a: FeatureLevel, b: FeatureLevel) std.math.Order {
-    if (a.major > b.major) {
-        return .gt;
-    } if (a.major < b.major) {
-        return .lt;
-    }
-
-    if (a.minor > b.minor) {
-        return .gt;
-    } else if (a.minor < b.minor) {
-        return .lt;
-    }
-
-    return .eq;
-}
-
 const DeclarationResolver = struct {
     const DeclarationSet = std.StringHashMap(void);
     const EnumExtensionMap = std.StringHashMap(std.ArrayList(reg.Enum.Field));
