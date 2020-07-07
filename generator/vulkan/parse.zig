@@ -24,6 +24,7 @@ pub fn parseXml(backing_allocator: *Allocator, root: *xml.Element) !ParseResult 
     const allocator = &arena.allocator;
 
     var reg = registry.Registry{
+        .copyright = root.getCharData("comment") orelse return error.InvalidRegistry,
         .decls = try parseDeclarations(allocator, root),
         .api_constants = try parseApiConstants(allocator, root),
         .tags = try parseTags(allocator, root),

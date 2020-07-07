@@ -1,4 +1,5 @@
 pub const Registry = struct {
+    copyright: []const u8,
     decls: []Declaration,
     api_constants: []ApiConstant,
     tags: []Tag,

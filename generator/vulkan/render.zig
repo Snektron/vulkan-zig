@@ -6,6 +6,9 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 
 const preamble =
+    \\
+    \\// This file is generated from the Khronos Vulkan XML API Registry
+    \\
     \\const std = @import("std");
     \\const builtin = @import("builtin");
     \\const root = @import("root");
@@ -294,6 +297,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn render(self: *Self) !void {
+            try self.renderCopyright();
             try self.writer.writeAll(preamble);
 
             for (self.registry.api_constants) |api_constant| {
@@ -307,6 +311,13 @@ fn Renderer(comptime WriterType: type) type {
             try self.renderCommandPtrs();
             try self.renderExtensionInfo();
             try self.renderWrappers();
+        }
+
+        fn renderCopyright(self: *Self) !void {
+            var it = mem.split(self.registry.copyright, "\n");
+            while (it.next()) |line| {
+                try self.writer.print("// {}\n", .{line});
+            }
         }
 
         fn renderApiConstant(self: *Self, api_constant: reg.ApiConstant) !void {
