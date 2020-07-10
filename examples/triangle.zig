@@ -153,8 +153,9 @@ pub fn main() !void {
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
 
-        try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
     }
+
+    try swapchain.waitForAllFences();
 }
 
 fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer, memory: vk.DeviceMemory) !void {

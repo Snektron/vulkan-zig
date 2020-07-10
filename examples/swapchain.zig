@@ -1,6 +1,5 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const c = @import("c.zig");
 const GraphicsContext = @import("graphics-context.zig").GraphicsContext;
 const Allocator = std.mem.Allocator;
 
@@ -99,7 +98,15 @@ pub const Swapchain = struct {
         self.gc.vkd.destroySemaphore(self.gc.dev, self.next_image_acquired, null);
     }
 
+    pub fn waitForAllFences(self: Swapchain) !void {
+        for (self.swap_images) |si| {
+            // Any error result is fatal anyway
+            _ = try self.gc.vkd.waitForFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &si.frame_fence), vk.TRUE, std.math.maxInt(u64));
+        }
+    }
+
     pub fn deinit(self: Swapchain) void {
+        self.waitForAllFences() catch return;
         self.deinitExceptSwapchain();
         self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
     }
@@ -229,10 +236,6 @@ const SwapImage = struct {
     }
 
     fn deinit(self: SwapImage, gc: *const GraphicsContext) void {
-        // Ignore any error (and the result), and still try to delete the other resources.
-        // If this errors, the error is likely to be triggered elsewhere anyway.
-        const result = gc.vkd.waitForFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.frame_fence), vk.TRUE, std.math.maxInt(u64));
-
         gc.vkd.destroyImageView(gc.dev, self.view, null);
         gc.vkd.destroySemaphore(gc.dev, self.image_acquired, null);
         gc.vkd.destroySemaphore(gc.dev, self.render_finished, null);
