@@ -6,6 +6,8 @@ A Vulkan binding generator for Zig.
 
 vulkan-zig attempts to provide a better experience to programming Vulkan applications in Zig, by providing features such as integration of vulkan errors with Zig's error system, function pointer loading, renaming fields to standard Zig style, better bitfield handling, turning out parameters into return values and more.
 
+vulkan-zig has been tested with vk.xml version 1.2.141 and 1.2.143.
+
 ## Features
 ### Generation from build.zig
 Vulkan bindings can be generated directly from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/master/xml) build.zig at compiletime, by using the provided

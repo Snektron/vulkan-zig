@@ -8,63 +8,53 @@ const mem = std.mem;
 const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
-const DeclarationResolver = struct {
-    const DeclarationSet = std.StringHashMap(void);
-    const EnumExtensionMap = std.StringHashMap(std.ArrayList(reg.Enum.Field));
+const EnumFieldMerger = struct {
+    const EnumExtensionMap = std.StringHashMap(std.ArrayListUnmanaged(reg.Enum.Field));
     const FieldSet = std.StringHashMap(void);
 
     gpa: *Allocator,
     reg_arena: *Allocator,
     registry: *reg.Registry,
-    declarations: DeclarationSet,
     enum_extensions: EnumExtensionMap,
     field_set: FieldSet,
 
-    fn init(gpa: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) DeclarationResolver {
+    fn init(gpa: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) EnumFieldMerger {
         return .{
             .gpa = gpa,
             .reg_arena = reg_arena,
             .registry = registry,
-            .declarations = DeclarationSet.init(gpa),
             .enum_extensions = EnumExtensionMap.init(gpa),
             .field_set = FieldSet.init(gpa),
         };
     }
 
-    fn deinit(self: *DeclarationResolver) void {
-        for (self.enum_extensions.items()) |entry| {
-            entry.value.deinit();
+    fn deinit(self: *EnumFieldMerger) void {
+        for (self.enum_extensions.items()) |*entry| {
+            entry.value.deinit(self.gpa);
         }
 
         self.field_set.deinit();
         self.enum_extensions.deinit();
-        self.declarations.deinit();
     }
 
-    fn putEnumExtension(self: *DeclarationResolver, enum_name: []const u8, field: reg.Enum.Field) !void {
+    fn putEnumExtension(self: *EnumFieldMerger, enum_name: []const u8, field: reg.Enum.Field) !void {
         const res = try self.enum_extensions.getOrPut(enum_name);
         if (!res.found_existing) {
-            res.entry.value = std.ArrayList(reg.Enum.Field).init(self.gpa);
+            res.entry.value = std.ArrayListUnmanaged(reg.Enum.Field){};
         }
 
-        try res.entry.value.append(field);
+        try res.entry.value.append(self.gpa, field);
     }
 
-    fn addRequire(self: *DeclarationResolver, req: reg.Require) !void {
-        for (req.types) |type_name| {
-            _ = try self.declarations.put(type_name, {});
-        }
-
-        for (req.commands) |command| {
-            _ = try self.declarations.put(command, {});
-        }
-
-        for (req.extends) |enum_ext| {
-            try self.putEnumExtension(enum_ext.extends, enum_ext.field);
+    fn addRequires(self: *EnumFieldMerger, reqs: []const reg.Require) !void {
+        for (reqs) |req| {
+            for (req.extends) |enum_ext| {
+                try self.putEnumExtension(enum_ext.extends, enum_ext.field);
+            }
         }
     }
 
-    fn mergeEnumFields(self: *DeclarationResolver, name: []const u8, base_enum: *reg.Enum) !void {
+    fn mergeEnumFields(self: *EnumFieldMerger, name: []const u8, base_enum: *reg.Enum) !void {
         // If there are no extensions for this enum, assume its valid.
         const extensions = self.enum_extensions.get(name) orelse return;
 
@@ -96,17 +86,13 @@ const DeclarationResolver = struct {
         base_enum.fields = self.reg_arena.shrink(new_fields, i);
     }
 
-    fn resolve(self: *DeclarationResolver) !void {
+    fn merge(self: *EnumFieldMerger) !void {
         for (self.registry.features) |feature| {
-            for (feature.requires) |req| {
-                try self.addRequire(req);
-            }
+            try self.addRequires(feature.requires);
         }
 
         for (self.registry.extensions) |ext| {
-            for (ext.requires) |req| {
-                try self.addRequire(req);
-            }
+            try self.addRequires(ext.requires);
         }
 
         // Merge all the enum fields.
@@ -116,24 +102,6 @@ const DeclarationResolver = struct {
                 try self.mergeEnumFields(decl.name, &decl.decl_type.enumeration);
             }
         }
-
-        // Remove all declarations that are not required.
-        //  Some declarations may exist in `self.declarations` that do not exit in
-        // `self.registry.decls`, these are mostly macros and other stuff not pa
-        var read_index: usize = 0;
-        var write_index: usize = 0;
-        while (read_index < self.registry.decls.len) {
-            const decl = self.registry.decls[read_index];
-            const is_required = self.declarations.contains(decl.name);
-            if (decl.decl_type == .foreign or is_required) {
-                self.registry.decls[write_index] = decl;
-                write_index += 1;
-            }
-
-            read_index += 1;
-        }
-
-        self.registry.decls = self.reg_arena.shrink(self.registry.decls, write_index);
     }
 };
 
@@ -292,11 +260,49 @@ pub const Generator = struct {
         self.registry.extensions.len = write_index;
     }
 
+    fn stripFlagBits(self: Generator, name: []const u8) []const u8 {
+        const tagless = util.stripAuthorTag(name, self.registry.tags);
+        return tagless[0 .. tagless.len - "FlagBits".len];
+    }
+
+    fn stripFlags(self: Generator, name: []const u8) []const u8 {
+        const tagless = util.stripAuthorTag(name, self.registry.tags);
+        return tagless[0 .. tagless.len - "Flags".len];
+    }
+
+    fn fixupBitmasks(self: *Generator) !void {
+        var bits = std.StringHashMap([]const u8).init(self.gpa);
+        defer bits.deinit();
+
+        for (self.registry.decls) |decl| {
+            if (decl.decl_type == .enumeration and decl.decl_type.enumeration.is_bitmask) {
+                try bits.put(self.stripFlagBits(decl.name), decl.name);
+            }
+        }
+
+        for (self.registry.decls) |*decl| {
+            switch (decl.decl_type) {
+                .bitmask => |*bitmask| {
+                    const base_name = self.stripFlags(decl.name);
+
+                    if (bitmask.bits_enum) |bits_enum| {
+                        if (bits.get(base_name) == null) {
+                            bitmask.bits_enum = null;
+                        }
+                    } else if (bits.get(base_name)) |bits_enum| {
+                        bitmask.bits_enum = bits_enum;
+                    }
+                },
+                else => {}
+            }
+        }
+    }
+
     // Solve `registry.declarations` according to `registry.extensions` and `registry.features`.
-    fn resolveDeclarations(self: *Generator) !void {
-        var resolver = DeclarationResolver.init(self.gpa, &self.reg_arena.allocator, &self.registry);
-        defer resolver.deinit();
-        try resolver.resolve();
+    fn mergeEnumFields(self: *Generator) !void {
+        var merger = EnumFieldMerger.init(self.gpa, &self.reg_arena.allocator, &self.registry);
+        defer merger.deinit();
+        try merger.merge();
     }
 
     fn fixupTags(self: *Generator) !void {
@@ -322,7 +328,8 @@ pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: var) !void 
     defer gen.deinit();
 
     gen.removePromotedExtensions();
-    try gen.resolveDeclarations();
+    try gen.mergeEnumFields();
+    try gen.fixupBitmasks();
     try gen.fixupTags();
     try gen.render(writer);
 }
