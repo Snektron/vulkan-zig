@@ -99,14 +99,10 @@ pub const Swapchain = struct {
     }
 
     pub fn waitForAllFences(self: Swapchain) !void {
-        for (self.swap_images) |si| {
-            // Any error result is fatal anyway
-            _ = try self.gc.vkd.waitForFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &si.frame_fence), vk.TRUE, std.math.maxInt(u64));
-        }
+        for (self.swap_images) |si| si.waitForFence(self.gc) catch {};
     }
 
     pub fn deinit(self: Swapchain) void {
-        self.waitForAllFences() catch return;
         self.deinitExceptSwapchain();
         self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
     }
@@ -147,9 +143,8 @@ pub const Swapchain = struct {
 
         // Step 1: Make sure the current frame has finished rendering
         const current = self.currentSwapImage();
-        const fence_ptr = @ptrCast([*]const vk.Fence, &current.frame_fence);
-        _ = try self.gc.vkd.waitForFences(self.gc.dev, 1, fence_ptr, vk.TRUE, std.math.maxInt(u64));
-        try self.gc.vkd.resetFences(self.gc.dev, 1, fence_ptr);
+        try current.waitForFence(self.gc);
+        try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
 
         // Step 2: Submit the command buffer
         const wait_stage = [_]vk.PipelineStageFlags{.{.top_of_pipe_bit = true}};
@@ -236,10 +231,15 @@ const SwapImage = struct {
     }
 
     fn deinit(self: SwapImage, gc: *const GraphicsContext) void {
+        self.waitForFence(gc) catch return;
         gc.vkd.destroyImageView(gc.dev, self.view, null);
         gc.vkd.destroySemaphore(gc.dev, self.image_acquired, null);
         gc.vkd.destroySemaphore(gc.dev, self.render_finished, null);
         gc.vkd.destroyFence(gc.dev, self.frame_fence, null);
+    }
+
+    fn waitForFence(self: SwapImage, gc: *const GraphicsContext) !void {
+        _ = try gc.vkd.waitForFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.frame_fence), vk.TRUE, std.math.maxInt(u64));
     }
 };
 
