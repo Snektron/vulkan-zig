@@ -179,7 +179,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.id_renderer.renderWithCase(self.writer, case, id);
         }
 
-        fn writeIdentifierFmt(self: *Self, comptime fmt: []const u8, args: var) !void {
+        fn writeIdentifierFmt(self: *Self, comptime fmt: []const u8, args: anytype) !void {
             try self.id_renderer.renderFmt(self.writer, fmt, args);
         }
 
@@ -1082,7 +1082,7 @@ fn Renderer(comptime WriterType: type) type {
     };
 }
 
-pub fn render(writer: var, allocator: *Allocator, registry: *const reg.Registry) !void {
+pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.Registry) !void {
     var renderer = Renderer(@TypeOf(writer)).init(writer, allocator, registry);
     defer renderer.deinit();
     try renderer.render();

@@ -540,7 +540,7 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![3][]const u8 {
     return version;
 }
 
-fn testTokenizer(tokenizer: var, expected_tokens: []const Token) void {
+fn testTokenizer(tokenizer: anytype, expected_tokens: []const Token) void {
     for (expected_tokens) |expected| {
         const tok = (tokenizer.next() catch unreachable).?;
         testing.expectEqual(expected.kind, tok.kind);

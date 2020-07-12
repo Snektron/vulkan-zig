@@ -311,7 +311,7 @@ pub const Generator = struct {
         try fixer_upper.fixup();
     }
 
-    fn render(self: *Generator, out_stream: var) !void {
+    fn render(self: *Generator, out_stream: anytype) !void {
         try renderRegistry(out_stream, &self.reg_arena.allocator, &self.registry);
     }
 };
@@ -320,7 +320,7 @@ pub const Generator = struct {
 /// and the resulting binding is written to `writer`. `allocator` will be used to allocate temporary
 /// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
 /// directly.
-pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: var) !void {
+pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: anytype) !void {
     const spec = try xml.parse(allocator, spec_xml);
     defer spec.deinit();
 

@@ -50,7 +50,7 @@ pub fn needZigEscape(name: []const u8) bool {
         or std.zig.Token.getKeyword(name) != null;
 }
 
-pub fn writeIdentifier(out: var, id: []const u8) !void {
+pub fn writeIdentifier(out: anytype, id: []const u8) !void {
     if (needZigEscape(id)) {
         try out.print("@\"{}\"", .{id});
     } else {
@@ -223,17 +223,17 @@ pub const IdRenderer = struct {
         }
     }
 
-    pub fn render(self: IdRenderer, out: var, id: []const u8) !void {
+    pub fn render(self: IdRenderer, out: anytype, id: []const u8) !void {
         try writeIdentifier(out, id);
     }
 
-    pub fn renderFmt(self: *IdRenderer, out: var, comptime fmt: []const u8, args: var) !void {
+    pub fn renderFmt(self: *IdRenderer, out: anytype, comptime fmt: []const u8, args: anytype) !void {
         self.text_cache.items.len = 0;
         try std.fmt.format(self.text_cache.writer(), fmt, args);
         try writeIdentifier(out, self.text_cache.items);
     }
 
-    pub fn renderWithCase(self: *IdRenderer, out: var, case_style: CaseStyle, id: []const u8) !void {
+    pub fn renderWithCase(self: *IdRenderer, out: anytype, case_style: CaseStyle, id: []const u8) !void {
         const tag = getAuthorTag(id, self.tags);
         const adjusted_id = if (tag) |name| id[0 .. id.len - name.len] else id;
 
