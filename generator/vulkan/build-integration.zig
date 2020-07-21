@@ -53,6 +53,7 @@ pub const GenerateStep = struct {
         const dir = path.dirname(self.full_out_path).?;
         try cwd.makePath(dir);
         const output_file = cwd.createFile(self.full_out_path, .{}) catch unreachable;
+        defer output_file.close();
         _ = try std.zig.render(self.builder.allocator, output_file.outStream(), tree);
     }
 };
