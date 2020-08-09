@@ -45,6 +45,19 @@ pub const GenerateStep = struct {
         return self;
     }
 
+    /// Initialize a Vulkan generation step for `builder`, by extracting vk.xml from the LunarG installation
+    /// root. Typically, the location of the LunarG SDK root can be retrieved by querying for the VULKAN_SDK
+    /// environment variable, set by activating the environment setup script located in the SDK root.
+    /// `builder` and `out_path` are used in the same manner as `init`.
+    pub fn initFromSdk(builder: *Builder, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
+        const spec_path = std.fs.path.join(
+            builder.allocator,
+            &[_][]const u8{sdk_path, "share/vulkan/registry/vk.xml"},
+        ) catch unreachable;
+
+        return init(builder, spec_path, out_path);
+    }
+
     /// Internal build function. This reads `vk.xml`, and passes it to `generate`, which then generates
     /// the final bindings. The resulting generated bindings are not formatted, which is why an ArrayList
     /// writer is passed instead of a file writer. This is then formatted into standard formatting
