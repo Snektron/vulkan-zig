@@ -8,20 +8,26 @@ pub const ResourceGenStep = struct {
     step: Step,
     shader_step: *vkgen.ShaderCompileStep,
     builder: *Builder,
-    full_out_path: []const u8,
+    package: std.build.Pkg,
     resources: std.ArrayList(u8),
 
     pub fn init(builder: *Builder, out: []const u8) *ResourceGenStep {
         const self = builder.allocator.create(ResourceGenStep) catch unreachable;
+        const full_out_path = path.join(builder.allocator, &[_][]const u8{
+            builder.build_root,
+            builder.cache_root,
+            out,
+        }) catch unreachable;
+
         self.* = .{
             .step = Step.init(.Custom, "resources", builder.allocator, make),
             .shader_step = vkgen.ShaderCompileStep.init(builder, &[_][]const u8{"glslc", "--target-env=vulkan1.2"}),
             .builder = builder,
-            .full_out_path = path.join(builder.allocator, &[_][]const u8{
-                self.builder.build_root,
-                builder.cache_root,
-                out,
-            }) catch unreachable,
+            .package = .{
+                .name = "resources",
+                .path = full_out_path,
+                .dependencies = null,
+            },
             .resources = std.ArrayList(u8).init(builder.allocator),
         };
 
@@ -40,9 +46,9 @@ pub const ResourceGenStep = struct {
         const self = @fieldParentPtr(ResourceGenStep, "step", step);
         const cwd = std.fs.cwd();
 
-        const dir = path.dirname(self.full_out_path).?;
+        const dir = path.dirname(self.package.path).?;
         try cwd.makePath(dir);
-        try cwd.writeFile(self.full_out_path, self.resources.items);
+        try cwd.writeFile(self.package.path, self.resources.items);
     }
 };
 
@@ -61,13 +67,13 @@ pub fn build(b: *Builder) void {
 
     const gen = vkgen.VkGenerateStep.init(b, "examples/vk.xml", "vk.zig");
     triangle_exe.step.dependOn(&gen.step);
-    triangle_exe.addPackagePath("vulkan", gen.full_out_path);
+    triangle_exe.addPackage(gen.package);
 
     const res = ResourceGenStep.init(b, "resources.zig");
     res.addShader("triangle_vert", "examples/shaders/triangle.vert");
     res.addShader("triangle_frag", "examples/shaders/triangle.frag");
     triangle_exe.step.dependOn(&res.step);
-    triangle_exe.addPackagePath("resources", res.full_out_path);
+    triangle_exe.addPackage(res.package);
 
     const triangle_run_cmd = triangle_exe.run();
     triangle_run_cmd.step.dependOn(b.getInstallStep());
