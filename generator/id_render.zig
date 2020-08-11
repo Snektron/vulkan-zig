@@ -1,5 +1,4 @@
 const std = @import("std");
-const reg = @import("registry.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
@@ -65,35 +64,6 @@ pub const CaseStyle = enum {
     camel,
 };
 
-pub fn trimVkNamespace(id: []const u8) []const u8 {
-    const prefixes = [_][]const u8{"VK_", "vk", "Vk", "PFN_vk"};
-    for (prefixes) |prefix| {
-        if (mem.startsWith(u8, id, prefix)) {
-            return id[prefix.len..];
-        }
-    }
-
-    return id;
-}
-
-pub fn getAuthorTag(id: []const u8, tags: []const reg.Tag) ?[]const u8 {
-    for (tags) |tag| {
-        if (mem.endsWith(u8, id, tag.name)) {
-            return tag.name;
-        }
-    }
-
-    return null;
-}
-
-pub fn stripAuthorTag(id: []const u8, tags: []const reg.Tag) []const u8 {
-    if (getAuthorTag(id, tags)) |tag| {
-        return mem.trimRight(u8, id[0 .. id.len - tag.len], "_");
-    }
-
-    return id;
-}
-
 pub const SegmentIterator = struct {
     text: []const u8,
     offset: usize,
@@ -151,10 +121,10 @@ pub const SegmentIterator = struct {
 };
 
 pub const IdRenderer = struct {
-    tags: []const reg.Tag,
+    tags: []const []const u8,
     text_cache: std.ArrayList(u8),
 
-    pub fn init(allocator: *Allocator, tags: []const reg.Tag) IdRenderer {
+    pub fn init(allocator: *Allocator, tags: []const []const u8) IdRenderer {
         return .{
             .tags = tags,
             .text_cache = std.ArrayList(u8).init(allocator),
@@ -234,7 +204,8 @@ pub const IdRenderer = struct {
     }
 
     pub fn renderWithCase(self: *IdRenderer, out: anytype, case_style: CaseStyle, id: []const u8) !void {
-        const tag = getAuthorTag(id, self.tags);
+        const tag = self.getAuthorTag(id);
+        // The trailing underscore doesn't need to be removed here as its removed by the SegmentIterator.
         const adjusted_id = if (tag) |name| id[0 .. id.len - name.len] else id;
 
         self.text_cache.items.len = 0;
@@ -247,5 +218,23 @@ pub const IdRenderer = struct {
         }
 
         try writeIdentifier(out, self.text_cache.items);
+    }
+
+    pub fn getAuthorTag(self: IdRenderer, id: []const u8) ?[]const u8 {
+        for (self.tags) |tag| {
+            if (mem.endsWith(u8, id, tag)) {
+                return tag;
+            }
+        }
+
+        return null;
+    }
+
+    pub fn stripAuthorTag(self: IdRenderer, id: []const u8) []const u8 {
+        if (self.getAuthorTag(id)) |tag| {
+            return mem.trimRight(u8, id[0 .. id.len - tag.len], "_");
+        }
+
+        return id;
     }
 };

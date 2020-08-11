@@ -1,7 +1,7 @@
 const std = @import("std");
 const reg = @import("registry.zig");
-const util = @import("util.zig");
-const cparse = @import("c-parse.zig");
+const id_render = @import("../id_render.zig");
+const cparse = @import("c_parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
@@ -112,6 +112,17 @@ fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
     return true;
 }
 
+pub fn trimVkNamespace(id: []const u8) []const u8 {
+    const prefixes = [_][]const u8{"VK_", "vk", "Vk", "PFN_vk"};
+    for (prefixes) |prefix| {
+        if (mem.startsWith(u8, id, prefix)) {
+            return id[prefix.len..];
+        }
+    }
+
+    return id;
+}
+
 fn Renderer(comptime WriterType: type) type {
     return struct {
         const Self = @This();
@@ -156,18 +167,22 @@ fn Renderer(comptime WriterType: type) type {
         writer: WriterType,
         allocator: *Allocator,
         registry: *const reg.Registry,
-        id_renderer: util.IdRenderer,
+        id_renderer: id_render.IdRenderer,
 
-        fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry) Self {
-            return .{
+        fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry) !Self {
+            const tags = try allocator.alloc([]const u8, registry.tags.len);
+            for (tags) |*tag, i| tag.* = registry.tags[i].name;
+
+            return Self{
                 .writer = writer,
                 .allocator = allocator,
                 .registry = registry,
-                .id_renderer = util.IdRenderer.init(allocator, registry.tags),
+                .id_renderer = id_render.IdRenderer.init(allocator, tags),
             };
         }
 
         fn deinit(self: Self) void {
+            self.allocator.free(self.id_renderer.tags);
             self.id_renderer.deinit();
         }
 
@@ -175,7 +190,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.id_renderer.render(self.writer, id);
         }
 
-        fn writeIdentifierWithCase(self: *Self, case: util.CaseStyle, id: []const u8) !void {
+        fn writeIdentifierWithCase(self: *Self, case: id_render.CaseStyle, id: []const u8) !void {
             try self.id_renderer.renderWithCase(self.writer, case, id);
         }
 
@@ -184,10 +199,10 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn extractEnumFieldName(self: Self, enum_name: []const u8, field_name: []const u8) ![]const u8 {
-            const adjusted_enum_name = util.stripAuthorTag(enum_name, self.registry.tags);
+            const adjusted_enum_name = self.id_renderer.stripAuthorTag(enum_name);
 
-            var enum_it = util.SegmentIterator.init(adjusted_enum_name);
-            var field_it = util.SegmentIterator.init(field_name);
+            var enum_it = id_render.SegmentIterator.init(adjusted_enum_name);
+            var field_it = id_render.SegmentIterator.init(field_name);
 
             while (true) {
                 const rest = field_it.rest();
@@ -201,7 +216,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn extractBitflagName(self: Self, name: []const u8) ?BitflagName {
-            const tag = util.getAuthorTag(name, self.registry.tags);
+            const tag = self.id_renderer.getAuthorTag(name);
             const base_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
 
             if (!mem.endsWith(u8, base_name, "FlagBits")) {
@@ -215,7 +230,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn isFlags(self: Self, name: []const u8) bool {
-            const tag = util.getAuthorTag(name, self.registry.tags);
+            const tag = self.id_renderer.getAuthorTag(name);
             const base_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
 
             return mem.endsWith(u8, base_name, "Flags");
@@ -236,7 +251,7 @@ fn Renderer(comptime WriterType: type) type {
                         const child_name = ptr.child.name;
                         if (mem.eql(u8, child_name, "void")) {
                             return .other;
-                        } else if (builtin_types.get(child_name) == null and util.trimVkNamespace(child_name).ptr == child_name.ptr) {
+                        } else if (builtin_types.get(child_name) == null and trimVkNamespace(child_name).ptr == child_name.ptr) {
                             return .other; // External type
                         }
                     }
@@ -414,7 +429,7 @@ fn Renderer(comptime WriterType: type) type {
                 return;
             } else if (self.extractBitflagName(name)) |bitflag_name| {
                 try self.writeIdentifierFmt("{}Flags{}", .{
-                    util.trimVkNamespace(bitflag_name.base_name),
+                    trimVkNamespace(bitflag_name.base_name),
                     @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
                 });
                 return;
@@ -453,7 +468,7 @@ fn Renderer(comptime WriterType: type) type {
                     if (param.param_type == .name) {
                         if (self.extractBitflagName(param.param_type.name)) |bitflag_name| {
                             try self.writeIdentifierFmt("{}Flags{}", .{
-                                util.trimVkNamespace(bitflag_name.base_name),
+                                trimVkNamespace(bitflag_name.base_name),
                                 @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
                             });
                             try self.writer.writeAll(".IntType");
@@ -568,7 +583,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(" = null");
             } else if (mem.eql(u8, field.name, "sType")) {
                 try self.writer.writeAll(" = .");
-                try self.writeIdentifierWithCase(.snake, util.trimVkNamespace(name));
+                try self.writeIdentifierWithCase(.snake, trimVkNamespace(name));
             }
         }
 
@@ -728,7 +743,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderCommandPtrName(self: *Self, name: []const u8) !void {
-            try self.writeIdentifierFmt("Pfn{}", .{util.trimVkNamespace(name)});
+            try self.writeIdentifierFmt("Pfn{}", .{trimVkNamespace(name)});
         }
 
         fn renderCommandPtrs(self: *Self) !void {
@@ -755,7 +770,7 @@ fn Renderer(comptime WriterType: type) type {
             );
             for (self.registry.extensions) |ext| {
                 try self.writer.writeAll("pub const ");
-                try self.writeIdentifierWithCase(.snake, util.trimVkNamespace(ext.name));
+                try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
                 try self.writer.writeAll("= Info {\n");
                 try self.writer.print(".name = \"{}\", .version = {},", .{ext.name, ext.version});
                 try self.writer.writeAll("};\n");
@@ -822,7 +837,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn derefName(name: []const u8) []const u8 {
-            var it = util.SegmentIterator.init(name);
+            var it = id_render.SegmentIterator.init(name);
             return if (mem.eql(u8, it.next().?, "p"))
                     name[1..]
                 else
@@ -831,7 +846,7 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderWrapperPrototype(self: *Self, name: []const u8, command: reg.Command, returns: []const ReturnValue) !void {
             try self.writer.writeAll("pub fn ");
-            try self.writeIdentifierWithCase(.camel, util.trimVkNamespace(name));
+            try self.writeIdentifierWithCase(.camel, trimVkNamespace(name));
             try self.writer.writeAll("(self: Self, ");
 
             for (command.params) |param| {
@@ -946,7 +961,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderReturnStructName(self: *Self, command_name: []const u8) !void {
-            try self.writeIdentifierFmt("{}Result", .{util.trimVkNamespace(command_name)});
+            try self.writeIdentifierFmt("{}Result", .{trimVkNamespace(command_name)});
         }
 
         fn renderReturnStruct(self: *Self, command_name: []const u8, returns: []const ReturnValue) !void {
@@ -1076,14 +1091,14 @@ fn Renderer(comptime WriterType: type) type {
             } else {
                 // Apparently some commands (VkAcquireProfilingLockInfoKHR) return
                 // success codes as error...
-                try self.writeIdentifierWithCase(.title, util.trimVkNamespace(name));
+                try self.writeIdentifierWithCase(.title, trimVkNamespace(name));
             }
         }
     };
 }
 
 pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.Registry) !void {
-    var renderer = Renderer(@TypeOf(writer)).init(writer, allocator, registry);
+    var renderer = try Renderer(@TypeOf(writer)).init(writer, allocator, registry);
     defer renderer.deinit();
     try renderer.render();
 }
