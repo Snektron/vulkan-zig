@@ -1,5 +1,6 @@
 const std = @import("std");
 const reg = @import("registry.zig");
+const renderSpirv = @import("render.zig").render;
 const Allocator = std.mem.Allocator;
 
 pub fn generate(allocator: *Allocator, spec_jsons: []const []const u8, writer: anytype) !void {
@@ -32,4 +33,6 @@ pub fn generate(allocator: *Allocator, spec_jsons: []const []const u8, writer: a
     if (ext_registry_i != num_ext_registries) {
         return error.MultipleCoreRegistries;
     }
+
+    try renderSpirv(writer, allocator, &core_registry, ext_registries);
 }
