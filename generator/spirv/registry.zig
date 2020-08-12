@@ -18,10 +18,9 @@ pub const CoreRegistry = struct {
 pub const ExtensionRegistry = struct {
     copyright: [][]const u8,
     version: u32,
-    minor_version: u32,
     revision: u32,
     instructions: []Instruction,
-    operand_kinds: []OperandKind,
+    operand_kinds: []OperandKind = &[_]OperandKind{},
 };
 
 pub const Instruction = struct {
