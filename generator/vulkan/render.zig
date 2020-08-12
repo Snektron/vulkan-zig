@@ -4,6 +4,8 @@ const id_render = @import("../id_render.zig");
 const cparse = @import("c_parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+const CaseStyle = id_render.CaseStyle;
+const IdRenderer = id_render.IdRenderer;
 
 const preamble =
     \\
@@ -167,9 +169,9 @@ fn Renderer(comptime WriterType: type) type {
         writer: WriterType,
         allocator: *Allocator,
         registry: *const reg.Registry,
-        id_renderer: id_render.IdRenderer,
+        id_renderer: *IdRenderer,
 
-        fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry) !Self {
+        fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
             const tags = try allocator.alloc([]const u8, registry.tags.len);
             for (tags) |*tag, i| tag.* = registry.tags[i].name;
 
@@ -177,7 +179,7 @@ fn Renderer(comptime WriterType: type) type {
                 .writer = writer,
                 .allocator = allocator,
                 .registry = registry,
-                .id_renderer = id_render.IdRenderer.init(allocator, tags),
+                .id_renderer = id_renderer,
             };
         }
 
@@ -190,7 +192,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.id_renderer.render(self.writer, id);
         }
 
-        fn writeIdentifierWithCase(self: *Self, case: id_render.CaseStyle, id: []const u8) !void {
+        fn writeIdentifierWithCase(self: *Self, case: CaseStyle, id: []const u8) !void {
             try self.id_renderer.renderWithCase(self.writer, case, id);
         }
 
@@ -1097,8 +1099,8 @@ fn Renderer(comptime WriterType: type) type {
     };
 }
 
-pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.Registry) !void {
-    var renderer = try Renderer(@TypeOf(writer)).init(writer, allocator, registry);
+pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !void {
+    var renderer = try Renderer(@TypeOf(writer)).init(writer, allocator, registry, id_renderer);
     defer renderer.deinit();
     try renderer.render();
 }

@@ -3,7 +3,7 @@ const reg = @import("registry.zig");
 const xml = @import("../xml.zig");
 const renderRegistry = @import("render.zig").render;
 const parseXml = @import("parse.zig").parseXml;
-const util = @import("util.zig");
+const IdRenderer = @import("../id_render.zig").IdRenderer;
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
@@ -114,12 +114,14 @@ const TagFixerUpper = struct {
     gpa: *Allocator,
     registry: *reg.Registry,
     names: std.StringHashMap(NameInfo),
+    id_renderer: *const IdRenderer,
 
-    fn init(gpa: *Allocator, registry: *reg.Registry) TagFixerUpper {
+    fn init(gpa: *Allocator, registry: *reg.Registry, id_renderer: *const IdRenderer) TagFixerUpper {
         return .{
             .gpa = gpa,
             .registry = registry,
             .names = std.StringHashMap(NameInfo).init(gpa),
+            .id_renderer = id_renderer,
         };
     }
 
@@ -128,7 +130,7 @@ const TagFixerUpper = struct {
     }
 
     fn insertName(self: *TagFixerUpper, name: []const u8) !void {
-        const tagless = util.stripAuthorTag(name, self.registry.tags);
+        const tagless = self.id_renderer.stripAuthorTag(name);
         const is_tagged = tagless.len != name.len;
         const result = try self.names.getOrPut(tagless);
 
@@ -162,7 +164,7 @@ const TagFixerUpper = struct {
     }
 
     fn fixName(self: *TagFixerUpper, name: *[]const u8) !void {
-        const tagless = util.stripAuthorTag(name.*, self.registry.tags);
+        const tagless = self.id_renderer.stripAuthorTag(name.*);
         const info = self.names.get(tagless) orelse return error.InvalidRegistry;
         if (info.tagless_name_exists) {
             name.* = tagless;
@@ -235,17 +237,24 @@ pub const Generator = struct {
     gpa: *Allocator,
     reg_arena: std.heap.ArenaAllocator,
     registry: reg.Registry,
+    id_renderer: IdRenderer,
 
     fn init(allocator: *Allocator, spec: *xml.Element) !Generator {
         const result = try parseXml(allocator, spec);
+
+        const tags = try allocator.alloc([]const u8, result.registry.tags.len);
+        for (tags) |*tag, i| tag.* = result.registry.tags[i].name;
+
         return Generator{
             .gpa = allocator,
             .reg_arena = result.arena,
             .registry = result.registry,
+            .id_renderer = IdRenderer.init(allocator, tags),
         };
     }
 
     fn deinit(self: Generator) void {
+        self.gpa.free(self.id_renderer.tags);
         self.reg_arena.deinit();
     }
 
@@ -261,12 +270,12 @@ pub const Generator = struct {
     }
 
     fn stripFlagBits(self: Generator, name: []const u8) []const u8 {
-        const tagless = util.stripAuthorTag(name, self.registry.tags);
+        const tagless = self.id_renderer.stripAuthorTag(name);
         return tagless[0 .. tagless.len - "FlagBits".len];
     }
 
     fn stripFlags(self: Generator, name: []const u8) []const u8 {
-        const tagless = util.stripAuthorTag(name, self.registry.tags);
+        const tagless = self.id_renderer.stripAuthorTag(name);
         return tagless[0 .. tagless.len - "Flags".len];
     }
 
@@ -306,13 +315,13 @@ pub const Generator = struct {
     }
 
     fn fixupTags(self: *Generator) !void {
-        var fixer_upper = TagFixerUpper.init(self.gpa, &self.registry);
+        var fixer_upper = TagFixerUpper.init(self.gpa, &self.registry, &self.id_renderer);
         defer fixer_upper.deinit();
         try fixer_upper.fixup();
     }
 
-    fn render(self: *Generator, out_stream: anytype) !void {
-        try renderRegistry(out_stream, &self.reg_arena.allocator, &self.registry);
+    fn render(self: *Generator, writer: anytype) !void {
+        try renderRegistry(writer, &self.reg_arena.allocator, &self.registry, &self.id_renderer);
     }
 };
 
