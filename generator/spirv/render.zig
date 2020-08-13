@@ -21,8 +21,7 @@ fn Renderer(comptime WriterType: type) type {
 
         writer: WriterType,
         allocator: *Allocator,
-        core: *const reg.CoreRegistry,
-        extensions: []const reg.ExtensionRegistry,
+        registry: *const reg.CoreRegistry,
         id_renderer: IdRenderer,
 
         fn deinit(self: Self) void {
@@ -35,13 +34,12 @@ fn Renderer(comptime WriterType: type) type {
     };
 }
 
-pub fn render(writer: anytype, allocator: *Allocator, core: *const reg.CoreRegistry, extensions: []const reg.ExtensionRegistry) !void {
+pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.CoreRegistry) !void {
     const id_renderer = IdRenderer.init(allocator, &tags);
     var renderer = Renderer(@TypeOf(writer)) {
         .writer = writer,
         .allocator = allocator,
-        .core = core,
-        .extensions = extensions,
+        .registry = registry,
         .id_renderer = id_renderer,
     };
     defer renderer.deinit();
