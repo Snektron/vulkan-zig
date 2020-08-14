@@ -69,5 +69,5 @@ pub fn generate(allocator: *Allocator, spec_jsons: []const []const u8, writer: a
     }
 
     const merged = try mergeRegistries(&arena.allocator, core_registry, ext_registries);
-    try renderSpirv(writer, &arena.allocator, &merged);
+    try renderSpirv(writer, &merged);
 }

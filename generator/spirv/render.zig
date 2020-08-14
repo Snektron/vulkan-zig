@@ -20,7 +20,6 @@ fn Renderer(comptime WriterType: type) type {
         const Self = @This();
 
         writer: WriterType,
-        allocator: *Allocator,
         registry: *const reg.CoreRegistry,
         id_renderer: IdRenderer,
 
@@ -34,11 +33,10 @@ fn Renderer(comptime WriterType: type) type {
     };
 }
 
-pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.CoreRegistry) !void {
+pub fn render(writer: anytype, registry: *const reg.CoreRegistry) !void {
     const id_renderer = IdRenderer.init(allocator, &tags);
     var renderer = Renderer(@TypeOf(writer)) {
         .writer = writer,
-        .allocator = allocator,
         .registry = registry,
         .id_renderer = id_renderer,
     };
