@@ -9,7 +9,7 @@ const IdRenderer = id_render.IdRenderer;
 
 const preamble =
     \\
-    \\// This file is generated from the Khronos Vulkan XML API Registry
+    \\// This file is generated from the Khronos Vulkan XML API registry
     \\
     \\const std = @import("std");
     \\const builtin = @import("builtin");

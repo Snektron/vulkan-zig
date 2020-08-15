@@ -15,6 +15,20 @@ const tags = [_][]const u8{
     "NV",
 };
 
+const preamble =
+    \\
+    \\ This file is generated from the SPIR-V JSON registry
+    ;
+
+fn stripOpPrefix(name: []const u8) []const u8 {
+    // Some instructions (those from the core) are prefixed with 'Op'
+    const prefix = "Op";
+    return if (std.mem.startsWith(u8, name, prefix))
+            name[prefix.len ..]
+        else
+            name;
+}
+
 fn Renderer(comptime WriterType: type) type {
     return struct {
         const Self = @This();
@@ -23,23 +37,33 @@ fn Renderer(comptime WriterType: type) type {
         registry: *const reg.CoreRegistry,
         id_renderer: IdRenderer,
 
-        fn deinit(self: Self) void {
-
+        fn render(self: *Self) !void {
+            for (self.registry.copyright) |line| {
+                try self.writer.print("// {}\n", .{ line });
+            }
+            try self.writer.writeAll(preamble);
+            try self.renderOpcodes();
         }
 
-        fn render(self: *Self) !void {
-
+        fn renderOpcodes(self: *Self) !void {
+            try self.writer.writeAll("pub const Opcode = enum(u16) {\n");
+            for (self.registry.instructions) |instr| {
+                try self.id_renderer.renderWithCase(self.writer, .snake, stripOpPrefix(instr.opname));
+                try self.writer.print(" = {},\n", .{ instr.opcode });
+            }
+            try self.writer.writeAll("};\n");
         }
     };
 }
 
-pub fn render(writer: anytype, registry: *const reg.CoreRegistry) !void {
+pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.CoreRegistry) !void {
     const id_renderer = IdRenderer.init(allocator, &tags);
+    defer id_renderer.deinit();
     var renderer = Renderer(@TypeOf(writer)) {
         .writer = writer,
         .registry = registry,
         .id_renderer = id_renderer,
     };
-    defer renderer.deinit();
     try renderer.render();
 }
+
