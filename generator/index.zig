@@ -6,5 +6,4 @@ pub const ShaderCompileStep = @import("build_integration.zig").ShaderCompileStep
 test "main" {
     _ = @import("xml.zig");
     _ = @import("vulkan/c_parse.zig");
-    _ = @import("spirv/generator.zig");
 }

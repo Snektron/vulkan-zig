@@ -9,8 +9,8 @@ const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
 const EnumFieldMerger = struct {
-    const EnumExtensionMap = std.StringHashMap(std.ArrayListUnmanaged(reg.Enum.Field));
-    const FieldSet = std.StringHashMap(void);
+    const EnumExtensionMap = std.StringArrayHashMap(std.ArrayListUnmanaged(reg.Enum.Field));
+    const FieldSet = std.StringArrayHashMap(void);
 
     gpa: *Allocator,
     reg_arena: *Allocator,
