@@ -810,9 +810,9 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderWrapperLoader(self: *Self, dispatch_type: CommandDispatchType) !void {
             const params = switch (dispatch_type) {
-                .base => "loader: PfnGetInstanceProcAddr",
-                .instance => "instance: Instance, loader: PfnGetInstanceProcAddr",
-                .device => "device: Device, loader: PfnGetDeviceProcAddr",
+                .base => "loader: anytype",
+                .instance => "instance: Instance, loader: anytype",
+                .device => "device: Device, loader: anytype",
             };
 
             const loader_first_param = switch (dispatch_type) {
