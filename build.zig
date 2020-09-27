@@ -82,7 +82,9 @@ pub fn build(b: *Builder) void {
     triangle_exe.linkSystemLibrary("c");
     triangle_exe.linkSystemLibrary("glfw");
 
-    const gen = vkgen.VkGenerateStep.init(b, "examples/vk.xml", "vk.zig");
+    const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the to the Vulkan registry") orelse "examples/vk.xml";
+
+    const gen = vkgen.VkGenerateStep.init(b, vk_xml_path, "vk.zig");
     triangle_exe.step.dependOn(&gen.step);
     triangle_exe.addPackage(gen.package);
 
