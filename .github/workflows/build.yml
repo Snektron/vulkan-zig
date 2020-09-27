@@ -16,13 +16,16 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v1.2.3
+        uses: goto-bus-stop/setup-zig@v1.2.4
         with:
           version: master
 
       - name: Test
         working-directory: ./vulkan-zig
         run: |
+          ls
+          echo $PATH
+          which zig
           zig zen
 
       - name: Build with latest zig & vk.xml
