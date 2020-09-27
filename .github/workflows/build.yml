@@ -1,0 +1,31 @@
+name: Build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+        
+      - name: Setup Zig
+        uses: goto-bus-stop/setup-zig@v1.2.4
+        with:
+          version: master
+      
+      - name: Test
+        working-directory: ./vulkan-zig
+        run: zig build test
+
+      - name: Build with latest zig & vk.xml
+        working-directory: ./vulkan-zig
+        run: |
+          wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
+          zig build -Dvulkan-registry=./vk.xml
