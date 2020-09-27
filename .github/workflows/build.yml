@@ -21,5 +21,4 @@ jobs:
           version: master
 
       - name: Test
-        working-directory: ./vulkan-zig
         run: echo test
