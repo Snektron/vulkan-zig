@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Setup Zig
-        uses: goto-bus-stop/setup-zig@v1.2.4
+        uses: goto-bus-stop/setup-zig@v1.2.3
         with:
           version: master
 
