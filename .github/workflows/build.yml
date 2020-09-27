@@ -22,14 +22,4 @@ jobs:
 
       - name: Test
         working-directory: ./vulkan-zig
-        run: |
-          ls
-          echo $PATH
-          which zig
-          zig zen
-
-      - name: Build with latest zig & vk.xml
-        working-directory: ./vulkan-zig
-        run: |
-          wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
-          zig build -Dvulkan-registry=./vk.xml
+        run: echo test
