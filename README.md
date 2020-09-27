@@ -2,11 +2,13 @@
 
 A Vulkan binding generator for Zig.
 
+[![Actions Status](https://github.com/Snektron/vulkan-zig/workflows/Build/badge.svg)](https://github.com/Snektron/vulkan-zig/actions)
+
 ## Overview
 
 vulkan-zig attempts to provide a better experience to programming Vulkan applications in Zig, by providing features such as integration of vulkan errors with Zig's error system, function pointer loading, renaming fields to standard Zig style, better bitfield handling, turning out parameters into return values and more.
 
-vulkan-zig has been tested with vk.xml version 1.2.141, 1.2.143 and 1.2.148.
+vulkan-zig is automatically tested against the latest vk.xml and zig, and supports vk.xml from version 1.x.141.
 
 ## Features
 ### Generation from build.zig
