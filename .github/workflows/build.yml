@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     steps:
       - uses: actions/checkout@v2
@@ -23,7 +23,7 @@ jobs:
       - name: Test
         working-directory: ./vulkan-zig
         run: |
-          zig build test
+          zig zen
 
       - name: Build with latest zig & vk.xml
         working-directory: ./vulkan-zig
