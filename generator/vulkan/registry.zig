@@ -21,7 +21,7 @@ pub const DeclarationType = union(enum) {
     alias: Alias,
     foreign: Foreign,
     typedef: TypeInfo,
-    opaque,
+    external,
 };
 
 pub const Alias = struct {

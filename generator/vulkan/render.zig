@@ -81,20 +81,20 @@ const builtin_types = std.ComptimeStringMap([]const u8, .{
 });
 
 const foreign_types = std.ComptimeStringMap([]const u8, .{
-    .{"Display", "@Type(.Opaque)"},
+    .{"Display", "opaque {}"},
     .{"VisualID", @typeName(c_uint)},
     .{"Window", @typeName(c_ulong)},
     .{"RROutput", @typeName(c_ulong)},
-    .{"wl_display", "@Type(.Opaque)"},
-    .{"wl_surface", "@Type(.Opaque)"},
+    .{"wl_display", "opaque {}"},
+    .{"wl_surface", "opaque {}"},
     .{"HINSTANCE", "std.os.HINSTANCE"},
-    .{"HWND", "*@Type(.Opaque)"},
-    .{"HMONITOR", "*@Type(.Opaque)"},
+    .{"HWND", "*opaque {}"},
+    .{"HMONITOR", "*opaque {}"},
     .{"HANDLE", "std.os.HANDLE"},
     .{"SECURITY_ATTRIBUTES", "std.os.SECURITY_ATTRIBUTES"},
     .{"DWORD", "std.os.DWORD"},
     .{"LPCWSTR", "std.os.LPCWSTR"},
-    .{"xcb_connection_t", "@Type(.Opaque)"},
+    .{"xcb_connection_t", "opaque {}"},
     .{"xcb_visualid_t", @typeName(u32)},
     .{"xcb_window_t", @typeName(u32)},
     .{"zx_handle_t", @typeName(u32)},
@@ -536,7 +536,7 @@ fn Renderer(comptime WriterType: type) type {
                 .alias => |alias| try self.renderAlias(decl.name, alias),
                 .foreign => |foreign| try self.renderForeign(decl.name, foreign),
                 .typedef => |type_info| try self.renderTypedef(decl.name, type_info),
-                .opaque => try self.renderOpaque(decl.name),
+                .external => try self.renderExternal(decl.name),
             }
         }
 
@@ -711,10 +711,10 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(";\n");
         }
 
-        fn renderOpaque(self: *Self, name: []const u8) !void {
+        fn renderExternal(self: *Self, name: []const u8) !void {
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.writeAll(" = @Type(.Opaque);\n");
+            try self.writer.writeAll(" = opaque {};\n");
         }
 
         fn renderForeign(self: *Self, name: []const u8, foreign: reg.Foreign) !void {
