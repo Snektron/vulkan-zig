@@ -2,61 +2,6 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
-// Lifted from src-self-hosted/translate_c.zig
-pub fn isValidZigIdentifier(name: []const u8) bool {
-    for (name) |c, i| {
-        switch (c) {
-            '_', 'a'...'z', 'A'...'Z' => {},
-            '0' ... '9' => if (i == 0) return false,
-            else => return false
-        }
-    }
-
-    return true;
-}
-
-// Lifted from src-self-hosted/translate_c.zig
-pub fn isZigReservedIdentifier(name: []const u8) bool {
-    if (name.len > 1 and (name[0] == 'u' or name[0] == 'i')) {
-        for (name[1..]) |c| {
-            switch (c) {
-                '0'...'9' => {},
-                else => return false,
-            }
-        }
-        return true;
-    }
-
-    const reserved_names = [_][]const u8 {
-        "void", "comptime_float", "comptime_int", "bool", "isize",
-        "usize", "f16", "f32", "f64", "f128", "c_longdouble",
-        "noreturn", "type", "anyerror", "c_short", "c_ushort",
-        "c_int", "c_uint", "c_long", "c_ulong", "c_longlong", "c_ulonglong"
-    };
-
-    for (reserved_names) |reserved| {
-        if (mem.eql(u8, reserved, name)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-pub fn needZigEscape(name: []const u8) bool {
-    return !isValidZigIdentifier(name)
-        or isZigReservedIdentifier(name)
-        or std.zig.Token.getKeyword(name) != null;
-}
-
-pub fn writeIdentifier(out: anytype, id: []const u8) !void {
-    if (needZigEscape(id)) {
-        try out.print("@\"{}\"", .{id});
-    } else {
-        try out.writeAll(id);
-    }
-}
-
 pub const CaseStyle = enum {
     snake,
     screaming_snake,
@@ -194,13 +139,13 @@ pub const IdRenderer = struct {
     }
 
     pub fn render(self: IdRenderer, out: anytype, id: []const u8) !void {
-        try writeIdentifier(out, id);
+        try out.print("{z}", .{ id });
     }
 
     pub fn renderFmt(self: *IdRenderer, out: anytype, comptime fmt: []const u8, args: anytype) !void {
         self.text_cache.items.len = 0;
         try std.fmt.format(self.text_cache.writer(), fmt, args);
-        try writeIdentifier(out, self.text_cache.items);
+        try out.print("{z}", .{ self.text_cache.items });
     }
 
     pub fn renderWithCase(self: *IdRenderer, out: anytype, case_style: CaseStyle, id: []const u8) !void {
@@ -217,7 +162,7 @@ pub const IdRenderer = struct {
             .camel => try self.renderCamel(false, adjusted_id, tag),
         }
 
-        try writeIdentifier(out, self.text_cache.items);
+        try out.print("{z}", .{ self.text_cache.items });
     }
 
     pub fn getAuthorTag(self: IdRenderer, id: []const u8) ?[]const u8 {
