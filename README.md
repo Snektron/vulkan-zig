@@ -22,7 +22,7 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("my-executable", "src/main.zig");
 
     // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
-    const gen = vkgen.VkGenerateStep(b, "path/to/vk.xml", "vk.zig");
+    const gen = vkgen.VkGenerateStep.init(b, "path/to/vk.xml", "vk.zig");
     exe.step.dependOn(&gen.step);
 
     // Add the generated file as package to the final executable
