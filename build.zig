@@ -75,6 +75,12 @@ pub fn build(b: *Builder) void {
 
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
+
+    const generator_exe = b.addExecutable("vulkan-zig-generator", "generator/main.zig");
+    generator_exe.setTarget(target);
+    generator_exe.setBuildMode(mode);
+    generator_exe.install();
+
     const triangle_exe = b.addExecutable("triangle", "examples/triangle.zig");
     triangle_exe.setTarget(target);
     triangle_exe.setBuildMode(mode);

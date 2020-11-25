@@ -11,9 +11,15 @@ vulkan-zig attempts to provide a better experience to programming Vulkan applica
 vulkan-zig is automatically tested against the latest vk.xml and zig, and supports vk.xml from version 1.x.141.
 
 ## Features
+### CLI-interface
+A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/master/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
+```
+$ zig-cache/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
+```
+This reads the xml file, parses its contents, renders the Vulkan bindings, and formats file, before writing the result to the output path. While the intended usage of vulkan-zig is through direct generation from build.zig (see below), the CLI-interface can be used for one-off generation and vendoring the result.
+
 ### Generation from build.zig
-Vulkan bindings can be generated directly from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/master/xml) build.zig at compiletime, by using the provided
-vulkan generation step:
+Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step:
 ```zig
 const vkgen = @import("vulkan-zig/generator/index.zig");
 
@@ -236,5 +242,5 @@ Upon compilation, glslc is then invoked to compile each shader, and the result i
 A partial implementation of https://vulkan-tutorial.org is implemented in [examples/triangle.zig](examples/triangle.zig). This example can be ran by executing `zig build run-triangle` in vulkan-zig's root.
 
 ## See also
-* (Outdated) implementation of https://vulkan-tutorial.org using translate-c: https://github.com/andrewrk/zig-vulkan-triangle.
+* Implementation of https://vulkan-tutorial.org: https://github.com/andrewrk/zig-vulkan-triangle.
 * Alternative binding generator: https://github.com/SpexGuy/Zig-Vulkan-Headers
