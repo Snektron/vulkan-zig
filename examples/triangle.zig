@@ -2,7 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const c = @import("c.zig");
 const resources = @import("resources");
-const GraphicsContext = @import("graphics-context.zig").GraphicsContext;
+const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Swapchain = @import("swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
 
