@@ -106,21 +106,16 @@ const EnumFieldMerger = struct {
 };
 
 const TagFixerUpper = struct {
-    const NameInfo = struct {
-        tagged_name: ?[]const u8,
-        tagless_name_exists: bool,
-    };
-
-    gpa: *Allocator,
+    allocator: *Allocator,
     registry: *reg.Registry,
-    names: std.StringHashMap(NameInfo),
+    names: std.StringHashMap(void),
     id_renderer: *const IdRenderer,
 
-    fn init(gpa: *Allocator, registry: *reg.Registry, id_renderer: *const IdRenderer) TagFixerUpper {
+    fn init(allocator: *Allocator, registry: *reg.Registry, id_renderer: *const IdRenderer) TagFixerUpper {
         return .{
-            .gpa = gpa,
+            .allocator = allocator,
             .registry = registry,
-            .names = std.StringHashMap(NameInfo).init(gpa),
+            .names = std.StringHashMap(void).init(allocator),
             .id_renderer = id_renderer,
         };
     }
@@ -131,20 +126,10 @@ const TagFixerUpper = struct {
 
     fn insertName(self: *TagFixerUpper, name: []const u8) !void {
         const tagless = self.id_renderer.stripAuthorTag(name);
-        const is_tagged = tagless.len != name.len;
-        const result = try self.names.getOrPut(tagless);
+        const result = try self.names.getOrPut(name);
 
         if (result.found_existing) {
-            if (is_tagged) {
-                result.entry.value.tagged_name = name;
-            } else {
-                result.entry.value.tagless_name_exists = true;
-            }
-        } else {
-            result.entry.value = .{
-                .tagged_name = if (is_tagged) name else null,
-                .tagless_name_exists = !is_tagged,
-            };
+            return error.DuplicateDefinition;
         }
     }
 
@@ -163,16 +148,22 @@ const TagFixerUpper = struct {
         }
     }
 
-    fn fixName(self: *TagFixerUpper, name: *[]const u8) !void {
-        const tagless = self.id_renderer.stripAuthorTag(name.*);
-        const info = self.names.get(tagless) orelse return error.InvalidRegistry;
-        if (info.tagless_name_exists) {
-            name.* = tagless;
-        } else if (info.tagged_name) |tagged| {
-            name.* = tagged;
-        } else {
-            return error.InvalidRegistry;
+    fn fixAlias(self: *TagFixerUpper, name: *[]const u8) !void {
+        if (self.names.contains(name.*)) {
+            // The alias exists, everything is fine
+            return;
         }
+
+        // The alias does not exist, check if the tagless version exists
+        const tagless = self.id_renderer.stripAuthorTag(name.*);
+        if (self.names.contains(tagless)) {
+            // Fix up the name to the tagless version
+            name.* = tagless;
+            return;
+        }
+
+        // Neither original nor tagless version exists
+        return error.InvalidRegistry;
     }
 
     fn fixCommand(self: *TagFixerUpper, command: *reg.Command) !void {
@@ -182,17 +173,17 @@ const TagFixerUpper = struct {
 
         try self.fixTypeInfo(command.return_type);
         for (command.success_codes) |*code| {
-            try self.fixName(code);
+            try self.fixAlias(code);
         }
 
         for (command.error_codes) |*code| {
-            try self.fixName(code);
+            try self.fixAlias(code);
         }
     }
 
     fn fixTypeInfo(self: *TagFixerUpper, type_info: *reg.TypeInfo) error{InvalidRegistry}!void {
         switch (type_info.*) {
-            .name => |*name| try self.fixName(name),
+            .name => |*name| try self.fixAlias(name),
             .command_ptr => |*command| try self.fixCommand(command),
             .pointer => |ptr| try self.fixTypeInfo(ptr.child),
             .array => |arr| try self.fixTypeInfo(arr.child),
@@ -210,17 +201,17 @@ const TagFixerUpper = struct {
                 .enumeration => |*enumeration| {
                     for (enumeration.fields) |*field| {
                         if (field.value == .alias) {
-                            try self.fixName(&field.value.alias.name);
+                            try self.fixAlias(&field.value.alias.name);
                         }
                     }
                 },
                 .bitmask => |*bitmask| {
                     if (bitmask.bits_enum) |*bits| {
-                        try self.fixName(bits);
+                        try self.fixAlias(bits);
                     }
                 },
                 .command => |*command| try self.fixCommand(command),
-                .alias => |*alias| try self.fixName(&alias.name),
+                .alias => |*alias| try self.fixAlias(&alias.name),
                 .typedef => |*type_info| try self.fixTypeInfo(type_info),
                 else => {},
             }
@@ -228,7 +219,10 @@ const TagFixerUpper = struct {
     }
 
     fn fixup(self: *TagFixerUpper) !void {
+        // Extract all non-aliases
         try self.extractNames();
+
+        // Fix aliases
         try self.fixNames();
     }
 };
