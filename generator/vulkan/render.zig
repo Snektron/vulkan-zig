@@ -145,6 +145,7 @@ fn Renderer(comptime WriterType: type) type {
         const ParamType = enum {
             in_pointer,
             out_pointer,
+            in_out_pointer,
             bitflags,
             mut_buffer_len,
             buffer_len,
@@ -170,20 +171,36 @@ fn Renderer(comptime WriterType: type) type {
         allocator: *Allocator,
         registry: *const reg.Registry,
         id_renderer: *IdRenderer,
+        declarations_by_name: std.StringHashMap(*const reg.DeclarationType),
 
         fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
             const tags = try allocator.alloc([]const u8, registry.tags.len);
+            errdefer allocator.free(tags);
             for (tags) |*tag, i| tag.* = registry.tags[i].name;
+
+            var declarations_by_name = std.StringHashMap(*const reg.DeclarationType).init(allocator);
+            errdefer declarations_by_name.deinit();
+
+            for (registry.decls) |*decl| {
+                const result = try declarations_by_name.getOrPut(decl.name);
+                if (result.found_existing) {
+                    return error.InvalidRegistry;
+                }
+
+                result.entry.value = &decl.decl_type;
+            }
 
             return Self{
                 .writer = writer,
                 .allocator = allocator,
                 .registry = registry,
                 .id_renderer = id_renderer,
+                .declarations_by_name = declarations_by_name,
             };
         }
 
-        fn deinit(self: Self) void {
+        fn deinit(self: *Self) void {
+            self.declarations_by_name.deinit();
             self.allocator.free(self.id_renderer.tags);
             self.id_renderer.deinit();
         }
@@ -238,6 +255,50 @@ fn Renderer(comptime WriterType: type) type {
             return mem.endsWith(u8, base_name, "Flags");
         }
 
+        fn containerHasField(self: Self, container: *const reg.Container, field_name: []const u8) bool {
+            for (container.fields) |field| {
+                if (mem.eql(u8, field, field_name)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
+            if (ptr.child.* != .name) {
+                return false;
+            }
+
+            var name = ptr.child.name;
+
+            const decl = while (true) {
+                const decl = self.declarations_by_name.get(name) orelse return error.InvalidRegistry;
+                if (decl.* != .alias) {
+                    break decl;
+                }
+
+                name = decl.alias.name;
+            } else unreachable;
+
+            if (decl.* != .container) {
+                return false;
+            }
+
+            const container = decl.container;
+            if (container.is_union) {
+                return false;
+            }
+
+            for (container.fields) |field| {
+                if (mem.eql(u8, field.name, "pNext")) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         fn classifyParam(self: Self, param: reg.Command.Param) !ParamType {
             switch (param.param_type) {
                 .pointer => |ptr| {
@@ -259,8 +320,13 @@ fn Renderer(comptime WriterType: type) type {
                     }
 
                     if (ptr.size == .one and !ptr.is_optional) {
+                        // Sometimes, a mutable pointer to a struct is taken, even though
+                        // Vulkan expects this struct to be initialized. This is particularly the case
+                        // for getting structs which include pNext chains.
                         if (ptr.is_const) {
                             return .in_pointer;
+                        } else if (try self.isInOutPointer(ptr)) {
+                            return .in_out_pointer;
                         } else {
                             return .out_pointer;
                         }
@@ -860,6 +926,7 @@ fn Renderer(comptime WriterType: type) type {
                         try self.renderTypeInfo(param.param_type.pointer.child.*);
                     },
                     .out_pointer => continue, // Return value
+                    .in_out_pointer,
                     .bitflags, // Special stuff handled in renderWrapperCall
                     .buffer_len,
                     .mut_buffer_len,
@@ -911,7 +978,10 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writeIdentifierWithCase(.snake, param.name);
                         try self.writer.writeAll(".toInt()");
                     },
-                    .buffer_len, .mut_buffer_len, .other => {
+                    .in_out_pointer,
+                    .buffer_len,
+                    .mut_buffer_len,
+                    .other => {
                         try self.writeIdentifierWithCase(.snake, param.name);
                     },
                 }
