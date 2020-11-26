@@ -64,6 +64,7 @@ pub const Container = struct {
         is_buffer_len: bool,
     };
 
+    stype: ?[]const u8,
     fields: []Field,
     is_union: bool,
 };

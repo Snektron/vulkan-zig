@@ -638,7 +638,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 } else {
                     try self.renderTypeInfo(field.field_type);
-                    try self.renderContainerDefaultField(name, field);
+                    try self.renderContainerDefaultField(container, field);
                     try self.writer.writeAll(", ");
                 }
             }
@@ -646,12 +646,21 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("};\n");
         }
 
-        fn renderContainerDefaultField(self: *Self, name: []const u8, field: reg.Container.Field) !void {
+        fn renderContainerDefaultField(self: *Self, container: reg.Container, field: reg.Container.Field) !void {
             if (mem.eql(u8, field.name, "pNext")) {
                 try self.writer.writeAll(" = null");
             } else if (mem.eql(u8, field.name, "sType")) {
+                if (container.stype == null) {
+                    return;
+                }
+
+                const stype = container.stype.?;
+                if (!mem.startsWith(u8, stype, "VK_STRUCTURE_TYPE_")) {
+                    return error.InvalidRegistry;
+                }
+
                 try self.writer.writeAll(" = .");
-                try self.writeIdentifierWithCase(.snake, trimVkNamespace(name));
+                try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len ..]);
             }
         }
 

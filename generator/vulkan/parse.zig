@@ -171,9 +171,16 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
 
     var i: usize = 0;
     var it = ty.findChildrenByTag("member");
+    var maybe_stype: ?[]const u8 = null;
     while (it.next()) |member| {
         var xctok = cparse.XmlCTokenizer.init(member);
         members[i] = try cparse.parseMember(allocator, &xctok);
+        if (mem.eql(u8, members[i].name, "sType")) {
+            if (member.getAttribute("values")) |stype| {
+                maybe_stype = stype;
+            }
+        }
+
         i += 1;
     }
 
@@ -194,6 +201,7 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
         .name = name,
         .decl_type = .{
             .container = .{
+                .stype = maybe_stype,
                 .fields = members,
                 .is_union = is_union,
             }
