@@ -42,7 +42,7 @@ fn parseDeclarations(allocator: *Allocator, root: *xml.Element) ![]registry.Decl
     var types_elem = root.findChildByTag("types") orelse return error.InvalidRegistry;
     var commands_elem = root.findChildByTag("commands") orelse return error.InvalidRegistry;
 
-    const decl_upper_bound = types_elem.children.count() + commands_elem.children.count();
+    const decl_upper_bound = types_elem.children.items.len + commands_elem.children.items.len;
     const decls = try allocator.alloc(registry.Declaration, decl_upper_bound);
 
     var count: usize = 0;
@@ -167,7 +167,7 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
         };
     }
 
-    var members = try allocator.alloc(registry.Container.Field, ty.children.count());
+    var members = try allocator.alloc(registry.Container.Field, ty.children.items.len);
 
     var i: usize = 0;
     var it = ty.findChildrenByTag("member");
@@ -322,7 +322,7 @@ fn parseEnumFields(allocator: *Allocator, elem: *xml.Element) !registry.Enum {
         return error.InvalidRegistry;
     }
 
-    const fields = try allocator.alloc(registry.Enum.Field, elem.children.count());
+    const fields = try allocator.alloc(registry.Enum.Field, elem.children.items.len);
 
     var i: usize = 0;
     var it = elem.findChildrenByTag("enum");
@@ -414,7 +414,7 @@ fn parseCommand(allocator: *Allocator, elem: *xml.Element) !registry.Declaration
     var proto_xctok = cparse.XmlCTokenizer.init(proto);
     const command_decl = try cparse.parseParamOrProto(allocator, &proto_xctok);
 
-    var params = try allocator.alloc(registry.Command.Param, elem.children.count());
+    var params = try allocator.alloc(registry.Command.Param, elem.children.items.len);
 
     var i: usize = 0;
     var it = elem.findChildrenByTag("param");
@@ -490,7 +490,7 @@ fn parseApiConstants(allocator: *Allocator, root: *xml.Element) ![]registry.ApiC
         break :blk n_defines;
     };
 
-    const constants = try allocator.alloc(registry.ApiConstant, enums.children.count() + n_defines);
+    const constants = try allocator.alloc(registry.ApiConstant, enums.children.items.len + n_defines);
 
     var i: usize = 0;
     var it = enums.findChildrenByTag("enum");
@@ -527,7 +527,7 @@ fn parseDefines(types: *xml.Element, out: []registry.ApiConstant) !usize {
         if (mem.eql(u8, name, "VK_HEADER_VERSION")) {
             out[i] = .{
                 .name = name,
-                .value = .{.expr = mem.trim(u8, ty.children.at(2).CharData, " ")},
+                .value = .{.expr = mem.trim(u8, ty.children.items[2].CharData, " ")},
             };
         } else {
             var xctok = cparse.XmlCTokenizer.init(ty);
@@ -546,7 +546,7 @@ fn parseDefines(types: *xml.Element, out: []registry.ApiConstant) !usize {
 
 fn parseTags(allocator: *Allocator, root: *xml.Element) ![]registry.Tag {
     var tags_elem = root.findChildByTag("tags") orelse return error.InvalidRegistry;
-    const tags = try allocator.alloc(registry.Tag, tags_elem.children.count());
+    const tags = try allocator.alloc(registry.Tag, tags_elem.children.items.len);
 
     var i: usize = 0;
     var it = tags_elem.findChildrenByTag("tag");
@@ -585,7 +585,7 @@ fn parseFeature(allocator: *Allocator, feature: *xml.Element) !registry.Feature 
         break :blk try splitFeatureLevel(number, ".");
     };
 
-    var requires = try allocator.alloc(registry.Require, feature.children.count());
+    var requires = try allocator.alloc(registry.Require, feature.children.items.len);
     var i: usize = 0;
     var it = feature.findChildrenByTag("require");
     while (it.next()) |require| {
@@ -707,7 +707,7 @@ fn parseRequire(allocator: *Allocator, require: *xml.Element, extnumber: ?u31) !
 fn parseExtensions(allocator: *Allocator, root: *xml.Element) ![]registry.Extension {
     const extensions_elem = root.findChildByTag("extensions") orelse return error.InvalidRegistry;
 
-    const extensions = try allocator.alloc(registry.Extension, extensions_elem.children.count());
+    const extensions = try allocator.alloc(registry.Extension, extensions_elem.children.items.len);
     var i: usize = 0;
     var it = extensions_elem.findChildrenByTag("extension");
     while (it.next()) |extension| {
@@ -786,7 +786,7 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !registry.Exte
         break :blk try splitCommaAlloc(allocator, requires_str);
     };
 
-    var requires = try allocator.alloc(registry.Require, extension.children.count());
+    var requires = try allocator.alloc(registry.Require, extension.children.items.len);
     var i: usize = 0;
     var it = extension.findChildrenByTag("require");
     while (it.next()) |require| {

@@ -3,7 +3,7 @@ const mem = std.mem;
 const testing = std.testing;
 const Allocator = mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
-const SegmentedList = std.SegmentedList;
+const ArrayList = std.ArrayList;
 
 pub const Attribute = struct {
     name: []const u8,
@@ -17,8 +17,8 @@ pub const Content = union(enum) {
 };
 
 pub const Element = struct {
-    pub const AttributeList = SegmentedList(*Attribute, 1);
-    pub const ContentList = SegmentedList(Content, 0);
+    pub const AttributeList = ArrayList(*Attribute);
+    pub const ContentList = ArrayList(Content);
 
     tag: []const u8,
     attributes: AttributeList,
@@ -33,10 +33,9 @@ pub const Element = struct {
     }
 
     pub fn getAttribute(self: *Element, attrib_name: []const u8) ?[]const u8 {
-        var it = self.attributes.iterator(0);
-        while (it.next()) |child| {
-            if (mem.eql(u8, child.*.name, attrib_name)) {
-                return child.*.value;
+        for (self.attributes.items) |child| {
+            if (mem.eql(u8, child.name, attrib_name)) {
+                return child.value;
             }
         }
 
@@ -45,19 +44,26 @@ pub const Element = struct {
 
     pub fn getCharData(self: *Element, child_tag: []const u8) ?[]const u8 {
         const child = self.findChildByTag(child_tag) orelse return null;
-        if (child.children.count() != 1) {
+        if (child.children.items.len != 1) {
             return null;
         }
 
-        return switch (child.children.at(0).*) {
+        return switch (child.children.items[0]) {
             .CharData => |char_data| char_data,
             else => null
         };
     }
 
+    pub fn iterator(self: *Element) ChildIterator {
+        return .{
+            .items = self.children.items,
+            .i = 0,
+        };
+    }
+
     pub fn elements(self: *Element) ChildElementIterator {
         return .{
-            .inner = self.children.iterator(0),
+            .inner = self.iterator(),
         };
     }
 
@@ -72,8 +78,22 @@ pub const Element = struct {
         };
     }
 
+    pub const ChildIterator = struct {
+        items: []Content,
+        i: usize,
+
+        pub fn next(self: *ChildIterator) ?*Content {
+            if (self.i < self.items.len) {
+                self.i += 1;
+                return &self.items[self.i - 1];
+            }
+
+            return null;
+        }
+    };
+
     pub const ChildElementIterator = struct {
-        inner: ContentList.Iterator,
+        inner: ChildIterator,
 
         pub fn next(self: *ChildElementIterator) ?*Element {
             while (self.inner.next()) |child| {
@@ -415,7 +435,7 @@ fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
 
     while (ctx.eatWs()) {
         const attr = (try tryParseAttr(ctx, alloc)) orelse break;
-        try element.attributes.push(attr);
+        try element.attributes.append(attr);
     }
 
     if (ctx.eatStr("/>")) {
@@ -432,7 +452,7 @@ fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
         }
 
         const content = try parseContent(ctx, alloc);
-        try element.children.push(content);
+        try element.children.append(content);
     }
 
     const closing_tag = try parseNameNoDupe(ctx);

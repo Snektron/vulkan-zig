@@ -156,22 +156,22 @@ pub const CTokenizer = struct {
 };
 
 pub const XmlCTokenizer = struct {
-    it: xml.Element.ContentList.Iterator,
+    it: xml.Element.ChildIterator,
     ctok: ?CTokenizer = null,
     current: ?Token = null,
 
     pub fn init(elem: *xml.Element) XmlCTokenizer {
         return .{
-            .it = elem.children.iterator(0),
+            .it = elem.iterator(),
         };
     }
 
     fn elemToToken(elem: *xml.Element) !?Token {
-        if (elem.children.count() != 1 or elem.children.at(0).* != .CharData) {
+        if (elem.children.items.len != 1 or elem.children.items[0] != .CharData) {
             return error.InvalidXml;
         }
 
-        const text = elem.children.at(0).CharData;
+        const text = elem.children.items[0].CharData;
         if (mem.eql(u8, elem.tag, "type")) {
             return Token{.kind = .type_name, .text = text};
         } else if (mem.eql(u8, elem.tag, "enum")) {
