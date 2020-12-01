@@ -481,11 +481,11 @@ test "tryParseElement" {
         const elem = try tryParseElement(&ctx, alloc);
         testing.expectEqualSlices(u8, elem.?.tag, "python");
 
-        const size_attr = elem.?.attributes.at(0).*;
+        const size_attr = elem.?.attributes.items[0];
         testing.expectEqualSlices(u8, size_attr.name, "size");
         testing.expectEqualSlices(u8, size_attr.value, "15");
 
-        const color_attr = elem.?.attributes.at(1).*;
+        const color_attr = elem.?.attributes.items[1];
         testing.expectEqualSlices(u8, color_attr.name, "color");
         testing.expectEqualSlices(u8, color_attr.value, "green");
     }
@@ -494,19 +494,19 @@ test "tryParseElement" {
         var ctx = ParseContext.init("<python>test</python>");
         const elem = try tryParseElement(&ctx, alloc);
         testing.expectEqualSlices(u8, elem.?.tag, "python");
-        testing.expectEqualSlices(u8, elem.?.children.at(0).CharData, "test");
+        testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "test");
     }
 
     {
         var ctx = ParseContext.init("<a>b<c/>d<e/>f<!--g--></a>");
         const elem = try tryParseElement(&ctx, alloc);
         testing.expectEqualSlices(u8, elem.?.tag, "a");
-        testing.expectEqualSlices(u8, elem.?.children.at(0).CharData, "b");
-        testing.expectEqualSlices(u8, elem.?.children.at(1).Element.tag, "c");
-        testing.expectEqualSlices(u8, elem.?.children.at(2).CharData, "d");
-        testing.expectEqualSlices(u8, elem.?.children.at(3).Element.tag, "e");
-        testing.expectEqualSlices(u8, elem.?.children.at(4).CharData, "f");
-        testing.expectEqualSlices(u8, elem.?.children.at(5).Comment, "g");
+        testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "b");
+        testing.expectEqualSlices(u8, elem.?.children.items[1].Element.tag, "c");
+        testing.expectEqualSlices(u8, elem.?.children.items[2].CharData, "d");
+        testing.expectEqualSlices(u8, elem.?.children.items[3].Element.tag, "e");
+        testing.expectEqualSlices(u8, elem.?.children.items[4].CharData, "f");
+        testing.expectEqualSlices(u8, elem.?.children.items[5].Comment, "g");
     }
 }
 
