@@ -190,11 +190,6 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     for (members) |*member| {
         const member_elem = it.next().?;
         try parsePointerMeta(.{.container = members}, &member.field_type, member_elem);
-
-        // pNext isn't properly marked as optional, so just manually override it,
-        if (mem.eql(u8, member.name, "pNext")) {
-            member.field_type.pointer.is_optional = true;
-        }
     }
 
     return registry.Declaration {
