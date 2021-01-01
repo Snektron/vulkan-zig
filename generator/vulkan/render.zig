@@ -14,7 +14,7 @@ const preamble =
     \\const std = @import("std");
     \\const builtin = @import("builtin");
     \\const root = @import("root");
-    \\pub const vulkan_call_conv: builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.os.arch == .i386)
+    \\pub const vulkan_call_conv: builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .i386)
     \\        .Stdcall
     \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and builtin.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
     \\        // On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
