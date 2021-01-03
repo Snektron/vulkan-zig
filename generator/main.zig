@@ -1,7 +1,7 @@
 const std = @import("std");
 const generate = @import("vulkan/generator.zig").generate;
 
-const usage = "Usage: {} [-h|--help] <spec xml path> <output zig source>\n";
+const usage = "Usage: {s} [-h|--help] <spec xml path> <output zig source>\n";
 
 pub fn main() !void {
     const stderr = std.io.getStdErr();
@@ -40,7 +40,7 @@ pub fn main() !void {
         } else if (maybe_out_path == null) {
             maybe_out_path = arg;
         } else {
-            try stderr.writer().print("Error: Superficial argument '{}'\n", .{ arg });
+            try stderr.writer().print("Error: Superficial argument '{s}'\n", .{ arg });
         }
     }
 
@@ -56,12 +56,12 @@ pub fn main() !void {
 
     const cwd = std.fs.cwd();
     const xml_src = cwd.readFileAlloc(allocator, xml_path, std.math.maxInt(usize)) catch |err| {
-        try stderr.writer().print("Error: Failed to open input file '{}' ({})\n", .{ xml_path, @errorName(err) });
+        try stderr.writer().print("Error: Failed to open input file '{s}' ({s})\n", .{ xml_path, @errorName(err) });
         return;
     };
 
     const out_file = cwd.createFile(out_path, .{}) catch |err| {
-        try stderr.writer().print("Error: Failed to create output file '{}' ({})\n", .{ out_path, @errorName(err) });
+        try stderr.writer().print("Error: Failed to create output file '{s}' ({s})\n", .{ out_path, @errorName(err) });
         return;
     };
     defer out_file.close();

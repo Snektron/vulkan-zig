@@ -54,7 +54,7 @@ pub const ResourceGenStep = struct {
         const shader_out_path = self.shader_step.add(source);
         var writer = self.resources.writer();
 
-        writer.print("pub const {} = @embedFile(\"", .{ name }) catch unreachable;
+        writer.print("pub const {s} = @embedFile(\"", .{ name }) catch unreachable;
         self.renderPath(shader_out_path, writer);
         writer.writeAll("\");\n") catch unreachable;
     }

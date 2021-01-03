@@ -399,7 +399,7 @@ fn Renderer(comptime WriterType: type) type {
         fn renderCopyright(self: *Self) !void {
             var it = mem.split(self.registry.copyright, "\n");
             while (it.next()) |line| {
-                try self.writer.print("// {}\n", .{line});
+                try self.writer.print("// {s}\n", .{line});
             }
         }
 
@@ -458,16 +458,16 @@ fn Renderer(comptime WriterType: type) type {
                 switch (suffix.kind) {
                     .id => {
                         if (mem.eql(u8, suffix.text, "ULL")) {
-                            try self.writer.print("@as(u64, {})", .{tok.text});
+                            try self.writer.print("@as(u64, {s})", .{tok.text});
                         } else if (mem.eql(u8, suffix.text, "U")) {
-                            try self.writer.print("@as(u32, {})", .{tok.text});
+                            try self.writer.print("@as(u32, {s})", .{tok.text});
                         } else {
                             return error.InvalidApiConstant;
                         }
                     },
                     .dot => {
                         const decimal = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
-                        try self.writer.print("@as(f32, {}.{})", .{tok.text, decimal.text});
+                        try self.writer.print("@as(f32, {s}.{s})", .{tok.text, decimal.text});
 
                         const f = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
                         if (f.kind != .id or !mem.eql(u8, f.text, "f")) {
@@ -496,7 +496,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(zig_name);
                 return;
             } else if (self.extractBitflagName(name)) |bitflag_name| {
-                try self.writeIdentifierFmt("{}Flags{}", .{
+                try self.writeIdentifierFmt("{s}Flags{s}", .{
                     trimVkNamespace(bitflag_name.base_name),
                     @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
                 });
@@ -512,7 +512,7 @@ fn Renderer(comptime WriterType: type) type {
             } else if (mem.startsWith(u8, name, "PFN_vk")) {
                 // Function pointer type, strip off the PFN_vk part and replace it with Pfn. Note that
                 // this function is only called to render the typedeffed function pointers like vkVoidFunction
-                try self.writeIdentifierFmt("Pfn{}", .{name[6..]});
+                try self.writeIdentifierFmt("Pfn{s}", .{name[6..]});
                 return;
             } else if (mem.startsWith(u8, name, "VK_")) {
                 // Constants
@@ -535,7 +535,7 @@ fn Renderer(comptime WriterType: type) type {
                 blk: {
                     if (param.param_type == .name) {
                         if (self.extractBitflagName(param.param_type.name)) |bitflag_name| {
-                            try self.writeIdentifierFmt("{}Flags{}", .{
+                            try self.writeIdentifierFmt("{s}Flags{s}", .{
                                 trimVkNamespace(bitflag_name.base_name),
                                 @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
                             });
@@ -768,7 +768,7 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.print(" = extern enum({}) {{null_handle = 0, _}};\n", .{backing_type});
+            try self.writer.print(" = extern enum({s}) {{null_handle = 0, _}};\n", .{backing_type});
         }
 
         fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
@@ -799,7 +799,7 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("pub const ");
             try self.writeIdentifier(name);
-            try self.writer.print(" = if (@hasDecl(root, \"{}\")) root.", .{name});
+            try self.writer.print(" = if (@hasDecl(root, \"{s}\")) root.", .{name});
             try self.writeIdentifier(name);
             try self.writer.writeAll(" else ");
 
@@ -807,7 +807,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(default);
                 try self.writer.writeAll(";\n");
             } else {
-                try self.writer.print("@compileError(\"Missing type definition of '{}'\");\n", .{name});
+                try self.writer.print("@compileError(\"Missing type definition of '{s}'\");\n", .{name});
             }
         }
 
@@ -820,7 +820,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderCommandPtrName(self: *Self, name: []const u8) !void {
-            try self.writeIdentifierFmt("Pfn{}", .{trimVkNamespace(name)});
+            try self.writeIdentifierFmt("Pfn{s}", .{trimVkNamespace(name)});
         }
 
         fn renderCommandPtrs(self: *Self) !void {
@@ -849,7 +849,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll("pub const ");
                 try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
                 try self.writer.writeAll("= Info {\n");
-                try self.writer.print(".name = \"{}\", .version = {},", .{ext.name, ext.version});
+                try self.writer.print(".name = \"{s}\", .version = {},", .{ext.name, ext.version});
                 try self.writer.writeAll("};\n");
             }
             try self.writer.writeAll("};\n");
@@ -863,7 +863,7 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderWrappersOfDispatchType(self: *Self, name: []const u8, dispatch_type: CommandDispatchType) !void {
             try self.writer.print(
-                \\pub fn {}(comptime Self: type) type {{
+                \\pub fn {s}(comptime Self: type) type {{
                 \\    return struct {{
                 \\
                 , .{name}
@@ -899,11 +899,11 @@ fn Renderer(comptime WriterType: type) type {
             @setEvalBranchQuota(2000);
 
             try self.writer.print(
-                \\pub fn load({}) !Self {{
+                \\pub fn load({s}) !Self {{
                 \\    var self: Self = undefined;
                 \\    inline for (std.meta.fields(Self)) |field| {{
                 \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
-                \\        const cmd_ptr = loader({}name) orelse return error.InvalidCommand;
+                \\        const cmd_ptr = loader({s}name) orelse return error.InvalidCommand;
                 \\        @field(self, field.name) = @ptrCast(field.field_type, cmd_ptr);
                 \\    }}
                 \\    return self;
@@ -1042,7 +1042,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderReturnStructName(self: *Self, command_name: []const u8) !void {
-            try self.writeIdentifierFmt("{}Result", .{trimVkNamespace(command_name)});
+            try self.writeIdentifierFmt("{s}Result", .{trimVkNamespace(command_name)});
         }
 
         fn renderReturnStruct(self: *Self, command_name: []const u8, returns: []const ReturnValue) !void {
