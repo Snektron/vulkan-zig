@@ -61,7 +61,7 @@ pub fn main() !void {
     const gc = try GraphicsContext.init(allocator, app_name, window);
     defer gc.deinit();
 
-    std.debug.print("Using device: {}\n", .{gc.deviceName()});
+    std.debug.print("Using device: {s}\n", .{ gc.deviceName() });
 
     var swapchain = try Swapchain.init(&gc, allocator, extent);
     defer swapchain.deinit();
