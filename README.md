@@ -18,10 +18,25 @@ $ zig-cache/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
 ```
 This reads the xml file, parses its contents, renders the Vulkan bindings, and formats file, before writing the result to the output path. While the intended usage of vulkan-zig is through direct generation from build.zig (see below), the CLI-interface can be used for one-off generation and vendoring the result.
 
+## Using in your project
+Using the https://github.com/nektro/zigmod package manager, add the bottom two lines to your `zig.mod` file. Run `zigmod init` if you dont have one.
+
+```yml
+dependencies:
+  - type: git
+    path: https://github.com/Snektron/vulkan-zig
+```
+
 ### Generation from build.zig
 Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step:
+
+ > Note: `deps.zig` comes from running `zigmod fetch`.
+
 ```zig
-const vkgen = @import("vulkan-zig/generator/index.zig");
+const std = @import("std");
+const Builder = std.build.Builder;
+const deps = @import("./deps.zig");
+const vkgen = @import(deps.pkgs.vkgen.path);
 
 pub fn build(b: *Builder) void {
     ...
