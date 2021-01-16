@@ -265,6 +265,17 @@ fn Renderer(comptime WriterType: type) type {
             return false;
         }
 
+        // fn resolveAlias(self: Self, name: []const u8) !*const reg.DeclarationType {
+        //     while (true) {
+        //         const decl = self.declarations_by_name.get(name) orelse return error.InvalidRegistry;
+        //         if (decl.* != .alias) {
+        //             return decl;
+        //         }
+
+        //         name = decl.alias.name;
+        //     }
+        // }
+
         fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
             if (ptr.child.* != .name) {
                 return false;
@@ -668,6 +679,37 @@ fn Renderer(comptime WriterType: type) type {
             try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field_name));
         }
 
+        fn renderEnumerationValue(self: *Self, enum_name: []const u8, enumeration: reg.Enum, value: reg.Enum.Value) !void {
+            var current_value = value;
+            var maybe_alias_of: ?[]const u8 = null;
+
+            while (true) {
+                switch (current_value) {
+                    .int => |int| try self.writer.print(" = {}, ", .{int}),
+                    .bitpos => |pos| try self.writer.print(" = 1 << {}, ", .{pos}),
+                    .bit_vector => |bv| try self.writer.print("= 0x{X}, ", .{bv}),
+                    .alias => |alias| {
+                        // Find the alias
+                        current_value = for (enumeration.fields) |field| {
+                            if (mem.eql(u8, field.name, alias.name)) {
+                                maybe_alias_of = field.name;
+                                break field.value;
+                            }
+                        } else return error.InvalidRegistry; // There is no alias
+                        continue;
+                    },
+                }
+
+                break;
+            }
+
+            if (maybe_alias_of) |alias_of| {
+                try self.writer.writeAll("// alias of ");
+                try self.renderEnumFieldName(enum_name, alias_of);
+                try self.writer.writeByte('\n');
+            }
+        }
+
         fn renderEnumeration(self: *Self, name: []const u8, enumeration: reg.Enum) !void {
             if (enumeration.is_bitmask) {
                 try self.renderBitmaskBits(name, enumeration);
@@ -676,38 +718,17 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.writeAll(" = extern enum {");
+            try self.writer.writeAll(" = extern enum(i32) {");
 
             for (enumeration.fields) |field| {
-                if (field.value == .alias) {
+                if (field.value == .alias and field.value.alias.is_compat_alias)
                     continue;
-                }
 
                 try self.renderEnumFieldName(name, field.name);
-
-                switch (field.value) {
-                    .int => |int| try self.writer.print(" = {}, ", .{int}),
-                    .bitpos => |pos| try self.writer.print(" = 1 << {}, ", .{pos}),
-                    .bit_vector => |value| try self.writer.print(" = 0x{X}, ", .{value}),
-                    .alias => unreachable,
-                }
+                try self.renderEnumerationValue(name, enumeration, field.value);
             }
 
-            for (enumeration.fields) |field| {
-                if (field.value != .alias or field.value.alias.is_compat_alias) {
-                    continue;
-                }
-
-                try self.writer.writeAll("pub const ");
-                try self.renderEnumFieldName(name, field.name);
-                try self.writer.writeAll(" = ");
-                try self.renderName(name);
-                try self.writer.writeByte('.');
-                try self.renderEnumFieldName(name, field.value.alias.name);
-                try self.writer.writeAll(";");
-            }
-
-            try self.writer.writeAll("};\n");
+            try self.writer.writeAll("_,};\n");
         }
 
         fn renderBitmaskBits(self: *Self, name: []const u8, bits: reg.Enum) !void {
