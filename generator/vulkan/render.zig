@@ -700,7 +700,9 @@ fn Renderer(comptime WriterType: type) type {
 
                 try self.writer.writeAll("pub const ");
                 try self.renderEnumFieldName(name, field.name);
-                try self.writer.writeAll(" = .");
+                try self.writer.writeAll(" = ");
+                try self.renderName(name);
+                try self.writer.writeByte('.');
                 try self.renderEnumFieldName(name, field.value.alias.name);
                 try self.writer.writeAll(";");
             }
