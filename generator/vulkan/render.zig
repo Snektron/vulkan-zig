@@ -754,10 +754,10 @@ fn Renderer(comptime WriterType: type) type {
                     }
 
                     try self.writer.writeAll(": bool ");
-                        if (bitpos == 0) { // Force alignment to integer boundaries
-                            try self.writer.writeAll("align(@alignOf(Flags)) ");
-                        }
-                        try self.writer.writeAll("= false, ");
+                    if (bitpos == 0) { // Force alignment to integer boundaries
+                        try self.writer.writeAll("align(@alignOf(Flags)) ");
+                    }
+                    try self.writer.writeAll("= false, ");
                 }
             }
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
