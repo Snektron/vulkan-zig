@@ -245,7 +245,7 @@ const ParseContext = struct {
 
     fn currentLine(self: ParseContext) []const u8 {
         var begin: usize = 0;
-        if (mem.indexOfScalarPos(u8, self.source[0 .. self.offset], '\n')) |prev_nl| {
+        if (mem.lastIndexOfScalar(u8, self.source[0 .. self.offset], '\n')) |prev_nl| {
             begin = prev_nl + 1;
         }
 
@@ -328,10 +328,15 @@ fn parseDocument(ctx: *ParseContext, backing_allocator: *Allocator) !Document {
 
     errdefer doc.deinit();
 
+    try trySkipComments(ctx, &doc.arena.allocator);
+
     doc.xml_decl = try tryParseProlog(ctx, &doc.arena.allocator);
     _ = ctx.eatWs();
+    try trySkipComments(ctx, &doc.arena.allocator);
+
     doc.root = (try tryParseElement(ctx, &doc.arena.allocator)) orelse return error.InvalidDocument;
     _ = ctx.eatWs();
+    try trySkipComments(ctx, &doc.arena.allocator);
 
     if (ctx.peek() != null) return error.InvalidDocument;
 
@@ -581,6 +586,12 @@ test "tryParseProlog" {
     }
 }
 
+fn trySkipComments(ctx: *ParseContext, alloc: *Allocator) !void {
+    while (try tryParseComment(ctx, alloc)) |_| {
+        _ = ctx.eatWs();
+    }
+}
+
 fn tryParseComment(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
     if (!ctx.eatStr("<!--")) return null;
 
@@ -644,4 +655,13 @@ test "dupeAndUnescape" {
     testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&&"));
     testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&test;"));
     testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&boa"));
+}
+
+test "Top level comments" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var alloc = &arena.allocator;
+
+    const doc = try parse(alloc, "<?xml version='aa'?><!--comment--><python color='green'/><!--another comment-->");
+    testing.expectEqualSlices(u8, "python", doc.root.tag);
 }
