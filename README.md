@@ -8,7 +8,11 @@ A Vulkan binding generator for Zig.
 
 vulkan-zig attempts to provide a better experience to programming Vulkan applications in Zig, by providing features such as integration of vulkan errors with Zig's error system, function pointer loading, renaming fields to standard Zig style, better bitfield handling, turning out parameters into return values and more.
 
-vulkan-zig is automatically tested against the latest vk.xml and zig, and supports vk.xml from version 1.x.163.
+vulkan-zig is automatically tested daily against the latest vk.xml and zig, and supports vk.xml from version 1.x.163.
+
+### Zig versions
+
+vulkan-zig aims to be always compatible with the ever-changing Zig master branch (however, development may lag a few days behind). Sometimes, the Zig master branch breaks a bunch of functionality however, which may make the latest version vulkan-zig incompatible with older releases of Zig. Versions compatible with older versions of zig are marked with the tag `zig-<version>`.
 
 ## Features
 ### CLI-interface
