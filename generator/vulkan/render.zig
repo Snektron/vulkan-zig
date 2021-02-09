@@ -265,17 +265,6 @@ fn Renderer(comptime WriterType: type) type {
             return false;
         }
 
-        // fn resolveAlias(self: Self, name: []const u8) !*const reg.DeclarationType {
-        //     while (true) {
-        //         const decl = self.declarations_by_name.get(name) orelse return error.InvalidRegistry;
-        //         if (decl.* != .alias) {
-        //             return decl;
-        //         }
-
-        //         name = decl.alias.name;
-        //     }
-        // }
-
         fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
             if (ptr.child.* != .name) {
                 return false;
