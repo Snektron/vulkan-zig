@@ -85,7 +85,7 @@ pub fn build(b: *Builder) void {
     triangle_exe.setTarget(target);
     triangle_exe.setBuildMode(mode);
     triangle_exe.install();
-    triangle_exe.linkSystemLibrary("c");
+    triangle_exe.linkLibC();
     triangle_exe.linkSystemLibrary("glfw");
 
     const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the to the Vulkan registry") orelse "examples/vk.xml";
