@@ -71,7 +71,7 @@ pub const Container = struct {
 
 pub const Enum = struct {
     pub const Value = union(enum) {
-        bitpos: u5, // 1 << bitpos
+        bitpos: u6, // 1 << bitpos
         bit_vector: i32, // Combined flags & some vendor IDs
         int: i32,
         alias: struct {
@@ -86,11 +86,13 @@ pub const Enum = struct {
     };
 
     fields: []Field,
+    bitwidth: u8,
     is_bitmask: bool,
 };
 
 pub const Bitmask = struct {
     bits_enum: ?[]const u8,
+    bitwidth: u8,
 };
 
 pub const Handle = struct {

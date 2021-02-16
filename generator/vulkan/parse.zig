@@ -107,9 +107,21 @@ fn parseBitmaskType(ty: *xml.Element) !registry.Declaration {
             .decl_type = .{.alias = .{.name = alias, .target = .other_type}},
         };
     } else {
+        const flags_type = ty.getCharData("type") orelse return error.InvalidRegistry;
+
+        const bitwidth: u8 = if (mem.eql(u8, flags_type, "VkFlags"))
+                32
+            else if (mem.eql(u8, flags_type, "VkFlags64"))
+                64
+            else
+                return error.InvalidRegistry;
+
         return registry.Declaration{
             .name = ty.getCharData("name") orelse return error.InvalidRegistry,
-            .decl_type = .{.bitmask = .{.bits_enum = ty.getAttribute("requires")}},
+            .decl_type = .{.bitmask = .{
+                .bits_enum = ty.getAttribute("requires"),
+                .bitwidth = bitwidth,
+            }},
         };
     }
 }
@@ -317,6 +329,11 @@ fn parseEnumFields(allocator: *Allocator, elem: *xml.Element) !registry.Enum {
         return error.InvalidRegistry;
     }
 
+    const bitwidth = if (elem.getAttribute("bitwidth")) |bitwidth|
+            try std.fmt.parseInt(u8, bitwidth, 10)
+        else
+            32;
+
     const fields = try allocator.alloc(registry.Enum.Field, elem.children.items.len);
 
     var i: usize = 0;
@@ -328,6 +345,7 @@ fn parseEnumFields(allocator: *Allocator, elem: *xml.Element) !registry.Enum {
 
     return registry.Enum{
         .fields = allocator.shrink(fields, i),
+        .bitwidth = bitwidth,
         .is_bitmask = is_bitmask,
     };
 }
@@ -356,7 +374,7 @@ fn parseEnumField(field: *xml.Element) !registry.Enum.Field {
                 break :blk .{.int = try std.fmt.parseInt(i32, value, 10)};
             }
         } else if (field.getAttribute("bitpos")) |bitpos| {
-            break :blk .{.bitpos = try std.fmt.parseInt(u5, bitpos, 10)};
+            break :blk .{.bitpos = try std.fmt.parseInt(u6, bitpos, 10)};
         } else if (field.getAttribute("alias")) |alias| {
             break :blk .{.alias = .{.name = alias, .is_compat_alias = is_compat_alias}};
         } else {
