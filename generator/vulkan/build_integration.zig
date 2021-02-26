@@ -65,16 +65,18 @@ pub const GenerateStep = struct {
     fn make(step: *Step) !void {
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
-        var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
+
         const spec = try cwd.readFileAlloc(self.builder.allocator, self.spec_path, std.math.maxInt(usize));
+
+        var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
         try generate(self.builder.allocator, spec, out_buffer.writer());
 
         const tree = try std.zig.parse(self.builder.allocator, out_buffer.items);
 
+        var formatted = try tree.render(self.builder.allocator);
+
         const dir = path.dirname(self.package.path).?;
         try cwd.makePath(dir);
-        const output_file = cwd.createFile(self.package.path, .{}) catch unreachable;
-        defer output_file.close();
-        _ = try std.zig.render(self.builder.allocator, output_file.writer(), tree);
+        try cwd.writeFile(self.package.path, formatted);
     }
 };

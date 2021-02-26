@@ -60,15 +60,22 @@ pub fn main() !void {
         return;
     };
 
-    const out_file = cwd.createFile(out_path, .{}) catch |err| {
-        try stderr.writer().print("Error: Failed to create output file '{s}' ({s})\n", .{ out_path, @errorName(err) });
-        return;
-    };
-    defer out_file.close();
-
     var out_buffer = std.ArrayList(u8).init(allocator);
     try generate(allocator, xml_src, out_buffer.writer());
-    const tree = try std.zig.parse(allocator, out_buffer.items);
 
-    _ = try std.zig.render(allocator, out_file.writer(), tree);
+    const tree = try std.zig.parse(allocator, out_buffer.items);
+    const formatted = try tree.render(allocator);
+    defer allocator.free(formatted);
+
+    if (std.fs.path.dirname(out_path)) |dir| {
+        cwd.makePath(dir) catch |err| {
+            try stderr.writer().print("Error: Failed to create output directory '{s}' ({s})\n", .{ dir, @errorName(err) });
+            return;
+        };
+    }
+
+    cwd.writeFile(out_path, formatted) catch |err| {
+        try stderr.writer().print("Error: Failed to write to output file '{s}' ({s})\n", .{ out_path, @errorName(err) });
+        return;
+    };
 }
