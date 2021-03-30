@@ -506,7 +506,7 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writer.print("@as(f32, {s}.{s})", .{tok.text, decimal.text});
 
                         const f = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
-                        if (f.kind != .id or !mem.eql(u8, f.text, "f")) {
+                        if (f.kind != .id or f.text.len != 1 or (f.text[0] != 'f' and f.text[0] != 'F')) {
                             return error.InvalidApiConstant;
                         }
                     },

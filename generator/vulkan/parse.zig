@@ -89,7 +89,7 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
 fn parseForeigntype(ty: *xml.Element) !registry.Declaration {
     const name = ty.getAttribute("name") orelse return error.InvalidRegistry;
     const depends = ty.getAttribute("requires") orelse if (mem.eql(u8, name, "int"))
-            "vk_platform"  // for some reason, int doesn't depend on vk_platform (but the other c types do)
+            "vk_platform" // for some reason, int doesn't depend on vk_platform (but the other c types do)
         else
             return error.InvalidRegistry;
 
