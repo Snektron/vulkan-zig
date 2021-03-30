@@ -391,7 +391,7 @@ fn tryParseCharData(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
 
     while (ctx.peek()) |ch| {
         switch (ch) {
-            '<', '>' => break,
+            '<' => break,
             else => _ = ctx.consumeNoEof()
         }
     }
