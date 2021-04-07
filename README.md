@@ -12,7 +12,7 @@ vulkan-zig is automatically tested daily against the latest vk.xml and zig, and 
 
 ### Zig versions
 
-vulkan-zig aims to be always compatible with the ever-changing Zig master branch (however, development may lag a few days behind). Sometimes, the Zig master branch breaks a bunch of functionality however, which may make the latest version vulkan-zig incompatible with older releases of Zig. Versions compatible with older versions of zig are marked with the tag `zig-<version>`.
+vulkan-zig aims to be always compatible with the ever-changing Zig master branch (however, development may lag a few days behind). Sometimes, the Zig master branch breaks a bunch of functionality however, which may make the latest version vulkan-zig incompatible with older releases of Zig. This repository aims to have a version compatible for both the latest Zig master, and the latest Zig release. The `master` branch is compatible with the `master` branch of Zig, and versions for older versions of Zig are maintained in the `zig-<version>-compat` branch.
 
 ## Features
 ### CLI-interface
