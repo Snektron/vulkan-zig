@@ -140,34 +140,6 @@ pub const Generator = struct {
         return tagless[0 .. tagless.len - "Flags".len];
     }
 
-    fn fixupBitmasks(self: *Generator) !void {
-        var bits = std.StringHashMap([]const u8).init(self.gpa);
-        defer bits.deinit();
-
-        for (self.registry.decls) |decl| {
-            if (decl.decl_type == .enumeration and decl.decl_type.enumeration.is_bitmask) {
-                try bits.put(self.stripFlagBits(decl.name), decl.name);
-            }
-        }
-
-        for (self.registry.decls) |*decl| {
-            switch (decl.decl_type) {
-                .bitmask => |*bitmask| {
-                    const base_name = self.stripFlags(decl.name);
-
-                    if (bitmask.bits_enum) |bits_enum| {
-                        if (bits.get(base_name) == null) {
-                            bitmask.bits_enum = null;
-                        }
-                    } else if (bits.get(base_name)) |bits_enum| {
-                        bitmask.bits_enum = bits_enum;
-                    }
-                },
-                else => {}
-            }
-        }
-    }
-
     // Solve `registry.declarations` according to `registry.extensions` and `registry.features`.
     fn mergeEnumFields(self: *Generator) !void {
         var merger = EnumFieldMerger.init(self.gpa, &self.reg_arena.allocator, &self.registry);
@@ -198,6 +170,5 @@ pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: anytype) !v
     defer gen.deinit();
 
     try gen.mergeEnumFields();
-    try gen.fixupBitmasks();
     try gen.render(writer);
 }
