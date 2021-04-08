@@ -252,17 +252,6 @@ pub const Generator = struct {
         self.reg_arena.deinit();
     }
 
-    fn removePromotedExtensions(self: *Generator) void {
-        var write_index: usize = 0;
-        for (self.registry.extensions) |ext| {
-            if (ext.promoted_to == .none) {
-                self.registry.extensions[write_index] = ext;
-                write_index += 1;
-            }
-        }
-        self.registry.extensions.len = write_index;
-    }
-
     fn stripFlagBits(self: Generator, name: []const u8) []const u8 {
         const tagless = self.id_renderer.stripAuthorTag(name);
         return tagless[0 .. tagless.len - "FlagBits".len];
@@ -330,7 +319,6 @@ pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: anytype) !v
     var gen = try Generator.init(allocator, spec.root);
     defer gen.deinit();
 
-    gen.removePromotedExtensions();
     try gen.mergeEnumFields();
     try gen.fixupBitmasks();
     try gen.fixupTags();
