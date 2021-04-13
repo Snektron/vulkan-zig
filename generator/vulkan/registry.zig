@@ -37,7 +37,7 @@ pub const Alias = struct {
 pub const ApiConstant = struct {
     pub const Value = union(enum) {
         expr: []const u8,
-        version: [3][]const u8,
+        version: [4][]const u8,
     };
 
     name: []const u8,

@@ -510,7 +510,7 @@ fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
     return size;
 }
 
-pub fn parseVersion(xctok: *XmlCTokenizer) ![3][]const u8 {
+pub fn parseVersion(xctok: *XmlCTokenizer) ![4][]const u8 {
     _ = try xctok.expect(.hash);
     const define = try xctok.expect(.id);
     if (!mem.eql(u8, define.text, "define")) {
@@ -519,12 +519,12 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![3][]const u8 {
 
     const name = try xctok.expect(.name);
     const vk_make_version = try xctok.expect(.type_name);
-    if (!mem.eql(u8, vk_make_version.text, "VK_MAKE_VERSION")) {
+    if (!mem.eql(u8, vk_make_version.text, "VK_MAKE_API_VERSION")) {
         return error.NotVersion;
     }
 
     _ = try xctok.expect(.lparen);
-    var version: [3][]const u8 = undefined;
+    var version: [4][]const u8 = undefined;
     for (version) |*part, i| {
         if (i != 0) {
             _ = try xctok.expect(.comma);
