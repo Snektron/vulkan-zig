@@ -50,16 +50,19 @@ const preamble =
     \\        }
     \\    };
     \\}
-    \\pub fn makeVersion(major: u10, minor: u10, patch: u12) u32 {
-    \\    return (@as(u32, major) << 22) | (@as(u32, minor) << 12) | patch;
+    \\pub fn makeApiVersion(variant: u3, major: u7, minor: u10, patch: u12) u32 {
+    \\    return (@as(u32, variant) << 29) | (@as(u32, major) << 22) | (@as(u32, minor) << 12) | patch;
     \\}
-    \\pub fn versionMajor(version: u32) u10 {
-    \\    return @truncate(u10, version >> 22);
+    \\pub fn apiVersionVariant(version: u32) u3 {
+    \\    return @truncate(u3, version >> 29);
     \\}
-    \\pub fn versionMinor(version: u32) u10 {
+    \\pub fn apiVersionMajor(version: u32) u7 {
+    \\    return @truncate(u7, version >> 22);
+    \\}
+    \\pub fn apiVersionMinor(version: u32) u10 {
     \\    return @truncate(u10, version >> 12);
     \\}
-    \\pub fn versionPatch(version: u32) u12 {
+    \\pub fn apiVersionPatch(version: u32) u12 {
     \\    return @truncate(u12, version);
     \\}
     \\
@@ -74,6 +77,8 @@ const builtin_types = std.ComptimeStringMap([]const u8, .{
     .{"uint16_t", @typeName(u16)},
     .{"uint32_t", @typeName(u32)},
     .{"uint64_t", @typeName(u64)},
+    .{"int8_t", @typeName(i8)},
+    .{"int16_t", @typeName(i16)},
     .{"int32_t", @typeName(i32)},
     .{"int64_t", @typeName(i64)},
     .{"size_t", @typeName(usize)},
@@ -98,6 +103,8 @@ const foreign_types = std.ComptimeStringMap([]const u8, .{
     .{"xcb_visualid_t", @typeName(u32)},
     .{"xcb_window_t", @typeName(u32)},
     .{"zx_handle_t", @typeName(u32)},
+    .{"_screen_context", "opaque {}"},
+    .{"_screen_window", "opaque {}"},
 });
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
@@ -261,11 +268,8 @@ fn Renderer(comptime WriterType: type) type {
             const tag = self.id_renderer.getAuthorTag(name);
             const tagless_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
 
-            const maybe_last_number = mem.lastIndexOfAny(u8, tagless_name, "0123456789");
-            const base_name = if (maybe_last_number) |last_number|
-                    tagless_name[0 .. last_number]
-                else
-                    tagless_name;
+            // Strip out the "version" number of a bitflag, like VkAccessFlagBits2KHR.
+            const base_name = std.mem.trimRight(u8, tagless_name, "0123456789");
 
             const maybe_flag_bits_index = mem.lastIndexOf(u8, base_name, "FlagBits");
             if (maybe_flag_bits_index == null) {
@@ -279,7 +283,7 @@ fn Renderer(comptime WriterType: type) type {
 
             return BitflagName{
                 .base_name = base_name[0 .. base_name.len - "FlagBits".len],
-                .revision = if (maybe_last_number) |last_number| tagless_name[last_number..] else null,
+                .revision = if (base_name.len != tagless_name.len) tagless_name[base_name.len..] else null,
                 .tag = tag,
             };
         }
@@ -447,7 +451,7 @@ fn Renderer(comptime WriterType: type) type {
             switch (api_constant.value) {
                 .expr => |expr| try self.renderApiConstantExpr(expr),
                 .version => |version| {
-                    try self.writer.writeAll("makeVersion(");
+                    try self.writer.writeAll("makeApiVersion(");
                     for (version) |part, i| {
                         if (i != 0) {
                             try self.writer.writeAll(", ");
