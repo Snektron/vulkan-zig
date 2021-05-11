@@ -257,46 +257,46 @@ const ParseContext = struct {
 test "ParseContext" {
     {
         var ctx = ParseContext.init("I like pythons");
-        testing.expectEqual(@as(?u8, 'I'), ctx.peek());
-        testing.expectEqual(@as(u8, 'I'), ctx.consumeNoEof());
-        testing.expectEqual(@as(?u8, ' '), ctx.peek());
-        testing.expectEqual(@as(u8, ' '), try ctx.consume());
+        try testing.expectEqual(@as(?u8, 'I'), ctx.peek());
+        try testing.expectEqual(@as(u8, 'I'), ctx.consumeNoEof());
+        try testing.expectEqual(@as(?u8, ' '), ctx.peek());
+        try testing.expectEqual(@as(u8, ' '), try ctx.consume());
 
-        testing.expect(ctx.eat('l'));
-        testing.expectEqual(@as(?u8, 'i'), ctx.peek());
-        testing.expectEqual(false, ctx.eat('a'));
-        testing.expectEqual(@as(?u8, 'i'), ctx.peek());
+        try testing.expect(ctx.eat('l'));
+        try testing.expectEqual(@as(?u8, 'i'), ctx.peek());
+        try testing.expectEqual(false, ctx.eat('a'));
+        try testing.expectEqual(@as(?u8, 'i'), ctx.peek());
 
         try ctx.expect('i');
-        testing.expectEqual(@as(?u8, 'k'), ctx.peek());
-        testing.expectError(error.UnexpectedCharacter, ctx.expect('a'));
-        testing.expectEqual(@as(?u8, 'k'), ctx.peek());
+        try testing.expectEqual(@as(?u8, 'k'), ctx.peek());
+        try testing.expectError(error.UnexpectedCharacter, ctx.expect('a'));
+        try testing.expectEqual(@as(?u8, 'k'), ctx.peek());
 
-        testing.expect(ctx.eatStr("ke"));
-        testing.expectEqual(@as(?u8, ' '), ctx.peek());
+        try testing.expect(ctx.eatStr("ke"));
+        try testing.expectEqual(@as(?u8, ' '), ctx.peek());
 
-        testing.expect(ctx.eatWs());
-        testing.expectEqual(@as(?u8, 'p'), ctx.peek());
-        testing.expectEqual(false, ctx.eatWs());
-        testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expect(ctx.eatWs());
+        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expectEqual(false, ctx.eatWs());
+        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
 
-        testing.expectEqual(false, ctx.eatStr("aaaaaaaaa"));
-        testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expectEqual(false, ctx.eatStr("aaaaaaaaa"));
+        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
 
-        testing.expectError(error.UnexpectedEof, ctx.expectStr("aaaaaaaaa"));
-        testing.expectEqual(@as(?u8, 'p'), ctx.peek());
-        testing.expectError(error.UnexpectedCharacter, ctx.expectStr("pytn"));
-        testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expectError(error.UnexpectedEof, ctx.expectStr("aaaaaaaaa"));
+        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expectError(error.UnexpectedCharacter, ctx.expectStr("pytn"));
+        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
         try ctx.expectStr("python");
-        testing.expectEqual(@as(?u8, 's'), ctx.peek());
+        try testing.expectEqual(@as(?u8, 's'), ctx.peek());
     }
 
     {
         var ctx = ParseContext.init("");
-        testing.expectEqual(ctx.peek(), null);
-        testing.expectError(error.UnexpectedEof, ctx.consume());
-        testing.expectEqual(ctx.eat('p'), false);
-        testing.expectError(error.UnexpectedEof, ctx.expect('p'));
+        try testing.expectEqual(ctx.peek(), null);
+        try testing.expectError(error.UnexpectedEof, ctx.consume());
+        try testing.expectEqual(ctx.eat('p'), false);
+        try testing.expectError(error.UnexpectedEof, ctx.expect('p'));
     }
 }
 
@@ -477,41 +477,41 @@ test "tryParseElement" {
 
     {
         var ctx = ParseContext.init("<= a='b'/>");
-        testing.expectEqual(@as(?*Element, null), try tryParseElement(&ctx, alloc));
-        testing.expectEqual(@as(?u8, '<'), ctx.peek());
+        try testing.expectEqual(@as(?*Element, null), try tryParseElement(&ctx, alloc));
+        try testing.expectEqual(@as(?u8, '<'), ctx.peek());
     }
 
     {
         var ctx = ParseContext.init("<python size='15' color = \"green\"/>");
         const elem = try tryParseElement(&ctx, alloc);
-        testing.expectEqualSlices(u8, elem.?.tag, "python");
+        try testing.expectEqualSlices(u8, elem.?.tag, "python");
 
         const size_attr = elem.?.attributes.items[0];
-        testing.expectEqualSlices(u8, size_attr.name, "size");
-        testing.expectEqualSlices(u8, size_attr.value, "15");
+        try testing.expectEqualSlices(u8, size_attr.name, "size");
+        try testing.expectEqualSlices(u8, size_attr.value, "15");
 
         const color_attr = elem.?.attributes.items[1];
-        testing.expectEqualSlices(u8, color_attr.name, "color");
-        testing.expectEqualSlices(u8, color_attr.value, "green");
+        try testing.expectEqualSlices(u8, color_attr.name, "color");
+        try testing.expectEqualSlices(u8, color_attr.value, "green");
     }
 
     {
         var ctx = ParseContext.init("<python>test</python>");
         const elem = try tryParseElement(&ctx, alloc);
-        testing.expectEqualSlices(u8, elem.?.tag, "python");
-        testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "test");
+        try testing.expectEqualSlices(u8, elem.?.tag, "python");
+        try testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "test");
     }
 
     {
         var ctx = ParseContext.init("<a>b<c/>d<e/>f<!--g--></a>");
         const elem = try tryParseElement(&ctx, alloc);
-        testing.expectEqualSlices(u8, elem.?.tag, "a");
-        testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "b");
-        testing.expectEqualSlices(u8, elem.?.children.items[1].Element.tag, "c");
-        testing.expectEqualSlices(u8, elem.?.children.items[2].CharData, "d");
-        testing.expectEqualSlices(u8, elem.?.children.items[3].Element.tag, "e");
-        testing.expectEqualSlices(u8, elem.?.children.items[4].CharData, "f");
-        testing.expectEqualSlices(u8, elem.?.children.items[5].Comment, "g");
+        try testing.expectEqualSlices(u8, elem.?.tag, "a");
+        try testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "b");
+        try testing.expectEqualSlices(u8, elem.?.children.items[1].Element.tag, "c");
+        try testing.expectEqualSlices(u8, elem.?.children.items[2].CharData, "d");
+        try testing.expectEqualSlices(u8, elem.?.children.items[3].Element.tag, "e");
+        try testing.expectEqualSlices(u8, elem.?.children.items[4].CharData, "f");
+        try testing.expectEqualSlices(u8, elem.?.children.items[5].Comment, "g");
     }
 }
 
@@ -565,24 +565,24 @@ test "tryParseProlog" {
 
     {
         var ctx = ParseContext.init("<?xmla version='aa'?>");
-        testing.expectEqual(@as(?*XmlDecl, null), try tryParseProlog(&ctx, alloc));
-        testing.expectEqual(@as(?u8, '<'), ctx.peek());
+        try testing.expectEqual(@as(?*XmlDecl, null), try tryParseProlog(&ctx, alloc));
+        try testing.expectEqual(@as(?u8, '<'), ctx.peek());
     }
 
     {
         var ctx = ParseContext.init("<?xml version='aa'?>");
         const decl = try tryParseProlog(&ctx, alloc);
-        testing.expectEqualSlices(u8, "aa", decl.?.version);
-        testing.expectEqual(@as(?[]const u8, null), decl.?.encoding);
-        testing.expectEqual(@as(?bool, null), decl.?.standalone);
+        try testing.expectEqualSlices(u8, "aa", decl.?.version);
+        try testing.expectEqual(@as(?[]const u8, null), decl.?.encoding);
+        try testing.expectEqual(@as(?bool, null), decl.?.standalone);
     }
 
     {
         var ctx = ParseContext.init("<?xml version=\"aa\" encoding = 'bbb' standalone   \t =   'yes'?>");
         const decl = try tryParseProlog(&ctx, alloc);
-        testing.expectEqualSlices(u8, "aa", decl.?.version);
-        testing.expectEqualSlices(u8, "bbb", decl.?.encoding.?);
-        testing.expectEqual(@as(?bool, true), decl.?.standalone.?);
+        try testing.expectEqualSlices(u8, "aa", decl.?.version);
+        try testing.expectEqualSlices(u8, "bbb", decl.?.encoding.?);
+        try testing.expectEqual(@as(?bool, true), decl.?.standalone.?);
     }
 }
 
@@ -649,12 +649,12 @@ test "dupeAndUnescape" {
     defer arena.deinit();
     var alloc = &arena.allocator;
 
-    testing.expectEqualSlices(u8, "test", try dupeAndUnescape(alloc, "test"));
-    testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try dupeAndUnescape(alloc, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&&"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&test;"));
-    testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&boa"));
+    try testing.expectEqualSlices(u8, "test", try dupeAndUnescape(alloc, "test"));
+    try testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try dupeAndUnescape(alloc, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
+    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&"));
+    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&&"));
+    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&test;"));
+    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&boa"));
 }
 
 test "Top level comments" {
@@ -663,5 +663,5 @@ test "Top level comments" {
     var alloc = &arena.allocator;
 
     const doc = try parse(alloc, "<?xml version='aa'?><!--comment--><python color='green'/><!--another comment-->");
-    testing.expectEqualSlices(u8, "python", doc.root.tag);
+    try testing.expectEqualSlices(u8, "python", doc.root.tag);
 }

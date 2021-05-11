@@ -540,11 +540,11 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![4][]const u8 {
     return version;
 }
 
-fn testTokenizer(tokenizer: anytype, expected_tokens: []const Token) void {
+fn testTokenizer(tokenizer: anytype, expected_tokens: []const Token) !void {
     for (expected_tokens) |expected| {
         const tok = (tokenizer.next() catch unreachable).?;
-        testing.expectEqual(expected.kind, tok.kind);
-        testing.expectEqualSlices(u8, expected.text, tok.text);
+        try testing.expectEqual(expected.kind, tok.kind);
+        try testing.expectEqualSlices(u8, expected.text, tok.text);
     }
 
     if (tokenizer.next() catch unreachable) |_| unreachable;
@@ -555,7 +555,7 @@ test "CTokenizer" {
         .source = \\typedef ([const)]** VKAPI_PTR 123,;aaaa
     };
 
-    testTokenizer(
+    try testTokenizer(
         &ctok,
         &[_]Token{
             .{.kind = .kw_typedef, .text = "typedef"},
@@ -586,7 +586,7 @@ test "XmlCTokenizer" {
 
     var xctok = XmlCTokenizer.init(document.root);
 
-    testTokenizer(
+    try testTokenizer(
         &xctok,
         &[_]Token{
             .{.kind = .kw_typedef, .text = "typedef"},
@@ -621,10 +621,10 @@ test "parseTypedef" {
     var xctok = XmlCTokenizer.init(document.root);
     const decl = try parseTypedef(&arena.allocator, &xctok);
 
-    testing.expectEqualSlices(u8, "pythons", decl.name);
+    try testing.expectEqualSlices(u8, "pythons", decl.name);
     const array = decl.decl_type.typedef.array;
-    testing.expectEqual(ArraySize{.int = 4}, array.size);
+    try testing.expectEqual(ArraySize{.int = 4}, array.size);
     const ptr = array.child.pointer;
-    testing.expectEqual(true, ptr.is_const);
-    testing.expectEqualSlices(u8, "Python", ptr.child.name);
+    try testing.expectEqual(true, ptr.is_const);
+    try testing.expectEqualSlices(u8, "Python", ptr.child.name);
 }
