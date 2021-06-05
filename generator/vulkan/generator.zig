@@ -29,8 +29,8 @@ const EnumFieldMerger = struct {
     }
 
     fn deinit(self: *EnumFieldMerger) void {
-        for (self.enum_extensions.items()) |*entry| {
-            entry.value.deinit(self.gpa);
+        for (self.enum_extensions.values()) |*value| {
+            value.deinit(self.gpa);
         }
 
         self.field_set.deinit();
@@ -40,10 +40,10 @@ const EnumFieldMerger = struct {
     fn putEnumExtension(self: *EnumFieldMerger, enum_name: []const u8, field: reg.Enum.Field) !void {
         const res = try self.enum_extensions.getOrPut(enum_name);
         if (!res.found_existing) {
-            res.entry.value = std.ArrayListUnmanaged(reg.Enum.Field){};
+            res.value_ptr.* = std.ArrayListUnmanaged(reg.Enum.Field){};
         }
 
-        try res.entry.value.append(self.gpa, field);
+        try res.value_ptr.append(self.gpa, field);
     }
 
     fn addRequires(self: *EnumFieldMerger, reqs: []const reg.Require) !void {

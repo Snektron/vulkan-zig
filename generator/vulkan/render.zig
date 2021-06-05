@@ -195,7 +195,7 @@ fn Renderer(comptime WriterType: type) type {
                     return error.InvalidRegistry;
                 }
 
-                result.entry.value = &decl.decl_type;
+                result.value_ptr.* = &decl.decl_type;
             }
 
             return Self{
