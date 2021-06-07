@@ -771,12 +771,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderUsingFlagsMixin(self: *Self, name: []const u8, bitwidth: u8) !void {
-            const flags_type = switch (bitwidth) {
-                32 => "Flags",
-                64 => "Flags64",
-                else => return error.InvalidRegistry,
-            };
-
+            const flags_type = try bitmaskFlagsType(bitwidth);
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
             try self.renderName(name);
             try self.writer.print(", {s});\n", .{ flags_type });
@@ -810,7 +805,7 @@ fn Renderer(comptime WriterType: type) type {
 
                     try self.writer.writeAll(": bool ");
                     if (bitpos == 0) { // Force alignment to integer boundaries
-                        try self.writer.writeAll("align(@alignOf(Flags)) ");
+                        try self.writer.print("align(@alignOf({s})) ", .{ flags_type });
                     }
                     try self.writer.writeAll("= false, ");
                 }
