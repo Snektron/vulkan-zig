@@ -30,7 +30,7 @@ pub const ShaderCompileStep = struct {
     pub fn init(builder: *Builder, glslc_cmd: []const []const u8) *ShaderCompileStep {
         const self = builder.allocator.create(ShaderCompileStep) catch unreachable;
         self.* = .{
-            .step = Step.init(.Custom, "shader-compile", builder.allocator, make),
+            .step = Step.init(.custom, "shader-compile", builder.allocator, make),
             .builder = builder,
             .glslc_cmd = glslc_cmd,
             .shaders = std.ArrayList(Shader).init(builder.allocator),

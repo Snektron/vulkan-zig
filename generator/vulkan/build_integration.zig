@@ -21,6 +21,8 @@ pub const GenerateStep = struct {
     /// name `vulkan`.
     package: std.build.Pkg,
 
+    output_file: std.build.GeneratedFile,
+
     /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
     /// vk.xml, relative to the project root. The generated bindings will be placed at
     /// `out_path`, which is relative to the zig-cache directory.
@@ -33,14 +35,18 @@ pub const GenerateStep = struct {
         }) catch unreachable;
 
         self.* = .{
-            .step = Step.init(.Custom, "vulkan-generate", builder.allocator, make),
+            .step = Step.init(.custom, "vulkan-generate", builder.allocator, make),
             .builder = builder,
             .spec_path = spec_path,
             .package = .{
                 .name = "vulkan",
-                .path = full_out_path,
+                .path = .{.generated = &self.output_file},
                 .dependencies = null,
-            }
+            },
+            .output_file = .{
+                .step = &self.step,
+                .path = full_out_path,
+            },
         };
         return self;
     }
@@ -75,8 +81,8 @@ pub const GenerateStep = struct {
 
         var formatted = try tree.render(self.builder.allocator);
 
-        const dir = path.dirname(self.package.path).?;
+        const dir = path.dirname(self.output_file.path.?).?;
         try cwd.makePath(dir);
-        try cwd.writeFile(self.package.path, formatted);
+        try cwd.writeFile(self.output_file.path.?, formatted);
     }
 };
