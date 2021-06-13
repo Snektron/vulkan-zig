@@ -7,13 +7,13 @@ const ArrayList = std.ArrayList;
 
 pub const Attribute = struct {
     name: []const u8,
-    value: []const u8
+    value: []const u8,
 };
 
 pub const Content = union(enum) {
     CharData: []const u8,
     Comment: []const u8,
-    Element: *Element
+    Element: *Element,
 };
 
 pub const Element = struct {
@@ -50,7 +50,7 @@ pub const Element = struct {
 
         return switch (child.children.items[0]) {
             .CharData => |char_data| char_data,
-            else => null
+            else => null,
         };
     }
 
@@ -74,7 +74,7 @@ pub const Element = struct {
     pub fn findChildrenByTag(self: *Element, tag: []const u8) FindChildrenByTagIterator {
         return .{
             .inner = self.elements(),
-            .tag = tag
+            .tag = tag,
         };
     }
 
@@ -129,7 +129,7 @@ pub const Element = struct {
 pub const XmlDecl = struct {
     version: []const u8,
     encoding: ?[]const u8,
-    standalone: ?bool
+    standalone: ?bool,
 };
 
 pub const Document = struct {
@@ -154,7 +154,7 @@ const ParseContext = struct {
             .source = source,
             .offset = 0,
             .line = 0,
-            .column = 0
+            .column = 0,
         };
     }
 
@@ -211,7 +211,7 @@ const ParseContext = struct {
     fn expectStr(self: *ParseContext, text: []const u8) !void {
         if (self.source.len < self.offset + text.len) {
             return error.UnexpectedEof;
-        } else if (std.mem.startsWith(u8, self.source[self.offset ..], text)) {
+        } else if (std.mem.startsWith(u8, self.source[self.offset..], text)) {
             var i: usize = 0;
             while (i < text.len) : (i += 1) {
                 _ = self.consumeNoEof();
@@ -232,7 +232,7 @@ const ParseContext = struct {
                     ws = true;
                     _ = self.consumeNoEof();
                 },
-                else => break
+                else => break,
             }
         }
 
@@ -245,12 +245,12 @@ const ParseContext = struct {
 
     fn currentLine(self: ParseContext) []const u8 {
         var begin: usize = 0;
-        if (mem.lastIndexOfScalar(u8, self.source[0 .. self.offset], '\n')) |prev_nl| {
+        if (mem.lastIndexOfScalar(u8, self.source[0..self.offset], '\n')) |prev_nl| {
             begin = prev_nl + 1;
         }
 
         var end = mem.indexOfScalarPos(u8, self.source, self.offset, '\n') orelse self.source.len;
-        return self.source[begin .. end];
+        return self.source[begin..end];
     }
 };
 
@@ -300,7 +300,7 @@ test "ParseContext" {
     }
 }
 
-pub const ParseError = error {
+pub const ParseError = error{
     IllegalCharacter,
     UnexpectedEof,
     UnexpectedCharacter,
@@ -311,7 +311,7 @@ pub const ParseError = error {
     InvalidStandaloneValue,
     NonMatchingClosingTag,
     InvalidDocument,
-    OutOfMemory
+    OutOfMemory,
 };
 
 pub fn parse(backing_allocator: *Allocator, source: []const u8) !Document {
@@ -323,7 +323,7 @@ fn parseDocument(ctx: *ParseContext, backing_allocator: *Allocator) !Document {
     var doc = Document{
         .arena = ArenaAllocator.init(backing_allocator),
         .xml_decl = null,
-        .root = undefined
+        .root = undefined,
     };
 
     errdefer doc.deinit();
@@ -356,7 +356,7 @@ fn parseAttrValue(ctx: *ParseContext, alloc: *Allocator) ![]const u8 {
 
     const end = ctx.offset - 1;
 
-    return try dupeAndUnescape(alloc, ctx.source[begin .. end]);
+    return try dupeAndUnescape(alloc, ctx.source[begin..end]);
 }
 
 fn parseEqAttrValue(ctx: *ParseContext, alloc: *Allocator) ![]const u8 {
@@ -376,14 +376,14 @@ fn parseNameNoDupe(ctx: *ParseContext) ![]const u8 {
         switch (ch) {
             ' ', '\t', '\n', '\r' => break,
             '&', '"', '\'', '<', '>', '?', '=', '/' => break,
-            else => _ = ctx.consumeNoEof()
+            else => _ = ctx.consumeNoEof(),
         }
     }
 
     const end = ctx.offset;
     if (begin == end) return error.InvalidName;
 
-    return ctx.source[begin .. end];
+    return ctx.source[begin..end];
 }
 
 fn tryParseCharData(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
@@ -392,23 +392,23 @@ fn tryParseCharData(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
     while (ctx.peek()) |ch| {
         switch (ch) {
             '<' => break,
-            else => _ = ctx.consumeNoEof()
+            else => _ = ctx.consumeNoEof(),
         }
     }
 
     const end = ctx.offset;
     if (begin == end) return null;
 
-    return try dupeAndUnescape(alloc, ctx.source[begin .. end]);
+    return try dupeAndUnescape(alloc, ctx.source[begin..end]);
 }
 
 fn parseContent(ctx: *ParseContext, alloc: *Allocator) ParseError!Content {
     if (try tryParseCharData(ctx, alloc)) |cd| {
-        return Content{.CharData = cd};
+        return Content{ .CharData = cd };
     } else if (try tryParseComment(ctx, alloc)) |comment| {
-        return Content{.Comment = comment};
+        return Content{ .Comment = comment };
     } else if (try tryParseElement(ctx, alloc)) |elem| {
-        return Content{.Element = elem};
+        return Content{ .Element = elem };
     } else {
         return error.UnexpectedCharacter;
     }
@@ -601,21 +601,18 @@ fn tryParseComment(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
     }
 
     const end = ctx.offset - "-->".len;
-    return try mem.dupe(alloc, u8, ctx.source[begin .. end]);
+    return try mem.dupe(alloc, u8, ctx.source[begin..end]);
 }
 
 fn unescapeEntity(text: []const u8) !u8 {
-    const EntitySubstition = struct {
-        text: []const u8,
-        replacement: u8
-    };
+    const EntitySubstition = struct { text: []const u8, replacement: u8 };
 
     const entities = [_]EntitySubstition{
-        .{.text = "&lt;", .replacement = '<'},
-        .{.text = "&gt;", .replacement = '>'},
-        .{.text = "&amp;", .replacement = '&'},
-        .{.text = "&apos;", .replacement = '\''},
-        .{.text = "&quot;", .replacement = '"'}
+        .{ .text = "&lt;", .replacement = '<' },
+        .{ .text = "&gt;", .replacement = '>' },
+        .{ .text = "&amp;", .replacement = '&' },
+        .{ .text = "&apos;", .replacement = '\'' },
+        .{ .text = "&quot;", .replacement = '"' },
     };
 
     for (entities) |entity| {
@@ -633,7 +630,7 @@ fn dupeAndUnescape(alloc: *Allocator, text: []const u8) ![]const u8 {
     while (i < text.len) : (j += 1) {
         if (text[i] == '&') {
             const entity_end = 1 + (mem.indexOfScalarPos(u8, text, i, ';') orelse return error.InvalidEntity);
-            str[j] = try unescapeEntity(text[i .. entity_end]);
+            str[j] = try unescapeEntity(text[i..entity_end]);
             i = entity_end;
         } else {
             str[j] = text[i];

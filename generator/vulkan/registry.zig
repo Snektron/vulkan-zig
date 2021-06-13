@@ -70,15 +70,12 @@ pub const Container = struct {
 };
 
 pub const Enum = struct {
-    pub const Value = union(enum) {
-        bitpos: u6, // 1 << bitpos
-        bit_vector: i32, // Combined flags & some vendor IDs
-        int: i32,
-        alias: struct {
-            name: []const u8,
-            is_compat_alias: bool,
-        }
-    };
+    pub const Value = union(enum) { bitpos: u6, // 1 << bitpos
+    bit_vector: i32, // Combined flags & some vendor IDs
+    int: i32, alias: struct {
+        name: []const u8,
+        is_compat_alias: bool,
+    } };
 
     pub const Field = struct {
         name: []const u8,
@@ -118,7 +115,7 @@ pub const Pointer = struct {
         one,
         many, // The length is given by some complex expression, possibly involving another field
         other_field: []const u8, // The length is given by some other field or parameter
-        zero_terminated
+        zero_terminated,
     };
 
     is_const: bool,

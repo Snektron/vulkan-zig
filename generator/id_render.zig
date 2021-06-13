@@ -51,7 +51,7 @@ pub const SegmentIterator = struct {
         }
 
         const end = self.nextBoundary();
-        const word = self.text[self.offset .. end];
+        const word = self.text[self.offset..end];
         self.offset = end;
         return word;
     }
@@ -128,7 +128,7 @@ pub const IdRenderer = struct {
             }
             lower_first = false;
 
-            for (segment[i + 1..]) |c| {
+            for (segment[i + 1 ..]) |c| {
                 try self.text_cache.append(std.ascii.toLower(c));
             }
         }
@@ -139,13 +139,13 @@ pub const IdRenderer = struct {
     }
 
     pub fn render(self: IdRenderer, out: anytype, id: []const u8) !void {
-        try out.print("{}", .{ std.zig.fmtId(id) });
+        try out.print("{}", .{std.zig.fmtId(id)});
     }
 
     pub fn renderFmt(self: *IdRenderer, out: anytype, comptime fmt: []const u8, args: anytype) !void {
         self.text_cache.items.len = 0;
         try std.fmt.format(self.text_cache.writer(), fmt, args);
-        try out.print("{}", .{ std.zig.fmtId(self.text_cache.items) });
+        try out.print("{}", .{std.zig.fmtId(self.text_cache.items)});
     }
 
     pub fn renderWithCase(self: *IdRenderer, out: anytype, case_style: CaseStyle, id: []const u8) !void {
@@ -162,7 +162,7 @@ pub const IdRenderer = struct {
             .camel => try self.renderCamel(false, adjusted_id, tag),
         }
 
-        try out.print("{}", .{ std.zig.fmtId(self.text_cache.items) });
+        try out.print("{}", .{std.zig.fmtId(self.text_cache.items)});
     }
 
     pub fn getAuthorTag(self: IdRenderer, id: []const u8) ?[]const u8 {
