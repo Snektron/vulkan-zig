@@ -49,7 +49,7 @@ pub const ShaderCompileStep = struct {
             "shaders",
             src,
         }) catch unreachable;
-        self.shaders.append(.{.source_path = src, .full_out_path = full_out_path}) catch unreachable;
+        self.shaders.append(.{ .source_path = src, .full_out_path = full_out_path }) catch unreachable;
         return full_out_path;
     }
 

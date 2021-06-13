@@ -66,45 +66,45 @@ const preamble =
     \\    return @truncate(u12, version);
     \\}
     \\
-    ;
+;
 
 const builtin_types = std.ComptimeStringMap([]const u8, .{
-    .{"void", @typeName(void)},
-    .{"char", @typeName(u8)},
-    .{"float", @typeName(f32)},
-    .{"double", @typeName(f64)},
-    .{"uint8_t", @typeName(u8)},
-    .{"uint16_t", @typeName(u16)},
-    .{"uint32_t", @typeName(u32)},
-    .{"uint64_t", @typeName(u64)},
-    .{"int8_t", @typeName(i8)},
-    .{"int16_t", @typeName(i16)},
-    .{"int32_t", @typeName(i32)},
-    .{"int64_t", @typeName(i64)},
-    .{"size_t", @typeName(usize)},
-    .{"int", @typeName(c_int)},
+    .{ "void", @typeName(void) },
+    .{ "char", @typeName(u8) },
+    .{ "float", @typeName(f32) },
+    .{ "double", @typeName(f64) },
+    .{ "uint8_t", @typeName(u8) },
+    .{ "uint16_t", @typeName(u16) },
+    .{ "uint32_t", @typeName(u32) },
+    .{ "uint64_t", @typeName(u64) },
+    .{ "int8_t", @typeName(i8) },
+    .{ "int16_t", @typeName(i16) },
+    .{ "int32_t", @typeName(i32) },
+    .{ "int64_t", @typeName(i64) },
+    .{ "size_t", @typeName(usize) },
+    .{ "int", @typeName(c_int) },
 });
 
 const foreign_types = std.ComptimeStringMap([]const u8, .{
-    .{"Display", "opaque {}"},
-    .{"VisualID", @typeName(c_uint)},
-    .{"Window", @typeName(c_ulong)},
-    .{"RROutput", @typeName(c_ulong)},
-    .{"wl_display", "opaque {}"},
-    .{"wl_surface", "opaque {}"},
-    .{"HINSTANCE", "std.os.HINSTANCE"},
-    .{"HWND", "*opaque {}"},
-    .{"HMONITOR", "*opaque {}"},
-    .{"HANDLE", "std.os.HANDLE"},
-    .{"SECURITY_ATTRIBUTES", "std.os.SECURITY_ATTRIBUTES"},
-    .{"DWORD", "std.os.DWORD"},
-    .{"LPCWSTR", "std.os.LPCWSTR"},
-    .{"xcb_connection_t", "opaque {}"},
-    .{"xcb_visualid_t", @typeName(u32)},
-    .{"xcb_window_t", @typeName(u32)},
-    .{"zx_handle_t", @typeName(u32)},
-    .{"_screen_context", "opaque {}"},
-    .{"_screen_window", "opaque {}"},
+    .{ "Display", "opaque {}" },
+    .{ "VisualID", @typeName(c_uint) },
+    .{ "Window", @typeName(c_ulong) },
+    .{ "RROutput", @typeName(c_ulong) },
+    .{ "wl_display", "opaque {}" },
+    .{ "wl_surface", "opaque {}" },
+    .{ "HINSTANCE", "std.os.HINSTANCE" },
+    .{ "HWND", "*opaque {}" },
+    .{ "HMONITOR", "*opaque {}" },
+    .{ "HANDLE", "std.os.HANDLE" },
+    .{ "SECURITY_ATTRIBUTES", "std.os.SECURITY_ATTRIBUTES" },
+    .{ "DWORD", "std.os.DWORD" },
+    .{ "LPCWSTR", "std.os.LPCWSTR" },
+    .{ "xcb_connection_t", "opaque {}" },
+    .{ "xcb_visualid_t", @typeName(u32) },
+    .{ "xcb_window_t", @typeName(u32) },
+    .{ "zx_handle_t", @typeName(u32) },
+    .{ "_screen_context", "opaque {}" },
+    .{ "_screen_window", "opaque {}" },
 });
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
@@ -122,7 +122,7 @@ fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
 }
 
 pub fn trimVkNamespace(id: []const u8) []const u8 {
-    const prefixes = [_][]const u8{"VK_", "vk", "Vk", "PFN_vk"};
+    const prefixes = [_][]const u8{ "VK_", "vk", "Vk", "PFN_vk" };
     for (prefixes) |prefix| {
         if (mem.startsWith(u8, id, prefix)) {
             return id[prefix.len..];
@@ -136,7 +136,7 @@ fn Renderer(comptime WriterType: type) type {
     return struct {
         const Self = @This();
         const WriteError = WriterType.Error;
-        const RenderTypeInfoError = WriteError || std.fmt.ParseIntError || error { OutOfMemory, InvalidRegistry };
+        const RenderTypeInfoError = WriteError || std.fmt.ParseIntError || error{ OutOfMemory, InvalidRegistry };
 
         const BitflagName = struct {
             /// Name without FlagBits, so VkSurfaceTransformFlagBitsKHR
@@ -389,18 +389,18 @@ fn Renderer(comptime WriterType: type) type {
 
         fn classifyCommandDispatch(self: Self, name: []const u8, command: reg.Command) CommandDispatchType {
             const device_handles = std.ComptimeStringMap(void, .{
-                .{"VkDevice", {}},
-                .{"VkCommandBuffer", {}},
-                .{"VkQueue", {}},
+                .{ "VkDevice", {} },
+                .{ "VkCommandBuffer", {} },
+                .{ "VkQueue", {} },
             });
 
             const override_functions = std.ComptimeStringMap(CommandDispatchType, .{
-                .{"vkGetInstanceProcAddr", .base},
-                .{"vkCreateInstance", .base},
-                .{"vkEnumerateInstanceLayerProperties", .base},
-                .{"vkEnumerateInstanceExtensionProperties", .base},
-                .{"vkEnumerateInstanceVersion", .base},
-                .{"vkGetDeviceProcAddr", .instance},
+                .{ "vkGetInstanceProcAddr", .base },
+                .{ "vkCreateInstance", .base },
+                .{ "vkEnumerateInstanceLayerProperties", .base },
+                .{ "vkEnumerateInstanceExtensionProperties", .base },
+                .{ "vkEnumerateInstanceVersion", .base },
+                .{ "vkGetDeviceProcAddr", .instance },
             });
 
             if (override_functions.get(name)) |dispatch_type| {
@@ -428,7 +428,7 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             for (self.registry.decls) |decl| {
-               try self.renderDecl(decl);
+                try self.renderDecl(decl);
             }
 
             try self.renderCommandPtrs();
@@ -467,11 +467,11 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderApiConstantExpr(self: *Self, expr: []const u8) !void {
             const adjusted_expr = if (expr.len > 2 and expr[0] == '(' and expr[expr.len - 1] == ')')
-                    expr[1 .. expr.len - 1]
-                else
-                    expr;
+                expr[1 .. expr.len - 1]
+            else
+                expr;
 
-            var tokenizer = cparse.CTokenizer{.source = adjusted_expr};
+            var tokenizer = cparse.CTokenizer{ .source = adjusted_expr };
             var peeked: ?cparse.Token = null;
             while (true) {
                 const tok = peeked orelse (try tokenizer.next()) orelse break;
@@ -507,7 +507,7 @@ fn Renderer(comptime WriterType: type) type {
                     },
                     .dot => {
                         const decimal = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
-                        try self.writer.print("@as(f32, {s}.{s})", .{tok.text, decimal.text});
+                        try self.writer.print("@as(f32, {s}.{s})", .{ tok.text, decimal.text });
 
                         const f = (try tokenizer.next()) orelse return error.InvalidConstantExpr;
                         if (f.kind != .id or f.text.len != 1 or (f.text[0] != 'f' and f.text[0] != 'F')) {
@@ -536,10 +536,10 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(zig_name);
                 return;
             } else if (try self.extractBitflagName(name)) |bitflag_name| {
-                 try self.writeIdentifierFmt("{s}Flags{s}{s}", .{
+                try self.writeIdentifierFmt("{s}Flags{s}{s}", .{
                     trimVkNamespace(bitflag_name.base_name),
                     @as([]const u8, if (bitflag_name.revision) |revision| revision else ""),
-                    @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
+                    @as([]const u8, if (bitflag_name.tag) |tag| tag else ""),
                 });
                 return;
             } else if (mem.startsWith(u8, name, "vk")) {
@@ -579,7 +579,7 @@ fn Renderer(comptime WriterType: type) type {
                             try self.writeIdentifierFmt("{s}Flags{s}{s}", .{
                                 trimVkNamespace(bitflag_name.base_name),
                                 @as([]const u8, if (bitflag_name.revision) |revision| revision else ""),
-                                @as([]const u8, if (bitflag_name.tag) |tag| tag else "")
+                                @as([]const u8, if (bitflag_name.tag) |tag| tag else ""),
                             });
                             try self.writer.writeAll(".IntType");
                             break :blk;
@@ -702,7 +702,7 @@ fn Renderer(comptime WriterType: type) type {
                 }
 
                 try self.writer.writeAll(" = .");
-                try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len ..]);
+                try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
             }
         }
 
@@ -774,7 +774,7 @@ fn Renderer(comptime WriterType: type) type {
             const flags_type = try bitmaskFlagsType(bitwidth);
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
             try self.renderName(name);
-            try self.writer.print(", {s});\n", .{ flags_type });
+            try self.writer.print(", {s});\n", .{flags_type});
         }
 
         fn renderBitmaskBits(self: *Self, name: []const u8, bits: reg.Enum) !void {
@@ -786,7 +786,7 @@ fn Renderer(comptime WriterType: type) type {
             const flags_type = try bitmaskFlagsType(bits.bitwidth);
 
             if (bits.fields.len == 0) {
-                try self.writer.print("_reserved_bits: {s} = 0,", .{ flags_type });
+                try self.writer.print("_reserved_bits: {s} = 0,", .{flags_type});
             } else {
                 var flags_by_bitpos = [_]?[]const u8{null} ** 64;
                 for (bits.fields) |field| {
@@ -795,7 +795,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 }
 
-                for (flags_by_bitpos[0.. bits.bitwidth]) |maybe_flag_name, bitpos| {
+                for (flags_by_bitpos[0..bits.bitwidth]) |maybe_flag_name, bitpos| {
                     if (maybe_flag_name) |flag_name| {
                         const field_name = try self.extractBitflagFieldName(bitflag_name, flag_name);
                         try self.writeIdentifierWithCase(.snake, field_name);
@@ -805,14 +805,14 @@ fn Renderer(comptime WriterType: type) type {
 
                     try self.writer.writeAll(": bool ");
                     if (bitpos == 0) { // Force alignment to integer boundaries
-                        try self.writer.print("align(@alignOf({s})) ", .{ flags_type });
+                        try self.writer.print("align(@alignOf({s})) ", .{flags_type});
                     }
                     try self.writer.writeAll("= false, ");
                 }
             }
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
             try self.renderName(name);
-            try self.writer.print(", {s});\n}};\n", .{ flags_type });
+            try self.writer.print(", {s});\n}};\n", .{flags_type});
         }
 
         fn renderBitmask(self: *Self, name: []const u8, bitmask: reg.Bitmask) !void {
@@ -828,15 +828,13 @@ fn Renderer(comptime WriterType: type) type {
                     \\ = packed struct {{
                     \\_reserved_bits: {s} = 0,
                     \\pub usingnamespace FlagsMixin(
-                    , .{ flags_type }
-                );
+                , .{flags_type});
                 try self.renderName(name);
                 try self.writer.print(
                     \\, {s});
                     \\}};
                     \\
-                    , .{ flags_type }
-                );
+                , .{flags_type});
             }
         }
 
@@ -926,7 +924,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll("pub const ");
                 try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
                 try self.writer.writeAll("= Info {\n");
-                try self.writer.print(".name = \"{s}\", .version = {},", .{ext.name, ext.version});
+                try self.writer.print(".name = \"{s}\", .version = {},", .{ ext.name, ext.version });
                 try self.writer.writeAll("};\n");
             }
             try self.writer.writeAll("};\n");
@@ -943,8 +941,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\pub fn {s}(comptime Self: type) type {{
                 \\    return struct {{
                 \\
-                , .{name}
-            );
+            , .{name});
 
             try self.renderWrapperLoader(dispatch_type);
 
@@ -986,16 +983,15 @@ fn Renderer(comptime WriterType: type) type {
                 \\    return self;
                 \\}}
                 \\
-                , .{params, loader_first_param}
-            );
+            , .{ params, loader_first_param });
         }
 
         fn derefName(name: []const u8) []const u8 {
             var it = id_render.SegmentIterator.init(name);
             return if (mem.eql(u8, it.next().?, "p"))
-                    name[1..]
-                else
-                    name;
+                name[1..]
+            else
+                name;
         }
 
         fn renderWrapperPrototype(self: *Self, name: []const u8, command: reg.Command, returns: []const ReturnValue) !void {
@@ -1016,7 +1012,8 @@ fn Renderer(comptime WriterType: type) type {
                     .bitflags, // Special stuff handled in renderWrapperCall
                     .buffer_len,
                     .mut_buffer_len,
-                    .other => {
+                    .other,
+                    => {
                         try self.writeIdentifierWithCase(.snake, param.name);
                         try self.writer.writeAll(": ");
                         try self.renderTypeInfo(param.param_type);
@@ -1064,10 +1061,7 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writeIdentifierWithCase(.snake, param.name);
                         try self.writer.writeAll(".toInt()");
                     },
-                    .in_out_pointer,
-                    .buffer_len,
-                    .mut_buffer_len,
-                    .other => {
+                    .in_out_pointer, .buffer_len, .mut_buffer_len, .other => {
                         try self.writeIdentifierWithCase(.snake, param.name);
                     },
                 }
@@ -1131,16 +1125,13 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(": ");
                 try self.renderTypeInfo(ret.return_value_type);
                 try self.writer.writeAll(", ");
-
             }
             try self.writer.writeAll("};\n");
         }
 
         fn renderWrapper(self: *Self, name: []const u8, command: reg.Command) !void {
-            const returns_vk_result = command.return_type.* == .name
-                and mem.eql(u8, command.return_type.name, "VkResult");
-            const returns_void = command.return_type.* == .name
-                and mem.eql(u8, command.return_type.name, "void");
+            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+            const returns_void = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "void");
 
             const returns = try self.extractReturns(command);
 
@@ -1245,7 +1236,7 @@ fn Renderer(comptime WriterType: type) type {
         fn renderResultAsErrorName(self: *Self, name: []const u8) !void {
             const error_prefix = "VK_ERROR_";
             if (mem.startsWith(u8, name, error_prefix)) {
-                try self.writeIdentifierWithCase(.title, name[error_prefix.len ..]);
+                try self.writeIdentifierWithCase(.title, name[error_prefix.len..]);
             } else {
                 // Apparently some commands (VkAcquireProfilingLockInfoKHR) return
                 // success codes as error...

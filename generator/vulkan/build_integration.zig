@@ -40,7 +40,7 @@ pub const GenerateStep = struct {
             .spec_path = spec_path,
             .package = .{
                 .name = "vulkan",
-                .path = .{.generated = &self.output_file},
+                .path = .{ .generated = &self.output_file },
                 .dependencies = null,
             },
             .output_file = .{
@@ -58,7 +58,7 @@ pub const GenerateStep = struct {
     pub fn initFromSdk(builder: *Builder, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
         const spec_path = std.fs.path.join(
             builder.allocator,
-            &[_][]const u8{sdk_path, "share/vulkan/registry/vk.xml"},
+            &[_][]const u8{ sdk_path, "share/vulkan/registry/vk.xml" },
         ) catch unreachable;
 
         return init(builder, spec_path, out_path);

@@ -41,7 +41,7 @@ pub const Swapchain = struct {
         }
 
         const concurrent = gc.graphics_queue.family != gc.present_queue.family;
-        const qfi = [_]u32{gc.graphics_queue.family, gc.present_queue.family};
+        const qfi = [_]u32{ gc.graphics_queue.family, gc.present_queue.family };
 
         const handle = try gc.vkd.createSwapchainKHR(gc.dev, .{
             .flags = .{},
@@ -51,12 +51,12 @@ pub const Swapchain = struct {
             .image_color_space = surface_format.color_space,
             .image_extent = actual_extent,
             .image_array_layers = 1,
-            .image_usage = .{.color_attachment_bit = true, .transfer_dst_bit = true},
+            .image_usage = .{ .color_attachment_bit = true, .transfer_dst_bit = true },
             .image_sharing_mode = if (concurrent) .concurrent else .exclusive,
             .queue_family_index_count = qfi.len,
             .p_queue_family_indices = &qfi,
             .pre_transform = caps.current_transform,
-            .composite_alpha = .{.opaque_bit_khr = true},
+            .composite_alpha = .{ .opaque_bit_khr = true },
             .present_mode = present_mode,
             .clipped = vk.TRUE,
             .old_swapchain = old_handle,
@@ -71,7 +71,7 @@ pub const Swapchain = struct {
         const swap_images = try initSwapchainImages(gc, handle, surface_format.format, allocator);
         errdefer for (swap_images) |si| si.deinit(gc);
 
-        var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, .{.flags = .{}}, null);
+        var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, .{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, next_image_acquired, null);
 
         const result = try gc.vkd.acquireNextImageKHR(gc.dev, handle, std.math.maxInt(u64), next_image_acquired, .null_handle);
@@ -147,7 +147,7 @@ pub const Swapchain = struct {
         try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
 
         // Step 2: Submit the command buffer
-        const wait_stage = [_]vk.PipelineStageFlags{.{.top_of_pipe_bit = true}};
+        const wait_stage = [_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
         try self.gc.vkd.queueSubmit(self.gc.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &current.image_acquired),
@@ -201,9 +201,9 @@ const SwapImage = struct {
             .image = image,
             .view_type = .@"2d",
             .format = format,
-            .components = .{.r = .identity, .g = .identity, .b = .identity, .a = .identity},
+            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
             .subresource_range = .{
-                .aspect_mask = .{.color_bit = true},
+                .aspect_mask = .{ .color_bit = true },
                 .base_mip_level = 0,
                 .level_count = 1,
                 .base_array_layer = 0,
@@ -212,13 +212,13 @@ const SwapImage = struct {
         }, null);
         errdefer gc.vkd.destroyImageView(gc.dev, view, null);
 
-        const image_acquired = try gc.vkd.createSemaphore(gc.dev, .{.flags = .{}}, null);
+        const image_acquired = try gc.vkd.createSemaphore(gc.dev, .{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
 
-        const render_finished = try gc.vkd.createSemaphore(gc.dev, .{.flags = .{}}, null);
+        const render_finished = try gc.vkd.createSemaphore(gc.dev, .{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
 
-        const frame_fence = try gc.vkd.createFence(gc.dev, .{.flags = .{.signaled_bit = true}}, null);
+        const frame_fence = try gc.vkd.createFence(gc.dev, .{ .flags = .{ .signaled_bit = true } }, null);
         errdefer gc.vkd.destroyFence(gc.dev, frame_fence, null);
 
         return SwapImage{
@@ -254,7 +254,7 @@ fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, f
     errdefer allocator.free(images);
 
     var i: usize = 0;
-    errdefer for (swap_images[0 .. i]) |si| si.deinit(gc);
+    errdefer for (swap_images[0..i]) |si| si.deinit(gc);
 
     for (images) |image| {
         swap_images[i] = try SwapImage.init(gc, image, format);

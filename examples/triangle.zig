@@ -20,13 +20,13 @@ const Vertex = struct {
             .binding = 0,
             .location = 0,
             .format = .r32g32_sfloat,
-            .offset = @byteOffsetOf(Vertex, "pos"),
+            .offset = @offsetOf(Vertex, "pos"),
         },
         .{
             .binding = 0,
             .location = 1,
             .format = .r32g32b32_sfloat,
-            .offset = @byteOffsetOf(Vertex, "color"),
+            .offset = @offsetOf(Vertex, "color"),
         },
     };
 
@@ -35,16 +35,16 @@ const Vertex = struct {
 };
 
 const vertices = [_]Vertex{
-    .{.pos = .{0, -0.5}, .color = .{1, 0, 0}},
-    .{.pos = .{0.5, 0.5}, .color = .{0, 1, 0}},
-    .{.pos = .{-0.5, 0.5}, .color = .{0, 0, 1}},
+    .{ .pos = .{ 0, -0.5 }, .color = .{ 1, 0, 0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 0, 1, 0 } },
+    .{ .pos = .{ -0.5, 0.5 }, .color = .{ 0, 0, 1 } },
 };
 
 pub fn main() !void {
     if (c.glfwInit() != c.GLFW_TRUE) return error.GlfwInitFailed;
     defer c.glfwTerminate();
 
-    var extent = vk.Extent2D{.width = 800, .height = 600};
+    var extent = vk.Extent2D{ .width = 800, .height = 600 };
 
     c.glfwWindowHint(c.GLFW_CLIENT_API, c.GLFW_NO_API);
     const window = c.glfwCreateWindow(
@@ -52,7 +52,7 @@ pub fn main() !void {
         @intCast(c_int, extent.height),
         app_name,
         null,
-        null
+        null,
     ) orelse return error.WindowInitFailed;
     defer c.glfwDestroyWindow(window);
 
@@ -61,7 +61,7 @@ pub fn main() !void {
     const gc = try GraphicsContext.init(allocator, app_name, window);
     defer gc.deinit();
 
-    std.debug.print("Using device: {s}\n", .{ gc.deviceName() });
+    std.debug.print("Using device: {s}\n", .{gc.deviceName()});
 
     var swapchain = try Swapchain.init(&gc, allocator, extent);
     defer swapchain.deinit();
@@ -93,14 +93,14 @@ pub fn main() !void {
     const buffer = try gc.vkd.createBuffer(gc.dev, .{
         .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
-        .usage = .{.transfer_dst_bit = true, .vertex_buffer_bit = true},
+        .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
         .sharing_mode = .exclusive,
         .queue_family_index_count = 0,
         .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, buffer, null);
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, buffer);
-    const memory = try gc.allocate(mem_reqs, .{.device_local_bit = true});
+    const memory = try gc.allocate(mem_reqs, .{ .device_local_bit = true });
     defer gc.vkd.freeMemory(gc.dev, memory, null);
     try gc.vkd.bindBufferMemory(gc.dev, buffer, memory, 0);
 
@@ -114,7 +114,7 @@ pub fn main() !void {
         swapchain.extent,
         render_pass,
         pipeline,
-        framebuffers
+        framebuffers,
     );
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
@@ -146,13 +146,12 @@ pub fn main() !void {
                 swapchain.extent,
                 render_pass,
                 pipeline,
-                framebuffers
+                framebuffers,
             );
         }
 
         c.glfwSwapBuffers(window);
         c.glfwPollEvents();
-
     }
 
     try swapchain.waitForAllFences();
@@ -162,14 +161,14 @@ fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.B
     const staging_buffer = try gc.vkd.createBuffer(gc.dev, .{
         .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
-        .usage = .{.transfer_src_bit = true},
+        .usage = .{ .transfer_src_bit = true },
         .sharing_mode = .exclusive,
         .queue_family_index_count = 0,
         .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, staging_buffer, null);
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, staging_buffer);
-    const staging_memory = try gc.allocate(mem_reqs, .{.host_visible_bit = true, .host_coherent_bit = true});
+    const staging_memory = try gc.allocate(mem_reqs, .{ .host_visible_bit = true, .host_coherent_bit = true });
     defer gc.vkd.freeMemory(gc.dev, staging_memory, null);
     try gc.vkd.bindBufferMemory(gc.dev, staging_buffer, staging_memory, 0);
 
@@ -196,7 +195,7 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
     defer gc.vkd.freeCommandBuffers(gc.dev, pool, 1, @ptrCast([*]const vk.CommandBuffer, &cmdbuf));
 
     try gc.vkd.beginCommandBuffer(cmdbuf, .{
-        .flags = .{.one_time_submit_bit = true},
+        .flags = .{ .one_time_submit_bit = true },
         .p_inheritance_info = null,
     });
 
@@ -243,7 +242,7 @@ fn createCommandBuffers(
     errdefer gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, cmdbufs.len), cmdbufs.ptr);
 
     const clear = vk.ClearValue{
-        .color = .{.float_32 = .{0, 0, 0, 1}},
+        .color = .{ .float_32 = .{ 0, 0, 0, 1 } },
     };
 
     const viewport = vk.Viewport{
@@ -256,7 +255,7 @@ fn createCommandBuffers(
     };
 
     const scissor = vk.Rect2D{
-        .offset = .{.x = 0, .y = 0},
+        .offset = .{ .x = 0, .y = 0 },
         .extent = extent,
     };
 
@@ -273,7 +272,7 @@ fn createCommandBuffers(
             .render_pass = render_pass,
             .framebuffer = framebuffers[i],
             .render_area = .{
-                .offset = .{.x = 0, .y = 0},
+                .offset = .{ .x = 0, .y = 0 },
                 .extent = extent,
             },
             .clear_value_count = 1,
@@ -297,17 +296,12 @@ fn destroyCommandBuffers(gc: *const GraphicsContext, pool: vk.CommandPool, alloc
     allocator.free(cmdbufs);
 }
 
-fn createFramebuffers(
-    gc: *const GraphicsContext,
-    allocator: *Allocator,
-    render_pass: vk.RenderPass,
-    swapchain: Swapchain
-) ![]vk.Framebuffer {
+fn createFramebuffers(gc: *const GraphicsContext, allocator: *Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
     errdefer allocator.free(framebuffers);
 
     var i: usize = 0;
-    errdefer for (framebuffers[0 .. i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+    errdefer for (framebuffers[0..i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
 
     for (framebuffers) |*fb| {
         fb.* = try gc.vkd.createFramebuffer(gc.dev, .{
@@ -334,7 +328,7 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
         .format = swapchain.surface_format.format,
-        .samples = .{.@"1_bit" = true},
+        .samples = .{ .@"1_bit" = true },
         .load_op = .clear,
         .store_op = .store,
         .stencil_load_op = .dont_care,
@@ -395,14 +389,14 @@ fn createPipeline(
     const pssci = [_]vk.PipelineShaderStageCreateInfo{
         .{
             .flags = .{},
-            .stage = .{.vertex_bit = true},
+            .stage = .{ .vertex_bit = true },
             .module = vert,
             .p_name = "main",
             .p_specialization_info = null,
         },
         .{
             .flags = .{},
-            .stage = .{.fragment_bit = true},
+            .stage = .{ .fragment_bit = true },
             .module = frag,
             .p_name = "main",
             .p_specialization_info = null,
@@ -436,7 +430,7 @@ fn createPipeline(
         .depth_clamp_enable = vk.FALSE,
         .rasterizer_discard_enable = vk.FALSE,
         .polygon_mode = .fill,
-        .cull_mode = .{.back_bit = true},
+        .cull_mode = .{ .back_bit = true },
         .front_face = .clockwise,
         .depth_bias_enable = vk.FALSE,
         .depth_bias_constant_factor = 0,
@@ -447,7 +441,7 @@ fn createPipeline(
 
     const pmsci = vk.PipelineMultisampleStateCreateInfo{
         .flags = .{},
-        .rasterization_samples = .{.@"1_bit" = true},
+        .rasterization_samples = .{ .@"1_bit" = true },
         .sample_shading_enable = vk.FALSE,
         .min_sample_shading = 1,
         .p_sample_mask = null,
@@ -463,7 +457,7 @@ fn createPipeline(
         .src_alpha_blend_factor = .one,
         .dst_alpha_blend_factor = .zero,
         .alpha_blend_op = .add,
-        .color_write_mask = .{.r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true},
+        .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
     };
 
     const pcbsci = vk.PipelineColorBlendStateCreateInfo{
@@ -472,10 +466,10 @@ fn createPipeline(
         .logic_op = .copy,
         .attachment_count = 1,
         .p_attachments = @ptrCast([*]const vk.PipelineColorBlendAttachmentState, &pcbas),
-        .blend_constants = [_]f32{0, 0, 0, 0},
+        .blend_constants = [_]f32{ 0, 0, 0, 0 },
     };
 
-    const dynstate = [_]vk.DynamicState{.viewport, .scissor};
+    const dynstate = [_]vk.DynamicState{ .viewport, .scissor };
     const pdsci = vk.PipelineDynamicStateCreateInfo{
         .flags = .{},
         .dynamic_state_count = dynstate.len,
@@ -506,7 +500,8 @@ fn createPipeline(
     _ = try gc.vkd.createGraphicsPipelines(
         gc.dev,
         .null_handle,
-        1, @ptrCast([*]const vk.GraphicsPipelineCreateInfo, &gpci),
+        1,
+        @ptrCast([*]const vk.GraphicsPipelineCreateInfo, &gpci),
         null,
         @ptrCast([*]vk.Pipeline, &pipeline),
     );

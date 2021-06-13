@@ -3,9 +3,7 @@ const vk = @import("vulkan");
 const c = @import("c.zig");
 const Allocator = std.mem.Allocator;
 
-const required_device_extensions = [_][]const u8{
-    vk.extension_info.khr_swapchain.name
-};
+const required_device_extensions = [_][]const u8{vk.extension_info.khr_swapchain.name};
 
 const BaseDispatch = struct {
     vkCreateInstance: vk.PfnCreateInstance,
@@ -151,11 +149,11 @@ pub const GraphicsContext = struct {
 
     pub fn deviceName(self: GraphicsContext) []const u8 {
         const len = std.mem.indexOfScalar(u8, &self.props.device_name, 0).?;
-        return self.props.device_name[0 .. len];
+        return self.props.device_name[0..len];
     }
 
     pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
-        for (self.mem_props.memory_types[0 .. self.mem_props.memory_type_count]) |mem_type, i| {
+        for (self.mem_props.memory_types[0..self.mem_props.memory_type_count]) |mem_type, i| {
             if (memory_type_bits & (@as(u32, 1) << @truncate(u5, i)) != 0 and mem_type.property_flags.contains(flags)) {
                 return @truncate(u32, i);
             }
@@ -207,13 +205,13 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
             .queue_family_index = candidate.queues.present_family,
             .queue_count = 1,
             .p_queue_priorities = &priority,
-        }
+        },
     };
 
     const queue_count: u32 = if (candidate.queues.graphics_family == candidate.queues.present_family)
-            1
-        else
-            2;
+        1
+    else
+        2;
 
     return try vki.createDevice(candidate.pdev, .{
         .flags = .{},
@@ -281,19 +279,14 @@ fn checkSuitable(
         return DeviceCandidate{
             .pdev = pdev,
             .props = props,
-            .queues = allocation
+            .queues = allocation,
         };
     }
 
     return null;
 }
 
-fn allocateQueues(
-    vki: InstanceDispatch,
-    pdev: vk.PhysicalDevice,
-    allocator: *Allocator,
-    surface: vk.SurfaceKHR
-) !?QueueAllocation {
+fn allocateQueues(vki: InstanceDispatch, pdev: vk.PhysicalDevice, allocator: *Allocator, surface: vk.SurfaceKHR) !?QueueAllocation {
     var family_count: u32 = undefined;
     vki.getPhysicalDeviceQueueFamilyProperties(pdev, &family_count, null);
 
@@ -307,7 +300,7 @@ fn allocateQueues(
     for (families) |properties, i| {
         const family = @intCast(u32, i);
 
-        if (graphics_family == null and properties.queue_flags.contains(.{.graphics_bit = true})) {
+        if (graphics_family == null and properties.queue_flags.graphics_bit) {
             graphics_family = family;
         }
 
@@ -319,7 +312,7 @@ fn allocateQueues(
     if (graphics_family != null and present_family != null) {
         return QueueAllocation{
             .graphics_family = graphics_family.?,
-            .present_family = present_family.?
+            .present_family = present_family.?,
         };
     }
 
@@ -352,7 +345,7 @@ fn checkExtensionSupport(
     for (required_device_extensions) |ext| {
         for (propsv) |props| {
             const len = std.mem.indexOfScalar(u8, &props.extension_name, 0).?;
-            const prop_ext_name = props.extension_name[0 .. len];
+            const prop_ext_name = props.extension_name[0..len];
             if (std.mem.eql(u8, ext, prop_ext_name)) {
                 break;
             }
