@@ -147,10 +147,37 @@ pub const Generator = struct {
         try merger.merge();
     }
 
-    fn fixupTags(self: *Generator) !void {
-        var fixer_upper = TagFixerUpper.init(self.gpa, &self.registry, &self.id_renderer);
-        defer fixer_upper.deinit();
-        try fixer_upper.fixup();
+    // https://github.com/KhronosGroup/Vulkan-Docs/pull/1556
+    fn fixupBitFlags(self: *Generator) !void {
+        var seen_bits = std.StringArrayHashMap(void).init(&self.reg_arena.allocator);
+        defer seen_bits.deinit();
+
+        for (self.registry.decls) |decl| {
+            const bitmask = switch (decl.decl_type) {
+                .bitmask => |bm| bm,
+                else => continue,
+            };
+
+            if (bitmask.bits_enum) |bits_enum| {
+                try seen_bits.put(bits_enum, {});
+            }
+        }
+
+        var i: usize = 0;
+
+        for (self.registry.decls) |decl| {
+            switch (decl.decl_type) {
+                .enumeration => |e| {
+                    if (e.is_bitmask and seen_bits.get(decl.name) == null)
+                        continue;
+                },
+                else => {}
+            }
+            self.registry.decls[i] = decl;
+            i += 1;
+        }
+
+        self.registry.decls.len = i;
     }
 
     fn render(self: *Generator, writer: anytype) !void {
@@ -170,5 +197,6 @@ pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: anytype) !v
     defer gen.deinit();
 
     try gen.mergeEnumFields();
+    try gen.fixupBitFlags();
     try gen.render(writer);
 }
