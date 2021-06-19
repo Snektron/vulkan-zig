@@ -14,6 +14,9 @@ const preamble =
     \\const std = @import("std");
     \\const builtin = @import("builtin");
     \\const root = @import("root");
+    \\
+    \\const GlobalScope = @This();
+    \\
     \\pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .i386)
     \\        .Stdcall
     \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
@@ -412,6 +415,7 @@ fn Renderer(comptime WriterType: type) type {
         fn render(self: *Self) !void {
             try self.renderCopyright();
             try self.writer.writeAll(preamble);
+            try self.renderCommandEnums();
 
             for (self.registry.api_constants) |api_constant| {
                 try self.renderApiConstant(api_constant);
@@ -424,6 +428,54 @@ fn Renderer(comptime WriterType: type) type {
             try self.renderCommandPtrs();
             try self.renderExtensionInfo();
             try self.renderWrappers();
+        }
+
+        fn renderCommandEnums(self: *Self) !void {
+            try self.renderCommandEnumOfDispatchType(.base);
+            try self.renderCommandEnumOfDispatchType(.instance);
+            try self.renderCommandEnumOfDispatchType(.device);
+            try self.writer.writeAll("\n");
+        }
+
+        fn renderCommandEnumOfDispatchType(self: *Self, dispatch_type: CommandDispatchType) !void {
+            const dispatch_type_name = switch (dispatch_type) {
+                .base => "Base",
+                .instance => "Instance",
+                .device => "Device",
+            };
+
+            try self.writer.print("\npub const {s}Command = enum {{\n", .{dispatch_type_name});
+            for (self.registry.decls) |decl| {
+                if (decl.decl_type == .command) {
+                    const command = decl.decl_type.command;
+                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                        try self.writeIdentifierWithCase(.snake, trimVkNamespace(decl.name));
+                        try self.writer.writeAll(",\n");
+                    }
+                }
+            }
+            try self.writer.writeAll("};\n\n");
+
+            try self.writer.print(
+                \\fn snakeToCamel{s}(cmd: {s}Command) [:0]const u8 {{
+                \\    return switch(cmd) {{
+                , .{dispatch_type_name, dispatch_type_name});
+
+            for (self.registry.decls) |decl| {
+                if (decl.decl_type == .command) {
+                    const command = decl.decl_type.command;
+                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                        const trimmed_name = trimVkNamespace(decl.name);
+                        try self.writer.writeAll(".");
+                        try self.writeIdentifierWithCase(.snake, trimmed_name);
+                        try self.writer.print(" => \"{s}\",\n", .{ trimmed_name });
+                    }
+                }
+            }
+            try self.writer.writeAll(
+                \\    };
+                \\}
+            );
         }
 
         fn renderCopyright(self: *Self) !void {
@@ -910,17 +962,44 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrappers(self: *Self) !void {
-            try self.renderWrappersOfDispatchType("BaseWrapper", .base);
-            try self.renderWrappersOfDispatchType("InstanceWrapper", .instance);
-            try self.renderWrappersOfDispatchType("DeviceWrapper", .device);
+            try self.renderWrappersOfDispatchType(.base);
+            try self.renderWrappersOfDispatchType(.instance);
+            try self.renderWrappersOfDispatchType(.device);
         }
 
-        fn renderWrappersOfDispatchType(self: *Self, name: []const u8, dispatch_type: CommandDispatchType) !void {
+        fn renderWrappersOfDispatchType(self: *Self, dispatch_type: CommandDispatchType) !void {
+            const name = switch (dispatch_type) {
+                .base => "Base",
+                .instance => "Instance",
+                .device => "Device",
+            };
+
             try self.writer.print(
-                \\pub fn {s}(comptime Self: type) type {{
+                \\pub fn {s}Wrapper(comptime cmds: anytype) type {{
+                \\    comptime var fields: [cmds.len]std.builtin.TypeInfo.StructField = undefined;
+                \\    inline for (cmds) |cmd, i| {{
+                \\        const cmd_camel_case = snakeToCamel{s}(cmd);
+                \\        const cmd_type_name = "Pfn" ++ cmd_camel_case;
+                \\        const cmd_type = @field(GlobalScope, cmd_type_name);
+                \\        fields[i] = .{{
+                \\            .name = "vk" ++ cmd_camel_case,
+                \\            .field_type = cmd_type,
+                \\            .default_value = @as(?cmd_type, null),
+                \\            .is_comptime = false,
+                \\            .alignment = @alignOf(*cmd_type),
+                \\        }};
+                \\    }}
+                \\    const Dispatch = @Type(.{{ .Struct = .{{
+                \\        .layout = .Auto,
+                \\        .fields = &fields,
+                \\        .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
+                \\        .is_tuple = false,
+                \\    }}}});
                 \\    return struct {{
-                \\
-            , .{name});
+                \\        dispatch: Dispatch,
+                \\        
+                \\        const Self = @This();
+            , .{ name, name });
 
             try self.renderWrapperLoader(dispatch_type);
 
@@ -954,10 +1033,10 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.print(
                 \\pub fn load({s}) !Self {{
                 \\    var self: Self = undefined;
-                \\    inline for (std.meta.fields(Self)) |field| {{
+                \\    inline for (std.meta.fields(Dispatch)) |field| {{
                 \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
-                \\        const cmd_ptr = loader({s}name) orelse return error.InvalidCommand;
-                \\        @field(self, field.name) = @ptrCast(field.field_type, cmd_ptr);
+                \\        const cmd_ptr = loader({s}name) orelse return error.InvalidLoader;
+                \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
                 \\    }}
                 \\    return self;
                 \\}}
@@ -1019,7 +1098,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrapperCall(self: *Self, name: []const u8, command: reg.Command, returns: []const ReturnValue) !void {
-            try self.writer.writeAll("self.");
+            try self.writer.writeAll("self.dispatch.");
             try self.writeIdentifier(name);
             try self.writer.writeAll("(");
 

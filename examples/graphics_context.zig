@@ -5,81 +5,78 @@ const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][]const u8{vk.extension_info.khr_swapchain.name};
 
-const BaseDispatch = struct {
-    vkCreateInstance: vk.PfnCreateInstance,
-    usingnamespace vk.BaseWrapper(@This());
-};
+const BaseDispatch = vk.BaseWrapper([_]vk.BaseCommand{
+    .create_instance,
+});
 
-const InstanceDispatch = struct {
-    vkDestroyInstance: vk.PfnDestroyInstance,
-    vkCreateDevice: vk.PfnCreateDevice,
-    vkDestroySurfaceKHR: vk.PfnDestroySurfaceKHR,
-    vkEnumeratePhysicalDevices: vk.PfnEnumeratePhysicalDevices,
-    vkGetPhysicalDeviceProperties: vk.PfnGetPhysicalDeviceProperties,
-    vkEnumerateDeviceExtensionProperties: vk.PfnEnumerateDeviceExtensionProperties,
-    vkGetPhysicalDeviceSurfaceFormatsKHR: vk.PfnGetPhysicalDeviceSurfaceFormatsKHR,
-    vkGetPhysicalDeviceSurfacePresentModesKHR: vk.PfnGetPhysicalDeviceSurfacePresentModesKHR,
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR: vk.PfnGetPhysicalDeviceSurfaceCapabilitiesKHR,
-    vkGetPhysicalDeviceQueueFamilyProperties: vk.PfnGetPhysicalDeviceQueueFamilyProperties,
-    vkGetPhysicalDeviceSurfaceSupportKHR: vk.PfnGetPhysicalDeviceSurfaceSupportKHR,
-    vkGetPhysicalDeviceMemoryProperties: vk.PfnGetPhysicalDeviceMemoryProperties,
-    vkGetDeviceProcAddr: vk.PfnGetDeviceProcAddr,
-    usingnamespace vk.InstanceWrapper(@This());
-};
+const InstanceDispatch = vk.InstanceWrapper([_]vk.InstanceCommand{
+    .destroy_instance,
+    .create_device,
+    .destroy_surface_khr,
+    .enumerate_physical_devices,
+    .get_physical_device_properties,
+    .enumerate_device_extension_properties,
+    .get_physical_device_surface_formats_khr,
+    .get_physical_device_surface_present_modes_khr,
+    .get_physical_device_surface_capabilities_khr,
+    .get_physical_device_queue_family_properties,
+    .get_physical_device_surface_support_khr,
+    .get_physical_device_memory_properties,
+    .get_device_proc_addr,
+});
 
-const DeviceDispatch = struct {
-    vkDestroyDevice: vk.PfnDestroyDevice,
-    vkGetDeviceQueue: vk.PfnGetDeviceQueue,
-    vkCreateSemaphore: vk.PfnCreateSemaphore,
-    vkCreateFence: vk.PfnCreateFence,
-    vkCreateImageView: vk.PfnCreateImageView,
-    vkDestroyImageView: vk.PfnDestroyImageView,
-    vkDestroySemaphore: vk.PfnDestroySemaphore,
-    vkDestroyFence: vk.PfnDestroyFence,
-    vkGetSwapchainImagesKHR: vk.PfnGetSwapchainImagesKHR,
-    vkCreateSwapchainKHR: vk.PfnCreateSwapchainKHR,
-    vkDestroySwapchainKHR: vk.PfnDestroySwapchainKHR,
-    vkAcquireNextImageKHR: vk.PfnAcquireNextImageKHR,
-    vkDeviceWaitIdle: vk.PfnDeviceWaitIdle,
-    vkWaitForFences: vk.PfnWaitForFences,
-    vkResetFences: vk.PfnResetFences,
-    vkQueueSubmit: vk.PfnQueueSubmit,
-    vkQueuePresentKHR: vk.PfnQueuePresentKHR,
-    vkCreateCommandPool: vk.PfnCreateCommandPool,
-    vkDestroyCommandPool: vk.PfnDestroyCommandPool,
-    vkAllocateCommandBuffers: vk.PfnAllocateCommandBuffers,
-    vkFreeCommandBuffers: vk.PfnFreeCommandBuffers,
-    vkQueueWaitIdle: vk.PfnQueueWaitIdle,
-    vkCreateShaderModule: vk.PfnCreateShaderModule,
-    vkDestroyShaderModule: vk.PfnDestroyShaderModule,
-    vkCreatePipelineLayout: vk.PfnCreatePipelineLayout,
-    vkDestroyPipelineLayout: vk.PfnDestroyPipelineLayout,
-    vkCreateRenderPass: vk.PfnCreateRenderPass,
-    vkDestroyRenderPass: vk.PfnDestroyRenderPass,
-    vkCreateGraphicsPipelines: vk.PfnCreateGraphicsPipelines,
-    vkDestroyPipeline: vk.PfnDestroyPipeline,
-    vkCreateFramebuffer: vk.PfnCreateFramebuffer,
-    vkDestroyFramebuffer: vk.PfnDestroyFramebuffer,
-    vkBeginCommandBuffer: vk.PfnBeginCommandBuffer,
-    vkEndCommandBuffer: vk.PfnEndCommandBuffer,
-    vkAllocateMemory: vk.PfnAllocateMemory,
-    vkFreeMemory: vk.PfnFreeMemory,
-    vkCreateBuffer: vk.PfnCreateBuffer,
-    vkDestroyBuffer: vk.PfnDestroyBuffer,
-    vkGetBufferMemoryRequirements: vk.PfnGetBufferMemoryRequirements,
-    vkMapMemory: vk.PfnMapMemory,
-    vkUnmapMemory: vk.PfnUnmapMemory,
-    vkBindBufferMemory: vk.PfnBindBufferMemory,
-    vkCmdBeginRenderPass: vk.PfnCmdBeginRenderPass,
-    vkCmdEndRenderPass: vk.PfnCmdEndRenderPass,
-    vkCmdBindPipeline: vk.PfnCmdBindPipeline,
-    vkCmdDraw: vk.PfnCmdDraw,
-    vkCmdSetViewport: vk.PfnCmdSetViewport,
-    vkCmdSetScissor: vk.PfnCmdSetScissor,
-    vkCmdBindVertexBuffers: vk.PfnCmdBindVertexBuffers,
-    vkCmdCopyBuffer: vk.PfnCmdCopyBuffer,
-    usingnamespace vk.DeviceWrapper(@This());
-};
+const DeviceDispatch = vk.DeviceWrapper([_]vk.DeviceCommand{
+    .destroy_device,
+    .get_device_queue,
+    .create_semaphore,
+    .create_fence,
+    .create_image_view,
+    .destroy_image_view,
+    .destroy_semaphore,
+    .destroy_fence,
+    .get_swapchain_images_khr,
+    .create_swapchain_khr,
+    .destroy_swapchain_khr,
+    .acquire_next_image_khr,
+    .device_wait_idle,
+    .wait_for_fences,
+    .reset_fences,
+    .queue_submit,
+    .queue_present_khr,
+    .create_command_pool,
+    .destroy_command_pool,
+    .allocate_command_buffers,
+    .free_command_buffers,
+    .queue_wait_idle,
+    .create_shader_module,
+    .destroy_shader_module,
+    .create_pipeline_layout,
+    .destroy_pipeline_layout,
+    .create_render_pass,
+    .destroy_render_pass,
+    .create_graphics_pipelines,
+    .destroy_pipeline,
+    .create_framebuffer,
+    .destroy_framebuffer,
+    .begin_command_buffer,
+    .end_command_buffer,
+    .allocate_memory,
+    .free_memory,
+    .create_buffer,
+    .destroy_buffer,
+    .get_buffer_memory_requirements,
+    .map_memory,
+    .unmap_memory,
+    .bind_buffer_memory,
+    .cmd_begin_render_pass,
+    .cmd_end_render_pass,
+    .cmd_bind_pipeline,
+    .cmd_draw,
+    .cmd_set_viewport,
+    .cmd_set_scissor,
+    .cmd_bind_vertex_buffers,
+    .cmd_copy_buffer,
+});
 
 pub const GraphicsContext = struct {
     vkb: BaseDispatch,
@@ -130,7 +127,7 @@ pub const GraphicsContext = struct {
         self.pdev = candidate.pdev;
         self.props = candidate.props;
         self.dev = try initializeCandidate(self.vki, candidate);
-        self.vkd = try DeviceDispatch.load(self.dev, self.vki.vkGetDeviceProcAddr);
+        self.vkd = try DeviceDispatch.load(self.dev, self.vki.dispatch.vkGetDeviceProcAddr);
         errdefer self.vkd.destroyDevice(self.dev, null);
 
         self.graphics_queue = Queue.init(self.vkd, self.dev, candidate.queues.graphics_family);
