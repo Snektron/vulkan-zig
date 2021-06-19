@@ -67,17 +67,17 @@ For each function, a wrapper is generated into one of three structs:
 * InstanceWrapper. This contains wrappers for functions which are otherwise loaded by `vkGetInstanceProcAddr`.
 * DeviceWrapper. This contains wrappers for functions which are loaded by `vkGetDeviceProcAddr`.
 
-Each wrapper struct is to be used as a mixin on a struct containing **just** function pointers as members:
+Each wrapper struct can be called with an array of the appropriate enums:
 ```zig
 const vk = @import("vulkan");
-const BaseDispatch = struct {
-    vkCreateInstance: vk.PfnCreateInstance,
-    usingnamespace vk.BaseWrapper(@This());
-};
+const BaseDispatch = vk.BaseWrapper([_]vk.BaseCommand {
+    .create_instance,
+});
 ```
 The wrapper struct then provides wrapper functions for each function pointer in the dispatch struct:
 ```zig
 pub const BaseWrapper(comptime Self: type) type {
+    ...
     return struct {
         pub fn createInstance(
             self: Self,
@@ -128,6 +128,8 @@ Furthermore, each wrapper contains a function to load each function pointer memb
 * For `BaseWrapper`, this function has signature `fn load(loader: PfnGetInstanceProcAddr) !Self`.
 * For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: PfnGetInstanceProcAddr) !Self`.
 * For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: PfnGetDeviceProcAddr) !Self`.
+
+One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
 
 ### Bitflags
 Packed structs of bools are used for bit flags in vulkan-zig, instead of both a `FlagBits` and `Flags` variant. Places where either of these variants are used are both replaced by this packed struct instead. This means that even in places where just one flag would normally be accepted, the packed struct is accepted. The programmer is responsible for only enabling a single bit.
