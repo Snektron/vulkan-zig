@@ -123,7 +123,7 @@ pub const GraphicsContext = struct {
         self.vki = try InstanceDispatch.load(self.instance, c.glfwGetInstanceProcAddress);
         errdefer self.vki.destroyInstance(self.instance, null);
 
-        self.surface = try createSurface(self.vki, self.instance, window);
+        self.surface = try createSurface(self.instance, window);
         errdefer self.vki.destroySurfaceKHR(self.instance, self.surface, null);
 
         const candidate = try pickPhysicalDevice(self.vki, self.instance, allocator, self.surface);
@@ -182,7 +182,7 @@ pub const Queue = struct {
     }
 };
 
-fn createSurface(vki: InstanceDispatch, instance: vk.Instance, window: *c.GLFWwindow) !vk.SurfaceKHR {
+fn createSurface(instance: vk.Instance, window: *c.GLFWwindow) !vk.SurfaceKHR {
     var surface: vk.SurfaceKHR = undefined;
     if (c.glfwCreateWindowSurface(instance, window, null, &surface) != .success) {
         return error.SurfaceInitFailed;

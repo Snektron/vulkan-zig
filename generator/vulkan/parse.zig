@@ -74,7 +74,7 @@ fn parseTypes(allocator: *Allocator, out: []registry.Declaration, types_elem: *x
             } else if (mem.eql(u8, category, "funcpointer")) {
                 break :blk try parseFuncPointer(allocator, ty);
             } else if (mem.eql(u8, category, "enum")) {
-                break :blk (try parseEnumAlias(allocator, ty)) orelse continue;
+                break :blk (try parseEnumAlias(ty)) orelse continue;
             }
 
             continue;
@@ -297,7 +297,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
     }
 }
 
-fn parseEnumAlias(allocator: *Allocator, elem: *xml.Element) !?registry.Declaration {
+fn parseEnumAlias(elem: *xml.Element) !?registry.Declaration {
     if (elem.getAttribute("alias")) |alias| {
         const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
         return registry.Declaration{

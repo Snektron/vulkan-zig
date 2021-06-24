@@ -39,7 +39,7 @@ pub const ResourceGenStep = struct {
         return self;
     }
 
-    fn renderPath(self: *ResourceGenStep, path: []const u8, writer: anytype) void {
+    fn renderPath(path: []const u8, writer: anytype) void {
         const separators = &[_]u8{ std.fs.path.sep_windows, std.fs.path.sep_posix };
         var i: usize = 0;
         while (std.mem.indexOfAnyPos(u8, path, i, separators)) |j| {
@@ -60,7 +60,7 @@ pub const ResourceGenStep = struct {
         var writer = self.resources.writer();
 
         writer.print("pub const {s} = @embedFile(\"", .{name}) catch unreachable;
-        self.renderPath(shader_out_path, writer);
+        renderPath(shader_out_path, writer);
         writer.writeAll("\");\n") catch unreachable;
     }
 

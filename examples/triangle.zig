@@ -78,7 +78,7 @@ pub fn main() !void {
     const render_pass = try createRenderPass(&gc, swapchain);
     defer gc.vkd.destroyRenderPass(gc.dev, render_pass, null);
 
-    var pipeline = try createPipeline(&gc, extent, pipeline_layout, render_pass);
+    var pipeline = try createPipeline(&gc, pipeline_layout, render_pass);
     defer gc.vkd.destroyPipeline(gc.dev, pipeline, null);
 
     var framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
@@ -104,7 +104,7 @@ pub fn main() !void {
     defer gc.vkd.freeMemory(gc.dev, memory, null);
     try gc.vkd.bindBufferMemory(gc.dev, buffer, memory, 0);
 
-    try uploadVertices(&gc, pool, buffer, memory);
+    try uploadVertices(&gc, pool, buffer);
 
     var cmdbufs = try createCommandBuffers(
         &gc,
@@ -157,7 +157,7 @@ pub fn main() !void {
     try swapchain.waitForAllFences();
 }
 
-fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer, memory: vk.DeviceMemory) !void {
+fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer) !void {
     const staging_buffer = try gc.vkd.createBuffer(gc.dev, .{
         .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
@@ -368,7 +368,6 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
 
 fn createPipeline(
     gc: *const GraphicsContext,
-    extent: vk.Extent2D,
     layout: vk.PipelineLayout,
     render_pass: vk.RenderPass,
 ) !vk.Pipeline {

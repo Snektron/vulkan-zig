@@ -5,7 +5,6 @@ const usage = "Usage: {s} [-h|--help] <spec xml path> <output zig source>\n";
 
 pub fn main() !void {
     const stderr = std.io.getStdErr();
-    const stdout = std.io.getStdOut();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
