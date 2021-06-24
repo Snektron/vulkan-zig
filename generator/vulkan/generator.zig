@@ -171,7 +171,7 @@ pub const Generator = struct {
                     if (e.is_bitmask and seen_bits.get(decl.name) == null)
                         continue;
                 },
-                else => {}
+                else => {},
             }
             self.registry.decls[i] = decl;
             i += 1;

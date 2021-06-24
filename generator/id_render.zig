@@ -2,6 +2,41 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 
+pub fn isZigPrimitiveType(name: []const u8) bool {
+    if (name.len > 1 and (name[0] == 'u' or name[0] == 'i')) {
+        for (name[1..]) |c| {
+            switch (c) {
+                '0'...'9' => {},
+                else => return false,
+            }
+        }
+        return true;
+    }
+
+    const primitives = [_][]const u8{ "void", "comptime_float", "comptime_int", "bool", "isize", "usize", "f16", "f32", "f64", "f128", "c_longdouble", "noreturn", "type", "anyerror", "c_short", "c_ushort", "c_int", "c_uint", "c_long", "c_ulong", "c_longlong", "c_ulonglong" };
+
+    for (primitives) |reserved| {
+        if (mem.eql(u8, reserved, name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn needZigEscape(name: []const u8) bool {
+    return !std.zig.fmt.isValidId(name) or isZigPrimitiveType(name);
+}
+
+pub fn writeIdentifier(out: anytype, id: []const u8) !void {
+    // https://github.com/ziglang/zig/issues/2897
+    if (isZigPrimitiveType(id)) {
+        try out.print("{s}_", .{id});
+    } else {
+        try out.print("{}", .{std.zig.fmtId(id)});
+    }
+}
+
 pub const CaseStyle = enum {
     snake,
     screaming_snake,
@@ -138,14 +173,10 @@ pub const IdRenderer = struct {
         }
     }
 
-    pub fn render(self: IdRenderer, out: anytype, id: []const u8) !void {
-        try out.print("{}", .{std.zig.fmtId(id)});
-    }
-
     pub fn renderFmt(self: *IdRenderer, out: anytype, comptime fmt: []const u8, args: anytype) !void {
         self.text_cache.items.len = 0;
         try std.fmt.format(self.text_cache.writer(), fmt, args);
-        try out.print("{}", .{std.zig.fmtId(self.text_cache.items)});
+        try writeIdentifier(out, self.text_cache.items);
     }
 
     pub fn renderWithCase(self: *IdRenderer, out: anytype, case_style: CaseStyle, id: []const u8) !void {
@@ -162,7 +193,7 @@ pub const IdRenderer = struct {
             .camel => try self.renderCamel(false, adjusted_id, tag),
         }
 
-        try out.print("{}", .{std.zig.fmtId(self.text_cache.items)});
+        try writeIdentifier(out, self.text_cache.items);
     }
 
     pub fn getAuthorTag(self: IdRenderer, id: []const u8) ?[]const u8 {

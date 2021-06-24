@@ -40,7 +40,7 @@ const preamble =
     \\            return fromInt(toInt(lhs) & toInt(rhs));
     \\        }
     \\        pub fn complement(self: FlagsType) FlagsType {
-    \\            return fromInt(~toInt(lhs));
+    \\            return fromInt(~toInt(self));
     \\        }
     \\        pub fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {
     \\            return fromInt(toInt(lhs) & toInt(rhs.complement()));
@@ -214,7 +214,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn writeIdentifier(self: Self, id: []const u8) !void {
-            try self.id_renderer.render(self.writer, id);
+            try id_render.writeIdentifier(self.writer, id);
         }
 
         fn writeIdentifierWithCase(self: *Self, case: CaseStyle, id: []const u8) !void {
@@ -242,7 +242,7 @@ fn Renderer(comptime WriterType: type) type {
             }
         }
 
-        fn extractBitflagFieldName(self: Self, bitflag_name: BitflagName, field_name: []const u8) ![]const u8 {
+        fn extractBitflagFieldName(bitflag_name: BitflagName, field_name: []const u8) ![]const u8 {
             var flag_it = id_render.SegmentIterator.init(bitflag_name.base_name);
             var field_it = id_render.SegmentIterator.init(field_name);
 
@@ -293,16 +293,6 @@ fn Renderer(comptime WriterType: type) type {
             const base_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
 
             return mem.endsWith(u8, base_name, "Flags");
-        }
-
-        fn containerHasField(self: Self, container: *const reg.Container, field_name: []const u8) bool {
-            for (container.fields) |field| {
-                if (mem.eql(u8, field, field_name)) {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
@@ -373,7 +363,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 },
                 .name => |name| {
-                    if ((try self.extractBitflagName(param.param_type.name)) != null or self.isFlags(param.param_type.name)) {
+                    if ((try self.extractBitflagName(name)) != null or self.isFlags(name)) {
                         return .bitflags;
                     }
                 },
@@ -387,7 +377,7 @@ fn Renderer(comptime WriterType: type) type {
             return .other;
         }
 
-        fn classifyCommandDispatch(self: Self, name: []const u8, command: reg.Command) CommandDispatchType {
+        fn classifyCommandDispatch(name: []const u8, command: reg.Command) CommandDispatchType {
             const device_handles = std.ComptimeStringMap(void, .{
                 .{ "VkDevice", {} },
                 .{ "VkCommandBuffer", {} },
@@ -710,37 +700,6 @@ fn Renderer(comptime WriterType: type) type {
             try self.writeIdentifierWithCase(.snake, try self.extractEnumFieldName(name, field_name));
         }
 
-        fn renderEnumerationValue(self: *Self, enum_name: []const u8, enumeration: reg.Enum, value: reg.Enum.Value) !void {
-            var current_value = value;
-            var maybe_alias_of: ?[]const u8 = null;
-
-            while (true) {
-                switch (current_value) {
-                    .int => |int| try self.writer.print(" = {}, ", .{int}),
-                    .bitpos => |pos| try self.writer.print(" = 1 << {}, ", .{pos}),
-                    .bit_vector => |bv| try self.writer.print("= 0x{X}, ", .{bv}),
-                    .alias => |alias| {
-                        // Find the alias
-                        current_value = for (enumeration.fields) |field| {
-                            if (mem.eql(u8, field.name, alias.name)) {
-                                maybe_alias_of = field.name;
-                                break field.value;
-                            }
-                        } else return error.InvalidRegistry; // There is no alias
-                        continue;
-                    },
-                }
-
-                break;
-            }
-
-            if (maybe_alias_of) |alias_of| {
-                try self.writer.writeAll("// alias of ");
-                try self.renderEnumFieldName(enum_name, alias_of);
-                try self.writer.writeByte('\n');
-            }
-        }
-
         fn renderEnumeration(self: *Self, name: []const u8, enumeration: reg.Enum) !void {
             if (enumeration.is_bitmask) {
                 try self.renderBitmaskBits(name, enumeration);
@@ -749,17 +708,37 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.writeAll(" = extern enum(i32) {");
+            try self.writer.writeAll(" = enum(c_int) {");
 
             for (enumeration.fields) |field| {
-                if (field.value == .alias and field.value.alias.is_compat_alias)
+                if (field.value == .alias)
                     continue;
 
                 try self.renderEnumFieldName(name, field.name);
-                try self.renderEnumerationValue(name, enumeration, field.value);
+                switch (field.value) {
+                    .int => |int| try self.writer.print(" = {}, ", .{int}),
+                    .bitpos => |pos| try self.writer.print(" = 1 << {}, ", .{pos}),
+                    .bit_vector => |bv| try self.writer.print("= 0x{X}, ", .{bv}),
+                    .alias => unreachable,
+                }
             }
 
-            try self.writer.writeAll("_,};\n");
+            try self.writer.writeAll("_,");
+
+            for (enumeration.fields) |field| {
+                if (field.value != .alias or field.value.alias.is_compat_alias)
+                    continue;
+
+                try self.writer.writeAll("pub const ");
+                try self.renderEnumFieldName(name, field.name);
+                try self.writer.writeAll(" = ");
+                try self.renderName(name);
+                try self.writer.writeByte('.');
+                try self.renderEnumFieldName(name, field.value.alias.name);
+                try self.writer.writeAll(";\n");
+            }
+
+            try self.writer.writeAll("};\n");
         }
 
         fn bitmaskFlagsType(bitwidth: u8) ![]const u8 {
@@ -797,7 +776,7 @@ fn Renderer(comptime WriterType: type) type {
 
                 for (flags_by_bitpos[0..bits.bitwidth]) |maybe_flag_name, bitpos| {
                     if (maybe_flag_name) |flag_name| {
-                        const field_name = try self.extractBitflagFieldName(bitflag_name, flag_name);
+                        const field_name = try extractBitflagFieldName(bitflag_name, flag_name);
                         try self.writeIdentifierWithCase(.snake, field_name);
                     } else {
                         try self.writer.print("_reserved_bit_{}", .{bitpos});
@@ -843,7 +822,7 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.print(" = extern enum({s}) {{null_handle = 0, _}};\n", .{backing_type});
+            try self.writer.print(" = enum({s}) {{null_handle = 0, _}};\n", .{backing_type});
         }
 
         fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
@@ -948,7 +927,7 @@ fn Renderer(comptime WriterType: type) type {
             for (self.registry.decls) |decl| {
                 if (decl.decl_type == .command) {
                     const command = decl.decl_type.command;
-                    if (self.classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
                         try self.renderWrapper(decl.name, decl.decl_type.command);
                     }
                 }
@@ -1208,13 +1187,13 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll(") {\n");
 
             for (command.success_codes) |success| {
-                try self.writer.writeByte('.');
+                try self.writer.writeAll("Result.");
                 try self.renderEnumFieldName("VkResult", success);
                 try self.writer.writeAll(" => {},");
             }
 
             for (command.error_codes) |err| {
-                try self.writer.writeByte('.');
+                try self.writer.writeAll("Result.");
                 try self.renderEnumFieldName("VkResult", err);
                 try self.writer.writeAll(" => return error.");
                 try self.renderResultAsErrorName(err);
