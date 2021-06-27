@@ -449,33 +449,16 @@ fn Renderer(comptime WriterType: type) type {
                 if (decl.decl_type == .command) {
                     const command = decl.decl_type.command;
                     if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        try self.writeIdentifierWithCase(.snake, trimVkNamespace(decl.name));
-                        try self.writer.writeAll(",\n");
+                        try self.writer.print("{s},\n", .{ trimVkNamespace(decl.name) });
                     }
                 }
             }
             try self.writer.writeAll("};\n\n");
-
             try self.writer.print(
-                \\fn snakeToCamel{s}(cmd: {s}Command) [:0]const u8 {{
-                \\    return switch(cmd) {{
-                , .{dispatch_type_name, dispatch_type_name});
-
-            for (self.registry.decls) |decl| {
-                if (decl.decl_type == .command) {
-                    const command = decl.decl_type.command;
-                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        const trimmed_name = trimVkNamespace(decl.name);
-                        try self.writer.writeAll(".");
-                        try self.writeIdentifierWithCase(.snake, trimmed_name);
-                        try self.writer.print(" => \"{s}\",\n", .{ trimmed_name });
-                    }
-                }
-            }
-            try self.writer.writeAll(
-                \\    };
-                \\}
-            );
+                \\fn {s}CommandToString(cmd: {s}Command) []const u8 {{
+                \\    return std.meta.tagName(cmd);
+                \\}}
+            , .{ dispatch_type_name, dispatch_type_name });
         }
 
         fn renderCopyright(self: *Self) !void {
@@ -978,23 +961,25 @@ fn Renderer(comptime WriterType: type) type {
                 \\pub fn {s}Wrapper(comptime cmds: anytype) type {{
                 \\    comptime var fields: [cmds.len]std.builtin.TypeInfo.StructField = undefined;
                 \\    inline for (cmds) |cmd, i| {{
-                \\        const cmd_camel_case = snakeToCamel{s}(cmd);
-                \\        const cmd_type_name = "Pfn" ++ cmd_camel_case;
+                \\        const cmd_name = {s}CommandToString(cmd);
+                \\        const cmd_type_name = "Pfn" ++ cmd_name;
                 \\        const cmd_type = @field(GlobalScope, cmd_type_name);
                 \\        fields[i] = .{{
-                \\            .name = "vk" ++ cmd_camel_case,
+                \\            .name = "vk" ++ cmd_name,
                 \\            .field_type = cmd_type,
-                \\            .default_value = @as(?cmd_type, null),
+                \\            .default_value = null,
                 \\            .is_comptime = false,
                 \\            .alignment = @alignOf(*cmd_type),
                 \\        }};
                 \\    }}
-                \\    const Dispatch = @Type(.{{ .Struct = .{{
-                \\        .layout = .Auto,
-                \\        .fields = &fields,
-                \\        .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
-                \\        .is_tuple = false,
-                \\    }}}});
+                \\    const Dispatch = @Type(.{{
+                \\        .Struct = .{{
+                \\            .layout = .Auto,
+                \\            .fields = &fields,
+                \\            .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
+                \\            .is_tuple = false,
+                \\        }},
+                \\    }});
                 \\    return struct {{
                 \\        dispatch: Dispatch,
                 \\        
@@ -1035,7 +1020,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\    var self: Self = undefined;
                 \\    inline for (std.meta.fields(Dispatch)) |field| {{
                 \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
-                \\        const cmd_ptr = loader({s}name) orelse return error.InvalidLoader;
+                \\        const cmd_ptr = loader({s}name) orelse return error.CommandLoadFailure;
                 \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
                 \\    }}
                 \\    return self;

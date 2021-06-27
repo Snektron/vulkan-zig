@@ -70,8 +70,8 @@ For each function, a wrapper is generated into one of three structs:
 Each wrapper struct can be called with an array of the appropriate enums:
 ```zig
 const vk = @import("vulkan");
-const BaseDispatch = vk.BaseWrapper([_]vk.BaseCommand {
-    .create_instance,
+const BaseDispatch = vk.BaseWrapper(.{
+    .CreateInstance,
 });
 ```
 The wrapper struct then provides wrapper functions for each function pointer in the dispatch struct:
