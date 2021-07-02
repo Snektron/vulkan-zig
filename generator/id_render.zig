@@ -13,7 +13,30 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
         return true;
     }
 
-    const primitives = [_][]const u8{ "void", "comptime_float", "comptime_int", "bool", "isize", "usize", "f16", "f32", "f64", "f128", "c_longdouble", "noreturn", "type", "anyerror", "c_short", "c_ushort", "c_int", "c_uint", "c_long", "c_ulong", "c_longlong", "c_ulonglong" };
+    const primitives = [_][]const u8{
+        "void",
+        "comptime_float",
+        "comptime_int",
+        "bool",
+        "isize",
+        "usize",
+        "f16",
+        "f32",
+        "f64",
+        "f128",
+        "c_longdouble",
+        "noreturn",
+        "type",
+        "anyerror",
+        "c_short",
+        "c_ushort",
+        "c_int",
+        "c_uint",
+        "c_long",
+        "c_ulong",
+        "c_longlong",
+        "c_ulonglong",
+    };
 
     for (primitives) |reserved| {
         if (mem.eql(u8, reserved, name)) {
