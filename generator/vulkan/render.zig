@@ -449,7 +449,7 @@ fn Renderer(comptime WriterType: type) type {
                 if (decl.decl_type == .command) {
                     const command = decl.decl_type.command;
                     if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        try self.writer.print("{s},\n", .{ trimVkNamespace(decl.name) });
+                        try self.writer.print("{s},\n", .{trimVkNamespace(decl.name)});
                     }
                 }
             }
@@ -1068,8 +1068,8 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll(") ");
 
-            if (command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult")) {
-                try self.renderErrorSet(command.error_codes);
+            if (command.error_codes.len > 0) {
+                try self.renderErrorSetName(name);
                 try self.writer.writeByte('!');
             }
 
@@ -1159,6 +1159,11 @@ fn Renderer(comptime WriterType: type) type {
             try self.writeIdentifierFmt("{s}Result", .{trimVkNamespace(command_name)});
         }
 
+        fn renderErrorSetName(self: *Self, name: []const u8) !void {
+            try self.writeIdentifierWithCase(.title, trimVkNamespace(name));
+            try self.writer.writeAll("Error");
+        }
+
         fn renderReturnStruct(self: *Self, command_name: []const u8, returns: []const ReturnValue) !void {
             try self.writer.writeAll("pub const ");
             try self.renderReturnStructName(command_name);
@@ -1180,6 +1185,14 @@ fn Renderer(comptime WriterType: type) type {
 
             if (returns.len > 1) {
                 try self.renderReturnStruct(name, returns);
+            }
+
+            if (command.error_codes.len > 0) {
+                try self.writer.writeAll("pub const ");
+                try self.renderErrorSetName(name);
+                try self.writer.writeAll(" = ");
+                try self.renderErrorSet(command.error_codes);
+                try self.writer.writeAll(";\n");
             }
 
             try self.renderWrapperPrototype(name, command, returns);
