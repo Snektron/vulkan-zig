@@ -9,7 +9,7 @@ const IdRenderer = id_render.IdRenderer;
 
 const preamble =
     \\
-    \\// This file is generated from the Khronos Vulkan XML API registry
+    \\// This file is generated from the Khronos Vulkan XML API registry by vulkan-zig.
     \\
     \\const std = @import("std");
     \\const builtin = @import("builtin");
@@ -444,7 +444,7 @@ fn Renderer(comptime WriterType: type) type {
                 .device => "Device",
             };
 
-            try self.writer.print("\npub const {s}Command = enum {{\n", .{dispatch_type_name});
+            try self.writer.print("pub const {s}Command = enum {{\n", .{dispatch_type_name});
             for (self.registry.decls) |decl| {
                 if (decl.decl_type == .command) {
                     const command = decl.decl_type.command;
@@ -453,7 +453,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 }
             }
-            try self.writer.writeAll("};\n\n");
+            try self.writer.writeAll("};\n");
             try self.writer.print(
                 \\fn {s}CommandToString(cmd: {s}Command) []const u8 {{
                 \\    return std.meta.tagName(cmd);
