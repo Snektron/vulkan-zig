@@ -76,14 +76,13 @@ const BaseDispatch = vk.BaseWrapper(.{
 ```
 The wrapper struct then provides wrapper functions for each function pointer in the dispatch struct:
 ```zig
-pub const BaseWrapper(comptime Self: type) type {
+pub const BaseWrapper(comptime cmds: anytype) type {
     ...
+    const Dispatch = CreateDispatchStruct(cmds);
     return struct {
-        pub fn createInstance(
-            self: Self,
-            create_info: InstanceCreateInfo,
-            p_allocator: ?*const AllocationCallbacks,
-        ) error{
+        dispatch: Dispatch,
+
+        pub const CreateInstanceError = error{
             OutOfHostMemory,
             OutOfDeviceMemory,
             InitializationFailed,
@@ -91,9 +90,14 @@ pub const BaseWrapper(comptime Self: type) type {
             ExtensionNotPresent,
             IncompatibleDriver,
             Unknown,
-        }!Instance {
+        };
+        pub fn createInstance(
+            self: Self,
+            create_info: InstanceCreateInfo,
+            p_allocator: ?*const AllocationCallbacks,
+        ) CreateInstanceError!Instance {
             var instance: Instance = undefined;
-            const result = self.vkCreateInstance(
+            const result = self.dispatch.vkCreateInstance(
                 &create_info,
                 p_allocator,
                 &instance,
@@ -125,9 +129,9 @@ Wrappers are generated according to the following rules:
 * As of yet, there is no specific handling of enumeration style commands or other commands which accept slices.
 
 Furthermore, each wrapper contains a function to load each function pointer member when passed either `PfnGetInstanceProcAddr` or `PfnGetDeviceProcAddr`, which attempts to load each member as function pointer and casts it to the appropriate type. These functions are loaded literally, and any wrongly named member or member with a wrong function pointer type will result in problems.
-* For `BaseWrapper`, this function has signature `fn load(loader: PfnGetInstanceProcAddr) !Self`.
-* For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: PfnGetInstanceProcAddr) !Self`.
-* For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: PfnGetDeviceProcAddr) !Self`.
+* For `BaseWrapper`, this function has signature `fn load(loader: anytype) !Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr` (with optionally having a different calling convention).
+* For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: anytype) !Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr`.
+* For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: anytype) !Self`, where the type of `loader` must resemble `PfnGetDeviceProcAddr`.
 
 One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
 
