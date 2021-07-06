@@ -76,8 +76,10 @@ pub const GenerateStep = struct {
 
         var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
         try generate(self.builder.allocator, spec, out_buffer.writer());
+        try out_buffer.append(0);
 
-        const tree = try std.zig.parse(self.builder.allocator, out_buffer.items);
+        const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];
+        const tree = try std.zig.parse(self.builder.allocator, src);
 
         var formatted = try tree.render(self.builder.allocator);
 

@@ -61,8 +61,10 @@ pub fn main() !void {
 
     var out_buffer = std.ArrayList(u8).init(allocator);
     try generate(allocator, xml_src, out_buffer.writer());
+    try out_buffer.append(0);
 
-    const tree = try std.zig.parse(allocator, out_buffer.items);
+    const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];
+    const tree = try std.zig.parse(allocator, src);
     const formatted = try tree.render(allocator);
     defer allocator.free(formatted);
 
