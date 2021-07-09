@@ -728,7 +728,18 @@ fn Renderer(comptime WriterType: type) type {
 
                 try self.writer.writeAll(" = .");
                 try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
+            } else if (field.field_type == .name and !container.is_union and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(container.extends)) {
+                try self.writer.writeAll(" = FALSE");
             }
+        }
+
+        fn isFeatureStruct(maybe_extends: ?[]const []const u8) bool {
+            if (maybe_extends) |extends| {
+                return for (extends) |extend| {
+                    if (mem.eql(u8, extend, "VkDeviceCreateInfo")) break true;
+                } else false;
+            }
+            return false;
         }
 
         fn renderEnumFieldName(self: *Self, name: []const u8, field_name: []const u8) !void {

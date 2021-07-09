@@ -65,6 +65,7 @@ pub const Container = struct {
     };
 
     stype: ?[]const u8,
+    extends: ?[]const []const u8,
     fields: []Field,
     is_union: bool,
 };
