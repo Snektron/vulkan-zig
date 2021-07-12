@@ -205,6 +205,18 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
 
     members = allocator.shrink(members, i);
 
+    var maybe_extends: ?[][]const u8 = null;
+    if (ty.getAttribute("structextends")) |extends| {
+        const n_structs = std.mem.count(u8, extends, ",") + 1;
+        maybe_extends = try allocator.alloc([]const u8, n_structs);
+        var struct_extends = std.mem.split(extends, ",");
+        var j: usize = 0;
+        while (struct_extends.next()) |struct_extend| {
+            maybe_extends.?[j] = struct_extend;
+            j += 1;
+        }
+    }
+
     it = ty.findChildrenByTag("member");
     for (members) |*member| {
         const member_elem = it.next().?;
@@ -218,6 +230,7 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
                 .stype = maybe_stype,
                 .fields = members,
                 .is_union = is_union,
+                .extends = maybe_extends,
             },
         },
     };
