@@ -33,10 +33,9 @@ pub fn build(b: *Builder) void {
 
     // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
     const gen = vkgen.VkGenerateStep.init(b, "path/to/vk.xml", "vk.zig");
-    exe.step.dependOn(&gen.step);
 
     // Add the generated file as package to the final executable
-    exe.addPackagePath("vulkan", gen.full_out_path);
+    exe.addPackagePath(gen.package);
 }
 ```
 This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackagePath`.
@@ -230,8 +229,7 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("my-executable", "src/main.zig");
 
     const gen = vkgen.VkGenerateStep(b, "path/to/vk.xml", "vk.zig");
-    exe.step.dependOn(&gen.step);
-    exe.addPackagePath("vulkan", gen.full_out_path);
+    exe.addPackagePath(gen.package);
 
     const shader_comp = vkgen.ShaderCompileStep.init(
         builder,
