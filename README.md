@@ -35,10 +35,10 @@ pub fn build(b: *Builder) void {
     const gen = vkgen.VkGenerateStep.init(b, "path/to/vk.xml", "vk.zig");
 
     // Add the generated file as package to the final executable
-    exe.addPackagePath(gen.package);
+    exe.addPackage(gen.package);
 }
 ```
-This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackagePath`, after which the bindings will be made available to the executable under the name `vulkan`.
+This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackage`, after which the bindings will be made available to the executable under the name `vulkan`.
 
 ### Function & field renaming
 Functions and fields are renamed to be more or less in line with [Zig's standard library style](https://ziglang.org/documentation/master/#Style-Guide):
@@ -229,7 +229,7 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("my-executable", "src/main.zig");
 
     const gen = vkgen.VkGenerateStep(b, "path/to/vk.xml", "vk.zig");
-    exe.addPackagePath(gen.package);
+    exe.addPackage(gen.package);
 
     const shader_comp = vkgen.ShaderCompileStep.init(
         builder,
