@@ -38,7 +38,7 @@ pub fn build(b: *Builder) void {
     exe.addPackagePath(gen.package);
 }
 ```
-This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackagePath`.
+This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackagePath`, after which the bindings will be made available to the executable under the name `vulkan`.
 
 ### Function & field renaming
 Functions and fields are renamed to be more or less in line with [Zig's standard library style](https://ziglang.org/documentation/master/#Style-Guide):
