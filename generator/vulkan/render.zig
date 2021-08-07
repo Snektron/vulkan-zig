@@ -705,7 +705,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 } else {
                     try self.renderTypeInfo(field.field_type);
-                    try self.renderContainerDefaultField(container, field);
+                    try self.renderContainerDefaultField(name, container, field);
                     try self.writer.writeAll(", ");
                 }
             }
@@ -713,7 +713,7 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("};\n");
         }
 
-        fn renderContainerDefaultField(self: *Self, container: reg.Container, field: reg.Container.Field) !void {
+        fn renderContainerDefaultField(self: *Self, name: []const u8, container: reg.Container, field: reg.Container.Field) !void {
             if (mem.eql(u8, field.name, "pNext")) {
                 try self.writer.writeAll(" = null");
             } else if (mem.eql(u8, field.name, "sType")) {
@@ -728,12 +728,13 @@ fn Renderer(comptime WriterType: type) type {
 
                 try self.writer.writeAll(" = .");
                 try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
-            } else if (field.field_type == .name and !container.is_union and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(container.extends)) {
+            } else if (field.field_type == .name and !container.is_union and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(name, container.extends)) {
                 try self.writer.writeAll(" = FALSE");
             }
         }
 
-        fn isFeatureStruct(maybe_extends: ?[]const []const u8) bool {
+        fn isFeatureStruct(name: []const u8, maybe_extends: ?[]const []const u8) bool {
+            if (std.mem.eql(u8, name, "VkPhysicalDeviceFeatures")) return true;
             if (maybe_extends) |extends| {
                 return for (extends) |extend| {
                     if (mem.eql(u8, extend, "VkDeviceCreateInfo")) break true;
