@@ -251,7 +251,7 @@ fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, f
     _ = try gc.vkd.getSwapchainImagesKHR(gc.dev, swapchain, &count, images.ptr);
 
     const swap_images = try allocator.alloc(SwapImage, count);
-    errdefer allocator.free(images);
+    errdefer allocator.free(swap_images);
 
     var i: usize = 0;
     errdefer for (swap_images[0..i]) |si| si.deinit(gc);
