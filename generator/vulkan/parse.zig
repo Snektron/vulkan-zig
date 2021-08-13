@@ -209,7 +209,7 @@ fn parseContainer(allocator: *Allocator, ty: *xml.Element, is_union: bool) !regi
     if (ty.getAttribute("structextends")) |extends| {
         const n_structs = std.mem.count(u8, extends, ",") + 1;
         maybe_extends = try allocator.alloc([]const u8, n_structs);
-        var struct_extends = std.mem.split(extends, ",");
+        var struct_extends = std.mem.split(u8, extends, ",");
         var j: usize = 0;
         while (struct_extends.next()) |struct_extend| {
             maybe_extends.?[j] = struct_extend;
@@ -278,7 +278,7 @@ fn lenToPointerSize(fields: Fields, len: []const u8) registry.Pointer.PointerSiz
 
 fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.Element) !void {
     if (elem.getAttribute("len")) |lens| {
-        var it = mem.split(lens, ",");
+        var it = mem.split(u8, lens, ",");
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
             // TODO: Check altlen
@@ -295,7 +295,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
     }
 
     if (elem.getAttribute("optional")) |optionals| {
-        var it = mem.split(optionals, ",");
+        var it = mem.split(u8, optionals, ",");
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
             if (it.next()) |current_optional| {
@@ -428,7 +428,7 @@ fn splitCommaAlloc(allocator: *Allocator, text: []const u8) ![][]const u8 {
     }
 
     const codes = try allocator.alloc([]const u8, n_codes);
-    var it = mem.split(text, ",");
+    var it = mem.split(u8, text, ",");
     for (codes) |*code| {
         code.* = it.next().?;
     }
@@ -845,7 +845,7 @@ fn parseExtension(allocator: *Allocator, extension: *xml.Element) !registry.Exte
 }
 
 fn splitFeatureLevel(ver: []const u8, split: []const u8) !registry.FeatureLevel {
-    var it = mem.split(ver, split);
+    var it = mem.split(u8, ver, split);
 
     const major = it.next() orelse return error.InvalidFeatureLevel;
     const minor = it.next() orelse return error.InvalidFeatureLevel;

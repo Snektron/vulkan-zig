@@ -456,7 +456,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderCopyright(self: *Self) !void {
-            var it = mem.split(self.registry.copyright, "\n");
+            var it = mem.split(u8, self.registry.copyright, "\n");
             while (it.next()) |line| {
                 try self.writer.print("// {s}\n", .{line});
             }
