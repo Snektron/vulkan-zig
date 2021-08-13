@@ -9,41 +9,30 @@ const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
 const EnumFieldMerger = struct {
-    const EnumExtensionMap = std.StringArrayHashMap(std.ArrayListUnmanaged(reg.Enum.Field));
-    const FieldSet = std.StringArrayHashMap(void);
+    const EnumExtensionMap = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(reg.Enum.Field));
+    const FieldSet = std.StringArrayHashMapUnmanaged(void);
 
-    gpa: *Allocator,
-    reg_arena: *Allocator,
+    arena: *Allocator,
     registry: *reg.Registry,
     enum_extensions: EnumExtensionMap,
     field_set: FieldSet,
 
-    fn init(gpa: *Allocator, reg_arena: *Allocator, registry: *reg.Registry) EnumFieldMerger {
+    fn init(arena: *Allocator, registry: *reg.Registry) EnumFieldMerger {
         return .{
-            .gpa = gpa,
-            .reg_arena = reg_arena,
+            .arena = arena,
             .registry = registry,
-            .enum_extensions = EnumExtensionMap.init(gpa),
-            .field_set = FieldSet.init(gpa),
+            .enum_extensions = .{},
+            .field_set = .{},
         };
     }
 
-    fn deinit(self: *EnumFieldMerger) void {
-        for (self.enum_extensions.values()) |*value| {
-            value.deinit(self.gpa);
-        }
-
-        self.field_set.deinit();
-        self.enum_extensions.deinit();
-    }
-
     fn putEnumExtension(self: *EnumFieldMerger, enum_name: []const u8, field: reg.Enum.Field) !void {
-        const res = try self.enum_extensions.getOrPut(enum_name);
+        const res = try self.enum_extensions.getOrPut(self.arena, enum_name);
         if (!res.found_existing) {
             res.value_ptr.* = std.ArrayListUnmanaged(reg.Enum.Field){};
         }
 
-        try res.value_ptr.append(self.gpa, field);
+        try res.value_ptr.append(self.arena, field);
     }
 
     fn addRequires(self: *EnumFieldMerger, reqs: []const reg.Require) !void {
@@ -61,11 +50,11 @@ const EnumFieldMerger = struct {
         self.field_set.clearRetainingCapacity();
 
         const n_fields_upper_bound = base_enum.fields.len + extensions.items.len;
-        const new_fields = try self.reg_arena.alloc(reg.Enum.Field, n_fields_upper_bound);
+        const new_fields = try self.arena.alloc(reg.Enum.Field, n_fields_upper_bound);
         var i: usize = 0;
 
         for (base_enum.fields) |field| {
-            const res = try self.field_set.getOrPut(field.name);
+            const res = try self.field_set.getOrPut(self.arena, field.name);
             if (!res.found_existing) {
                 new_fields[i] = field;
                 i += 1;
@@ -74,16 +63,16 @@ const EnumFieldMerger = struct {
 
         // Assume that if a field name clobbers, the value is the same
         for (extensions.items) |field| {
-            const res = try self.field_set.getOrPut(field.name);
+            const res = try self.field_set.getOrPut(self.arena, field.name);
             if (!res.found_existing) {
                 new_fields[i] = field;
                 i += 1;
             }
         }
 
-        // Existing base_enum.fields was allocatued by `self.reg_arena`, so
+        // Existing base_enum.fields was allocated by `self.arena`, so
         // it gets cleaned up whenever that is deinited.
-        base_enum.fields = self.reg_arena.shrink(new_fields, i);
+        base_enum.fields = self.arena.shrink(new_fields, i);
     }
 
     fn merge(self: *EnumFieldMerger) !void {
@@ -106,8 +95,7 @@ const EnumFieldMerger = struct {
 };
 
 pub const Generator = struct {
-    gpa: *Allocator,
-    reg_arena: std.heap.ArenaAllocator,
+    arena: std.heap.ArenaAllocator,
     registry: reg.Registry,
     id_renderer: IdRenderer,
 
@@ -118,16 +106,14 @@ pub const Generator = struct {
         for (tags) |*tag, i| tag.* = result.registry.tags[i].name;
 
         return Generator{
-            .gpa = allocator,
-            .reg_arena = result.arena,
+            .arena = result.arena,
             .registry = result.registry,
             .id_renderer = IdRenderer.init(allocator, tags),
         };
     }
 
     fn deinit(self: Generator) void {
-        self.gpa.free(self.id_renderer.tags);
-        self.reg_arena.deinit();
+        self.arena.deinit();
     }
 
     fn stripFlagBits(self: Generator, name: []const u8) []const u8 {
@@ -142,14 +128,13 @@ pub const Generator = struct {
 
     // Solve `registry.declarations` according to `registry.extensions` and `registry.features`.
     fn mergeEnumFields(self: *Generator) !void {
-        var merger = EnumFieldMerger.init(self.gpa, &self.reg_arena.allocator, &self.registry);
-        defer merger.deinit();
+        var merger = EnumFieldMerger.init(&self.arena.allocator, &self.registry);
         try merger.merge();
     }
 
     // https://github.com/KhronosGroup/Vulkan-Docs/pull/1556
     fn fixupBitFlags(self: *Generator) !void {
-        var seen_bits = std.StringArrayHashMap(void).init(&self.reg_arena.allocator);
+        var seen_bits = std.StringArrayHashMap(void).init(&self.arena.allocator);
         defer seen_bits.deinit();
 
         for (self.registry.decls) |decl| {
@@ -181,7 +166,7 @@ pub const Generator = struct {
     }
 
     fn render(self: *Generator, writer: anytype) !void {
-        try renderRegistry(writer, &self.reg_arena.allocator, &self.registry, &self.id_renderer);
+        try renderRegistry(writer, &self.arena.allocator, &self.registry, &self.id_renderer);
     }
 };
 

@@ -185,10 +185,6 @@ fn Renderer(comptime WriterType: type) type {
         declarations_by_name: std.StringHashMap(*const reg.DeclarationType),
 
         fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
-            const tags = try allocator.alloc([]const u8, registry.tags.len);
-            errdefer allocator.free(tags);
-            for (tags) |*tag, i| tag.* = registry.tags[i].name;
-
             var declarations_by_name = std.StringHashMap(*const reg.DeclarationType).init(allocator);
             errdefer declarations_by_name.deinit();
 
@@ -212,8 +208,6 @@ fn Renderer(comptime WriterType: type) type {
 
         fn deinit(self: *Self) void {
             self.declarations_by_name.deinit();
-            self.allocator.free(self.id_renderer.tags);
-            self.id_renderer.deinit();
         }
 
         fn writeIdentifier(self: Self, id: []const u8) !void {
