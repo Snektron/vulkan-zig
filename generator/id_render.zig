@@ -7,10 +7,9 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
         for (name[1..]) |c| {
             switch (c) {
                 '0'...'9' => {},
-                else => return false,
+                else => break,
             }
-        }
-        return true;
+        } else return true;
     }
 
     const primitives = [_][]const u8{
@@ -36,6 +35,12 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
         "c_ulong",
         "c_longlong",
         "c_ulonglong",
+        // Removed in stage 2 in https://github.com/ziglang/zig/commit/05cf44933d753f7a5a53ab289ea60fd43761de57,
+        // but these are still invalid identifiers in stage 1.
+        "undefined",
+        "true",
+        "false",
+        "null",
     };
 
     for (primitives) |reserved| {
@@ -47,14 +52,10 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
     return false;
 }
 
-fn needZigEscape(name: []const u8) bool {
-    return !std.zig.fmt.isValidId(name) or isZigPrimitiveType(name);
-}
-
 pub fn writeIdentifier(out: anytype, id: []const u8) !void {
     // https://github.com/ziglang/zig/issues/2897
     if (isZigPrimitiveType(id)) {
-        try out.print("{s}_", .{id});
+        try out.print("@\"{}\"", .{std.zig.fmtEscapes(id)});
     } else {
         try out.print("{}", .{std.zig.fmtId(id)});
     }
