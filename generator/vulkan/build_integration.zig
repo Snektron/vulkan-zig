@@ -72,6 +72,7 @@ pub const GenerateStep = struct {
         try generate(self.builder.allocator, spec, out_buffer.writer());
 
         const tree = try std.zig.parse(self.builder.allocator, out_buffer.items);
+        std.debug.assert(tree.errors.len == 0); // If this triggers, vulkan-zig produced invalid code.
 
         var formatted = try tree.render(self.builder.allocator);
 
