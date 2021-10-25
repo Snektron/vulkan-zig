@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [ zig-0.8.0-compat ]
+    branches: [ zig-0.8.1-compat ]
   pull_request:
-    branches: [ zig-0.8.0-compat ]
+    branches: [ zig-0.8.1-compat ]
   schedule:
     - cron: '0 6 * * *'
 
