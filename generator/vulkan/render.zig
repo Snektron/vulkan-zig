@@ -440,19 +440,70 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.print("pub const {s}Command = enum {{\n", .{dispatch_type_name});
             for (self.registry.decls) |decl| {
-                if (decl.decl_type == .command) {
-                    const command = decl.decl_type.command;
-                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        try self.writer.print("{s},\n", .{trimVkNamespace(decl.name)});
-                    }
+                const command = switch (decl.decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                    try self.writer.writeAll(",\n");
                 }
             }
+
+            {
+                try self.writer.print(
+                    \\
+                    \\pub fn symbol(self: {s}Command) [:0]const u8 {{
+                    \\    return switch (self) {{
+                    \\
+                    , .{dispatch_type_name}
+                );
+
+                for (self.registry.decls) |decl| {
+                    const command = switch (decl.decl_type) {
+                        .command => |cmd| cmd,
+                        else => continue,
+                    };
+
+                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                        try self.writer.writeAll(".");
+                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                        try self.writer.print(" => \"{s}\",\n", .{ decl.name });
+                    }
+                }
+
+                try self.writer.writeAll("};\n}\n");
+            }
+
+            {
+                try self.writer.print(
+                    \\
+                    \\pub fn PfnType(comptime self: {s}Command) type {{
+                    \\    return switch (self) {{
+                    \\
+                    , .{dispatch_type_name}
+                );
+
+                for (self.registry.decls) |decl| {
+                    const command = switch (decl.decl_type) {
+                        .command => |cmd| cmd,
+                        else => continue,
+                    };
+
+                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                        try self.writer.writeAll(".");
+                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                        try self.writer.writeAll(" => ");
+                        try self.renderCommandPtrName(decl.name);
+                        try self.writer.writeAll(",\n");
+                    }
+                }
+
+                try self.writer.writeAll("};\n}\n");
+            }
+
             try self.writer.writeAll("};\n");
-            try self.writer.print(
-                \\fn {s}CommandToString(cmd: {s}Command) []const u8 {{
-                \\    return std.meta.tagName(cmd);
-                \\}}
-            , .{ dispatch_type_name, dispatch_type_name });
         }
 
         fn renderCopyright(self: *Self) !void {
@@ -965,17 +1016,16 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.print(
                 \\pub fn {s}Wrapper(comptime cmds: anytype) type {{
+                \\    const cmd_array: [cmds.len]{s}Command = cmds;
                 \\    comptime var fields: [cmds.len]std.builtin.TypeInfo.StructField = undefined;
-                \\    inline for (cmds) |cmd, i| {{
-                \\        const cmd_name = {s}CommandToString(cmd);
-                \\        const cmd_type_name = "Pfn" ++ cmd_name;
-                \\        const cmd_type = @field(GlobalScope, cmd_type_name);
+                \\    inline for (cmd_array) |cmd, i| {{
+                \\        const PfnType = cmd.PfnType();
                 \\        fields[i] = .{{
-                \\            .name = "vk" ++ cmd_name,
-                \\            .field_type = cmd_type,
+                \\            .name = cmd.symbol(),
+                \\            .field_type = PfnType,
                 \\            .default_value = null,
                 \\            .is_comptime = false,
-                \\            .alignment = @alignOf(*cmd_type),
+                \\            .alignment = @alignOf(PfnType),
                 \\        }};
                 \\    }}
                 \\    const Dispatch = @Type(.{{
