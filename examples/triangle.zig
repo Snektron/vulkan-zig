@@ -150,7 +150,6 @@ pub fn main() !void {
             );
         }
 
-        c.glfwSwapBuffers(window);
         c.glfwPollEvents();
     }
 
