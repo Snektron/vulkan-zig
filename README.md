@@ -233,7 +233,7 @@ pub fn build(b: *Builder) void {
 
     const shader_comp = vkgen.ShaderCompileStep.init(
         builder,
-        &[_][]const u8{"glslc", "--target-env=vulkan1.2"}, // Path to glslc and additional parameters
+        &[_][]const u8{"glslc", "--target-env", "vulkan1.2"}, // Path to glslc and additional parameters
     );
     exe.step.dependOn(&shader_comp.step);
     const spv_path = shader_comp.addShader("path/to/shader.frag");
