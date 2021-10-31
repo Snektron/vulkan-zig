@@ -252,5 +252,7 @@ Upon compilation, glslc is then invoked to compile each shader, and the result i
 A partial implementation of https://vulkan-tutorial.org is implemented in [examples/triangle.zig](examples/triangle.zig). This example can be ran by executing `zig build run-triangle` in vulkan-zig's root.
 
 ## See also
-* Implementation of https://vulkan-tutorial.org: https://github.com/andrewrk/zig-vulkan-triangle.
+* Implementation of https://vulkan-tutorial.org using `@cImport`'ed bindings: https://github.com/andrewrk/zig-vulkan-triangle.
 * Alternative binding generator: https://github.com/SpexGuy/Zig-Vulkan-Headers
+* Zig bindings for GLFW: https://github.com/hexops/mach-glfw
+  * With vulkan-zig integration example: https://github.com/hexops/mach-glfw-vulkan-example
