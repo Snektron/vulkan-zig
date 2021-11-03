@@ -95,7 +95,7 @@ const foreign_types = std.ComptimeStringMap([]const u8, .{
     .{ "RROutput", @typeName(c_ulong) },
     .{ "wl_display", "opaque {}" },
     .{ "wl_surface", "opaque {}" },
-    .{ "HINSTANCE", "std.os.HINSTANCE" },
+    .{ "HINSTANCE", "std.os.windows.HINSTANCE" },
     .{ "HWND", "*opaque {}" },
     .{ "HMONITOR", "*opaque {}" },
     .{ "HANDLE", "std.os.HANDLE" },
