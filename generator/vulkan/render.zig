@@ -96,7 +96,7 @@ const foreign_types = std.ComptimeStringMap([]const u8, .{
     .{ "wl_display", "opaque {}" },
     .{ "wl_surface", "opaque {}" },
     .{ "HINSTANCE", "std.os.windows.HINSTANCE" },
-    .{ "HWND", "*opaque {}" },
+    .{ "HWND", "std.os.windows.HWND" },
     .{ "HMONITOR", "*opaque {}" },
     .{ "HANDLE", "std.os.windows.HANDLE" },
     .{ "SECURITY_ATTRIBUTES", "std.os.SECURITY_ATTRIBUTES" },
