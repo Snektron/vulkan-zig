@@ -1015,10 +1015,9 @@ fn Renderer(comptime WriterType: type) type {
             };
 
             try self.writer.print(
-                \\pub fn {s}Wrapper(comptime cmds: anytype) type {{
-                \\    const cmd_array: [cmds.len]{s}Command = cmds;
+                \\pub fn {s}Wrapper(comptime cmds: []const {s}Command) type {{
                 \\    comptime var fields: [cmds.len]std.builtin.TypeInfo.StructField = undefined;
-                \\    inline for (cmd_array) |cmd, i| {{
+                \\    inline for (cmds) |cmd, i| {{
                 \\        const PfnType = cmd.PfnType();
                 \\        fields[i] = .{{
                 \\            .name = cmd.symbol(),
