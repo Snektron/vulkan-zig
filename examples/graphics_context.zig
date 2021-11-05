@@ -5,11 +5,11 @@ const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][]const u8{vk.extension_info.khr_swapchain.name};
 
-const BaseDispatch = vk.BaseWrapper(.{
+const BaseDispatch = vk.BaseWrapper(&.{
     .createInstance,
 });
 
-const InstanceDispatch = vk.InstanceWrapper(.{
+const InstanceDispatch = vk.InstanceWrapper(&.{
     .destroyInstance,
     .createDevice,
     .destroySurfaceKHR,
@@ -25,7 +25,7 @@ const InstanceDispatch = vk.InstanceWrapper(.{
     .getDeviceProcAddr,
 });
 
-const DeviceDispatch = vk.DeviceWrapper(.{
+const DeviceDispatch = vk.DeviceWrapper(&.{
     .destroyDevice,
     .getDeviceQueue,
     .createSemaphore,
