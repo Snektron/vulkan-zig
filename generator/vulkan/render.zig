@@ -800,7 +800,7 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.writeAll(" = enum(c_int) {");
+            try self.writer.writeAll(" = enum(i32) {");
 
             for (enumeration.fields) |field| {
                 if (field.value == .alias)
