@@ -126,10 +126,11 @@ pub fn main() !void {
             else => |narrow| return narrow,
         };
 
-        if (state == .suboptimal) {
-            var w: c_int = undefined;
-            var h: c_int = undefined;
-            c.glfwGetWindowSize(window, &w, &h);
+        var w: c_int = undefined;
+        var h: c_int = undefined;
+        c.glfwGetWindowSize(window, &w, &h);
+
+        if (state == .suboptimal or extent.width != @intCast(u32, w) or extent.height != @intCast(u32, h)) {
             extent.width = @intCast(u32, w);
             extent.height = @intCast(u32, h);
             try swapchain.recreate(extent);
