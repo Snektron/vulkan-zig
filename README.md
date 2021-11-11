@@ -16,7 +16,7 @@ vulkan-zig aims to be always compatible with the ever-changing Zig master branch
 
 ## Features
 ### CLI-interface
-A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/master/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
+A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
 ```
 $ zig-cache/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
 ```
