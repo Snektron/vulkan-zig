@@ -131,7 +131,7 @@ pub const GraphicsContext = struct {
         errdefer self.vkd.destroyDevice(self.dev, null);
 
         self.graphics_queue = Queue.init(self.vkd, self.dev, candidate.queues.graphics_family);
-        self.present_queue = Queue.init(self.vkd, self.dev, candidate.queues.graphics_family);
+        self.present_queue = Queue.init(self.vkd, self.dev, candidate.queues.present_family);
 
         self.mem_props = self.vki.getPhysicalDeviceMemoryProperties(self.pdev);
 
