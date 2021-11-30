@@ -422,7 +422,7 @@ fn tryParseAttr(ctx: *ParseContext, alloc: *Allocator) !?*Attribute {
     const value = try parseAttrValue(ctx, alloc);
 
     const attr = try alloc.create(Attribute);
-    attr.name = try mem.dupe(alloc, u8, name);
+    attr.name = try alloc.dupe(u8, name);
     attr.value = value;
     return attr;
 }
@@ -436,7 +436,7 @@ fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
     };
 
     const element = try alloc.create(Element);
-    element.* = Element.init(try std.mem.dupe(alloc, u8, tag), alloc);
+    element.* = Element.init(try alloc.dupe(u8, tag), alloc);
 
     while (ctx.eatWs()) {
         const attr = (try tryParseAttr(ctx, alloc)) orelse break;
@@ -601,7 +601,7 @@ fn tryParseComment(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
     }
 
     const end = ctx.offset - "-->".len;
-    return try mem.dupe(alloc, u8, ctx.source[begin..end]);
+    return try alloc.dupe(u8, ctx.source[begin..end]);
 }
 
 fn unescapeEntity(text: []const u8) !u8 {
