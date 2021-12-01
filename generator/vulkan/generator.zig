@@ -12,12 +12,12 @@ const EnumFieldMerger = struct {
     const EnumExtensionMap = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(reg.Enum.Field));
     const FieldSet = std.StringArrayHashMapUnmanaged(void);
 
-    arena: *Allocator,
+    arena: Allocator,
     registry: *reg.Registry,
     enum_extensions: EnumExtensionMap,
     field_set: FieldSet,
 
-    fn init(arena: *Allocator, registry: *reg.Registry) EnumFieldMerger {
+    fn init(arena: Allocator, registry: *reg.Registry) EnumFieldMerger {
         return .{
             .arena = arena,
             .registry = registry,
@@ -99,7 +99,7 @@ pub const Generator = struct {
     registry: reg.Registry,
     id_renderer: IdRenderer,
 
-    fn init(allocator: *Allocator, spec: *xml.Element) !Generator {
+    fn init(allocator: Allocator, spec: *xml.Element) !Generator {
         const result = try parseXml(allocator, spec);
 
         const tags = try allocator.alloc([]const u8, result.registry.tags.len);
@@ -128,13 +128,13 @@ pub const Generator = struct {
 
     // Solve `registry.declarations` according to `registry.extensions` and `registry.features`.
     fn mergeEnumFields(self: *Generator) !void {
-        var merger = EnumFieldMerger.init(&self.arena.allocator, &self.registry);
+        var merger = EnumFieldMerger.init(self.arena.allocator(), &self.registry);
         try merger.merge();
     }
 
     // https://github.com/KhronosGroup/Vulkan-Docs/pull/1556
     fn fixupBitFlags(self: *Generator) !void {
-        var seen_bits = std.StringArrayHashMap(void).init(&self.arena.allocator);
+        var seen_bits = std.StringArrayHashMap(void).init(self.arena.allocator());
         defer seen_bits.deinit();
 
         for (self.registry.decls) |decl| {
@@ -166,7 +166,7 @@ pub const Generator = struct {
     }
 
     fn render(self: *Generator, writer: anytype) !void {
-        try renderRegistry(writer, &self.arena.allocator, &self.registry, &self.id_renderer);
+        try renderRegistry(writer, self.arena.allocator(), &self.registry, &self.id_renderer);
     }
 };
 
@@ -174,7 +174,7 @@ pub const Generator = struct {
 /// and the resulting binding is written to `writer`. `allocator` will be used to allocate temporary
 /// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
 /// directly.
-pub fn generate(allocator: *Allocator, spec_xml: []const u8, writer: anytype) !void {
+pub fn generate(allocator: Allocator, spec_xml: []const u8, writer: anytype) !void {
     const spec = try xml.parse(allocator, spec_xml);
     defer spec.deinit();
 

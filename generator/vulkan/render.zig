@@ -179,12 +179,12 @@ fn Renderer(comptime WriterType: type) type {
         };
 
         writer: WriterType,
-        allocator: *Allocator,
+        allocator: Allocator,
         registry: *const reg.Registry,
         id_renderer: *IdRenderer,
         declarations_by_name: std.StringHashMap(*const reg.DeclarationType),
 
-        fn init(writer: WriterType, allocator: *Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
+        fn init(writer: WriterType, allocator: Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
             var declarations_by_name = std.StringHashMap(*const reg.DeclarationType).init(allocator);
             errdefer declarations_by_name.deinit();
 
@@ -1357,7 +1357,7 @@ fn Renderer(comptime WriterType: type) type {
     };
 }
 
-pub fn render(writer: anytype, allocator: *Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !void {
+pub fn render(writer: anytype, allocator: Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !void {
     var renderer = try Renderer(@TypeOf(writer)).init(writer, allocator, registry, id_renderer);
     defer renderer.deinit();
     try renderer.render();

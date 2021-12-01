@@ -10,7 +10,7 @@ pub const Swapchain = struct {
     };
 
     gc: *const GraphicsContext,
-    allocator: *Allocator,
+    allocator: Allocator,
 
     surface_format: vk.SurfaceFormatKHR,
     present_mode: vk.PresentModeKHR,
@@ -21,11 +21,11 @@ pub const Swapchain = struct {
     image_index: u32,
     next_image_acquired: vk.Semaphore,
 
-    pub fn init(gc: *const GraphicsContext, allocator: *Allocator, extent: vk.Extent2D) !Swapchain {
+    pub fn init(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D) !Swapchain {
         return try initRecycle(gc, allocator, extent, .null_handle);
     }
 
-    pub fn initRecycle(gc: *const GraphicsContext, allocator: *Allocator, extent: vk.Extent2D, old_handle: vk.SwapchainKHR) !Swapchain {
+    pub fn initRecycle(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D, old_handle: vk.SwapchainKHR) !Swapchain {
         const caps = try gc.vki.getPhysicalDeviceSurfaceCapabilitiesKHR(gc.pdev, gc.surface);
         const actual_extent = findActualExtent(caps, extent);
         if (actual_extent.width == 0 or actual_extent.height == 0) {
@@ -243,7 +243,7 @@ const SwapImage = struct {
     }
 };
 
-fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, format: vk.Format, allocator: *Allocator) ![]SwapImage {
+fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, format: vk.Format, allocator: Allocator) ![]SwapImage {
     var count: u32 = undefined;
     _ = try gc.vkd.getSwapchainImagesKHR(gc.dev, swapchain, &count, null);
     const images = try allocator.alloc(vk.Image, count);
@@ -264,7 +264,7 @@ fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, f
     return swap_images;
 }
 
-fn findSurfaceFormat(gc: *const GraphicsContext, allocator: *Allocator) !vk.SurfaceFormatKHR {
+fn findSurfaceFormat(gc: *const GraphicsContext, allocator: Allocator) !vk.SurfaceFormatKHR {
     const preferred = vk.SurfaceFormatKHR{
         .format = .b8g8r8a8_srgb,
         .color_space = .srgb_nonlinear_khr,
@@ -285,7 +285,7 @@ fn findSurfaceFormat(gc: *const GraphicsContext, allocator: *Allocator) !vk.Surf
     return surface_formats[0]; // There must always be at least one supported surface format
 }
 
-fn findPresentMode(gc: *const GraphicsContext, allocator: *Allocator) !vk.PresentModeKHR {
+fn findPresentMode(gc: *const GraphicsContext, allocator: Allocator) !vk.PresentModeKHR {
     var count: u32 = undefined;
     _ = try gc.vki.getPhysicalDeviceSurfacePresentModesKHR(gc.pdev, gc.surface, &count, null);
     const present_modes = try allocator.alloc(vk.PresentModeKHR, count);

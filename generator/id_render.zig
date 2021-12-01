@@ -128,7 +128,7 @@ pub const IdRenderer = struct {
     tags: []const []const u8,
     text_cache: std.ArrayList(u8),
 
-    pub fn init(allocator: *Allocator, tags: []const []const u8) IdRenderer {
+    pub fn init(allocator: Allocator, tags: []const []const u8) IdRenderer {
         return .{
             .tags = tags,
             .text_cache = std.ArrayList(u8).init(allocator),

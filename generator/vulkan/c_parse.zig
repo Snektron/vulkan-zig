@@ -241,7 +241,7 @@ pub const XmlCTokenizer = struct {
 };
 
 // TYPEDEF = kw_typedef DECLARATION ';'
-pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+pub fn parseTypedef(allocator: Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
     _ = try xctok.expect(.kw_typedef);
     const decl = try parseDeclaration(allocator, xctok);
     _ = try xctok.expect(.semicolon);
@@ -256,7 +256,7 @@ pub fn parseTypedef(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Decl
 }
 
 // MEMBER = DECLARATION (':' int)?
-pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Container.Field {
+pub fn parseMember(allocator: Allocator, xctok: *XmlCTokenizer) !registry.Container.Field {
     const decl = try parseDeclaration(allocator, xctok);
     var field = registry.Container.Field{
         .name = decl.name orelse return error.MissingTypeIdentifier,
@@ -284,7 +284,7 @@ pub fn parseMember(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Conta
     return field;
 }
 
-pub fn parseParamOrProto(allocator: *Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
+pub fn parseParamOrProto(allocator: Allocator, xctok: *XmlCTokenizer) !registry.Declaration {
     const decl = try parseDeclaration(allocator, xctok);
     if (try xctok.peek()) |_| {
         return error.InvalidSyntax;
@@ -315,7 +315,7 @@ pub const ParseError = error{
 // DECLARATION = kw_const? type_name DECLARATOR
 // DECLARATOR = POINTERS (id | name)? ('[' ARRAY_DECLARATOR ']')*
 //     | POINTERS '(' FNPTRSUFFIX
-fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Declaration {
+fn parseDeclaration(allocator: Allocator, xctok: *XmlCTokenizer) ParseError!Declaration {
     // Parse declaration constness
     var tok = try xctok.nextNoEof();
     const inner_is_const = tok.kind == .kw_const;
@@ -377,7 +377,7 @@ fn parseDeclaration(allocator: *Allocator, xctok: *XmlCTokenizer) ParseError!Dec
 }
 
 // FNPTRSUFFIX = kw_vkapi_ptr '*' name' ')' '(' ('void' | (DECLARATION (',' DECLARATION)*)?) ')'
-fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: TypeInfo) !?Declaration {
+fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: TypeInfo) !?Declaration {
     const lparen = try xctok.peek();
     if (lparen == null or lparen.?.kind != .lparen) {
         return null;
@@ -445,7 +445,7 @@ fn parseFnPtrSuffix(allocator: *Allocator, xctok: *XmlCTokenizer, return_type: T
 }
 
 // POINTERS = (kw_const? '*')*
-fn parsePointers(allocator: *Allocator, xctok: *XmlCTokenizer, inner_const: bool, inner: TypeInfo) !TypeInfo {
+fn parsePointers(allocator: Allocator, xctok: *XmlCTokenizer, inner_const: bool, inner: TypeInfo) !TypeInfo {
     var type_info = inner;
     var first_const = inner_const;
 
@@ -606,7 +606,7 @@ test "parseTypedef" {
     defer arena.deinit();
 
     var xctok = XmlCTokenizer.init(document.root);
-    const decl = try parseTypedef(&arena.allocator, &xctok);
+    const decl = try parseTypedef(arena.allocator(), &xctok);
 
     try testing.expectEqualSlices(u8, "pythons", decl.name);
     const array = decl.decl_type.typedef.array;

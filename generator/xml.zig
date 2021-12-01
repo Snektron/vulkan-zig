@@ -24,7 +24,7 @@ pub const Element = struct {
     attributes: AttributeList,
     children: ContentList,
 
-    fn init(tag: []const u8, alloc: *Allocator) Element {
+    fn init(tag: []const u8, alloc: Allocator) Element {
         return .{
             .tag = tag,
             .attributes = AttributeList.init(alloc),
@@ -314,12 +314,12 @@ pub const ParseError = error{
     OutOfMemory,
 };
 
-pub fn parse(backing_allocator: *Allocator, source: []const u8) !Document {
+pub fn parse(backing_allocator: Allocator, source: []const u8) !Document {
     var ctx = ParseContext.init(source);
     return try parseDocument(&ctx, backing_allocator);
 }
 
-fn parseDocument(ctx: *ParseContext, backing_allocator: *Allocator) !Document {
+fn parseDocument(ctx: *ParseContext, backing_allocator: Allocator) !Document {
     var doc = Document{
         .arena = ArenaAllocator.init(backing_allocator),
         .xml_decl = null,
@@ -328,22 +328,24 @@ fn parseDocument(ctx: *ParseContext, backing_allocator: *Allocator) !Document {
 
     errdefer doc.deinit();
 
-    try trySkipComments(ctx, &doc.arena.allocator);
+    const allocator = doc.arena.allocator();
 
-    doc.xml_decl = try tryParseProlog(ctx, &doc.arena.allocator);
-    _ = ctx.eatWs();
-    try trySkipComments(ctx, &doc.arena.allocator);
+    try trySkipComments(ctx, allocator);
 
-    doc.root = (try tryParseElement(ctx, &doc.arena.allocator)) orelse return error.InvalidDocument;
+    doc.xml_decl = try tryParseProlog(ctx, allocator);
     _ = ctx.eatWs();
-    try trySkipComments(ctx, &doc.arena.allocator);
+    try trySkipComments(ctx, allocator);
+
+    doc.root = (try tryParseElement(ctx, allocator)) orelse return error.InvalidDocument;
+    _ = ctx.eatWs();
+    try trySkipComments(ctx, allocator);
 
     if (ctx.peek() != null) return error.InvalidDocument;
 
     return doc;
 }
 
-fn parseAttrValue(ctx: *ParseContext, alloc: *Allocator) ![]const u8 {
+fn parseAttrValue(ctx: *ParseContext, alloc: Allocator) ![]const u8 {
     const quote = try ctx.consume();
     if (quote != '"' and quote != '\'') return error.UnexpectedCharacter;
 
@@ -359,7 +361,7 @@ fn parseAttrValue(ctx: *ParseContext, alloc: *Allocator) ![]const u8 {
     return try dupeAndUnescape(alloc, ctx.source[begin..end]);
 }
 
-fn parseEqAttrValue(ctx: *ParseContext, alloc: *Allocator) ![]const u8 {
+fn parseEqAttrValue(ctx: *ParseContext, alloc: Allocator) ![]const u8 {
     _ = ctx.eatWs();
     try ctx.expect('=');
     _ = ctx.eatWs();
@@ -386,7 +388,7 @@ fn parseNameNoDupe(ctx: *ParseContext) ![]const u8 {
     return ctx.source[begin..end];
 }
 
-fn tryParseCharData(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
+fn tryParseCharData(ctx: *ParseContext, alloc: Allocator) !?[]const u8 {
     const begin = ctx.offset;
 
     while (ctx.peek()) |ch| {
@@ -402,7 +404,7 @@ fn tryParseCharData(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
     return try dupeAndUnescape(alloc, ctx.source[begin..end]);
 }
 
-fn parseContent(ctx: *ParseContext, alloc: *Allocator) ParseError!Content {
+fn parseContent(ctx: *ParseContext, alloc: Allocator) ParseError!Content {
     if (try tryParseCharData(ctx, alloc)) |cd| {
         return Content{ .CharData = cd };
     } else if (try tryParseComment(ctx, alloc)) |comment| {
@@ -414,7 +416,7 @@ fn parseContent(ctx: *ParseContext, alloc: *Allocator) ParseError!Content {
     }
 }
 
-fn tryParseAttr(ctx: *ParseContext, alloc: *Allocator) !?*Attribute {
+fn tryParseAttr(ctx: *ParseContext, alloc: Allocator) !?*Attribute {
     const name = parseNameNoDupe(ctx) catch return null;
     _ = ctx.eatWs();
     try ctx.expect('=');
@@ -427,7 +429,7 @@ fn tryParseAttr(ctx: *ParseContext, alloc: *Allocator) !?*Attribute {
     return attr;
 }
 
-fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
+fn tryParseElement(ctx: *ParseContext, alloc: Allocator) !?*Element {
     const start = ctx.offset;
     if (!ctx.eat('<')) return null;
     const tag = parseNameNoDupe(ctx) catch {
@@ -473,7 +475,7 @@ fn tryParseElement(ctx: *ParseContext, alloc: *Allocator) !?*Element {
 test "tryParseElement" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var alloc = &arena.allocator;
+    const alloc = arena.allocator();
 
     {
         var ctx = ParseContext.init("<= a='b'/>");
@@ -515,7 +517,7 @@ test "tryParseElement" {
     }
 }
 
-fn tryParseProlog(ctx: *ParseContext, alloc: *Allocator) !?*XmlDecl {
+fn tryParseProlog(ctx: *ParseContext, alloc: Allocator) !?*XmlDecl {
     const start = ctx.offset;
     if (!ctx.eatStr("<?") or !mem.eql(u8, try parseNameNoDupe(ctx), "xml")) {
         ctx.offset = start;
@@ -561,7 +563,7 @@ fn tryParseProlog(ctx: *ParseContext, alloc: *Allocator) !?*XmlDecl {
 test "tryParseProlog" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var alloc = &arena.allocator;
+    const alloc = arena.allocator();
 
     {
         var ctx = ParseContext.init("<?xmla version='aa'?>");
@@ -586,13 +588,13 @@ test "tryParseProlog" {
     }
 }
 
-fn trySkipComments(ctx: *ParseContext, alloc: *Allocator) !void {
+fn trySkipComments(ctx: *ParseContext, alloc: Allocator) !void {
     while (try tryParseComment(ctx, alloc)) |_| {
         _ = ctx.eatWs();
     }
 }
 
-fn tryParseComment(ctx: *ParseContext, alloc: *Allocator) !?[]const u8 {
+fn tryParseComment(ctx: *ParseContext, alloc: Allocator) !?[]const u8 {
     if (!ctx.eatStr("<!--")) return null;
 
     const begin = ctx.offset;
@@ -622,7 +624,7 @@ fn unescapeEntity(text: []const u8) !u8 {
     return error.InvalidEntity;
 }
 
-fn dupeAndUnescape(alloc: *Allocator, text: []const u8) ![]const u8 {
+fn dupeAndUnescape(alloc: Allocator, text: []const u8) ![]const u8 {
     const str = try alloc.alloc(u8, text.len);
 
     var j: usize = 0;
@@ -644,7 +646,7 @@ fn dupeAndUnescape(alloc: *Allocator, text: []const u8) ![]const u8 {
 test "dupeAndUnescape" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var alloc = &arena.allocator;
+    const alloc = arena.allocator();
 
     try testing.expectEqualSlices(u8, "test", try dupeAndUnescape(alloc, "test"));
     try testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try dupeAndUnescape(alloc, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
@@ -657,7 +659,7 @@ test "dupeAndUnescape" {
 test "Top level comments" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var alloc = &arena.allocator;
+    const alloc = arena.allocator();
 
     const doc = try parse(alloc, "<?xml version='aa'?><!--comment--><python color='green'/><!--another comment-->");
     try testing.expectEqualSlices(u8, "python", doc.root.tag);
