@@ -1053,26 +1053,34 @@ fn Renderer(comptime WriterType: type) type {
                 .device => "device: Device, loader: anytype",
             };
 
-            const loader_first_param = switch (dispatch_type) {
-                .base => ".null_handle, ",
-                .instance => "instance, ",
-                .device => "device, ",
+            const loader_first_arg = switch (dispatch_type) {
+                .base => "Instance.null_handle",
+                .instance => "instance",
+                .device => "device",
             };
 
             @setEvalBranchQuota(2000);
 
             try self.writer.print(
-                \\pub fn load({s}) !Self {{
+                \\pub fn load({[params]s}) error{{CommandLoadFailure}}!Self {{
                 \\    var self: Self = undefined;
                 \\    inline for (std.meta.fields(Dispatch)) |field| {{
                 \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
-                \\        const cmd_ptr = loader({s}name) orelse return error.CommandLoadFailure;
+                \\        const cmd_ptr = loader({[first_arg]s}, name) orelse return error.CommandLoadFailure;
                 \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
                 \\    }}
                 \\    return self;
                 \\}}
-                \\
-            , .{ params, loader_first_param });
+                \\pub fn loadNoFail({[params]s}) Self {{
+                \\    var self: Self = undefined;
+                \\    inline for (std.meta.fields(Dispatch)) |field| {{
+                \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
+                \\        const cmd_ptr = loader({[first_arg]s}, name) orelse undefined;
+                \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
+                \\    }}
+                \\    return self;
+                \\}}
+            , .{ .params = params, .first_arg = loader_first_arg });
         }
 
         fn derefName(name: []const u8) []const u8 {

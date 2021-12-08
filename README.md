@@ -128,9 +128,11 @@ Wrappers are generated according to the following rules:
 * As of yet, there is no specific handling of enumeration style commands or other commands which accept slices.
 
 Furthermore, each wrapper contains a function to load each function pointer member when passed either `PfnGetInstanceProcAddr` or `PfnGetDeviceProcAddr`, which attempts to load each member as function pointer and casts it to the appropriate type. These functions are loaded literally, and any wrongly named member or member with a wrong function pointer type will result in problems.
-* For `BaseWrapper`, this function has signature `fn load(loader: anytype) !Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr` (with optionally having a different calling convention).
-* For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: anytype) !Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr`.
-* For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: anytype) !Self`, where the type of `loader` must resemble `PfnGetDeviceProcAddr`.
+* For `BaseWrapper`, this function has signature `fn load(loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr` (with optionally having a different calling convention).
+* For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr`.
+* For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetDeviceProcAddr`.
+
+By default, wrapper `load` functions return `error.CommandLoadFailure` if a call to the loader resulted in `null`. If this behaviour is not desired, one can use `loadNoFail`. This function accepts the same parameters as `load`, but does not return an error any function pointer fails to load and sets its value to `undefined` instead. It is at the programmer's discretion not to invoke invalid functions, which can be tested for by checking whether the required core and extension versions the function requires are supported.
 
 One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
 
