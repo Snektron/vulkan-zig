@@ -15,8 +15,6 @@ const preamble =
     \\const builtin = @import("builtin");
     \\const root = @import("root");
     \\
-    \\const GlobalScope = @This();
-    \\
     \\pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .i386)
     \\        .Stdcall
     \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
