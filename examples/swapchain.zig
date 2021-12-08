@@ -40,10 +40,13 @@ pub const Swapchain = struct {
             image_count = std.math.min(image_count, caps.max_image_count);
         }
 
-        const concurrent = gc.graphics_queue.family != gc.present_queue.family;
         const qfi = [_]u32{ gc.graphics_queue.family, gc.present_queue.family };
+        const sharing_mode: vk.SharingMode = if (gc.graphics_queue.family != gc.present_queue.family)
+            .concurrent
+        else
+            .exclusive;
 
-        const handle = try gc.vkd.createSwapchainKHR(gc.dev, .{
+        const handle = try gc.vkd.createSwapchainKHR(gc.dev, &.{
             .flags = .{},
             .surface = gc.surface,
             .min_image_count = image_count,
@@ -52,7 +55,7 @@ pub const Swapchain = struct {
             .image_extent = actual_extent,
             .image_array_layers = 1,
             .image_usage = .{ .color_attachment_bit = true, .transfer_dst_bit = true },
-            .image_sharing_mode = if (concurrent) .concurrent else .exclusive,
+            .image_sharing_mode = sharing_mode,
             .queue_family_index_count = qfi.len,
             .p_queue_family_indices = &qfi,
             .pre_transform = caps.current_transform,
@@ -71,7 +74,7 @@ pub const Swapchain = struct {
         const swap_images = try initSwapchainImages(gc, handle, surface_format.format, allocator);
         errdefer for (swap_images) |si| si.deinit(gc);
 
-        var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, .{ .flags = .{} }, null);
+        var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, next_image_acquired, null);
 
         const result = try gc.vkd.acquireNextImageKHR(gc.dev, handle, std.math.maxInt(u64), next_image_acquired, .null_handle);
@@ -159,7 +162,7 @@ pub const Swapchain = struct {
         }}, current.frame_fence);
 
         // Step 3: Present the current frame
-        _ = try self.gc.vkd.queuePresentKHR(self.gc.present_queue.handle, .{
+        _ = try self.gc.vkd.queuePresentKHR(self.gc.present_queue.handle, &.{
             .wait_semaphore_count = 1,
             .p_wait_semaphores = @ptrCast([*]const vk.Semaphore, &current.render_finished),
             .swapchain_count = 1,
@@ -196,7 +199,7 @@ const SwapImage = struct {
     frame_fence: vk.Fence,
 
     fn init(gc: *const GraphicsContext, image: vk.Image, format: vk.Format) !SwapImage {
-        const view = try gc.vkd.createImageView(gc.dev, .{
+        const view = try gc.vkd.createImageView(gc.dev, &.{
             .flags = .{},
             .image = image,
             .view_type = .@"2d",
@@ -212,13 +215,13 @@ const SwapImage = struct {
         }, null);
         errdefer gc.vkd.destroyImageView(gc.dev, view, null);
 
-        const image_acquired = try gc.vkd.createSemaphore(gc.dev, .{ .flags = .{} }, null);
+        const image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
 
-        const render_finished = try gc.vkd.createSemaphore(gc.dev, .{ .flags = .{} }, null);
+        const render_finished = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
 
-        const frame_fence = try gc.vkd.createFence(gc.dev, .{ .flags = .{ .signaled_bit = true } }, null);
+        const frame_fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{ .signaled_bit = true } }, null);
         errdefer gc.vkd.destroyFence(gc.dev, frame_fence, null);
 
         return SwapImage{

@@ -108,7 +108,7 @@ pub const GraphicsContext = struct {
             .api_version = vk.API_VERSION_1_2,
         };
 
-        self.instance = try self.vkb.createInstance(.{
+        self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
             .p_application_info = &app_info,
             .enabled_layer_count = 0,
@@ -160,7 +160,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn allocate(self: GraphicsContext, requirements: vk.MemoryRequirements, flags: vk.MemoryPropertyFlags) !vk.DeviceMemory {
-        return try self.vkd.allocateMemory(self.dev, .{
+        return try self.vkd.allocateMemory(self.dev, &.{
             .allocation_size = requirements.size,
             .memory_type_index = try self.findMemoryTypeIndex(requirements.memory_type_bits, flags),
         }, null);
@@ -210,7 +210,7 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
     else
         2;
 
-    return try vki.createDevice(candidate.pdev, .{
+    return try vki.createDevice(candidate.pdev, &.{
         .flags = .{},
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,

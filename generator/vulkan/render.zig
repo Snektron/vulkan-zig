@@ -453,7 +453,8 @@ fn Renderer(comptime WriterType: type) type {
                     \\pub fn symbol(self: {s}Command) [:0]const u8 {{
                     \\    return switch (self) {{
                     \\
-                    , .{dispatch_type_name}
+                ,
+                    .{dispatch_type_name},
                 );
 
                 for (self.registry.decls) |decl| {
@@ -465,7 +466,7 @@ fn Renderer(comptime WriterType: type) type {
                     if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
                         try self.writer.writeAll(".");
                         try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
-                        try self.writer.print(" => \"{s}\",\n", .{ decl.name });
+                        try self.writer.print(" => \"{s}\",\n", .{decl.name});
                     }
                 }
 
@@ -478,7 +479,8 @@ fn Renderer(comptime WriterType: type) type {
                     \\pub fn PfnType(comptime self: {s}Command) type {{
                     \\    return switch (self) {{
                     \\
-                    , .{dispatch_type_name}
+                ,
+                    .{dispatch_type_name},
                 );
 
                 for (self.registry.decls) |decl| {
@@ -1087,26 +1089,14 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("(self: Self, ");
 
             for (command.params) |param| {
-                switch (try self.classifyParam(param)) {
-                    .in_pointer => {
-                        // Remove one pointer level
-                        try self.writeIdentifierWithCase(.snake, derefName(param.name));
-                        try self.writer.writeAll(": ");
-                        try self.renderTypeInfo(param.param_type.pointer.child.*);
-                    },
-                    .out_pointer => continue, // Return value
-                    .in_out_pointer,
-                    .bitflags, // Special stuff handled in renderWrapperCall
-                    .buffer_len,
-                    .mut_buffer_len,
-                    .other,
-                    => {
-                        try self.writeIdentifierWithCase(.snake, param.name);
-                        try self.writer.writeAll(": ");
-                        try self.renderTypeInfo(param.param_type);
-                    },
+                // This parameter is returned instead.
+                if ((try self.classifyParam(param)) == .out_pointer) {
+                    continue;
                 }
 
+                try self.writeIdentifierWithCase(.snake, param.name);
+                try self.writer.writeAll(": ");
+                try self.renderTypeInfo(param.param_type);
                 try self.writer.writeAll(", ");
             }
 
@@ -1133,10 +1123,6 @@ fn Renderer(comptime WriterType: type) type {
 
             for (command.params) |param| {
                 switch (try self.classifyParam(param)) {
-                    .in_pointer => {
-                        try self.writer.writeByte('&');
-                        try self.writeIdentifierWithCase(.snake, derefName(param.name));
-                    },
                     .out_pointer => {
                         try self.writer.writeByte('&');
                         if (returns.len > 1) {
@@ -1148,7 +1134,7 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writeIdentifierWithCase(.snake, param.name);
                         try self.writer.writeAll(".toInt()");
                     },
-                    .in_out_pointer, .buffer_len, .mut_buffer_len, .other => {
+                    .in_pointer, .in_out_pointer, .buffer_len, .mut_buffer_len, .other => {
                         try self.writeIdentifierWithCase(.snake, param.name);
                     },
                 }
