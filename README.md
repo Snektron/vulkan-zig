@@ -132,6 +132,25 @@ Furthermore, each wrapper contains a function to load each function pointer memb
 * For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr`.
 * For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetDeviceProcAddr`.
 
+Note that these functions accepts a loader with the signature of `anytype` instead of `PfnGetInstanceProcAddr`. This is because it is valid for `vkGetInstanceProcAddr` to load itself, in which case the returned function is to be called with the vulkan calling convention. This calling convention is not required for loading vulkan-zig itself, though, and a loader to be called with any calling convention with the target architecture may be passed in. This is particularly useful when interacting with C libraries that provide `vkGetInstanceProcAddr`.
+
+```zig
+// vkGetInstanceProcAddr as provided by GLFW.
+// Note that vk.Instance and vk.PfnVoidFunction are ABI compatible with VkInstance,
+// and that `extern` implies the C calling convention.
+pub extern fn glfwGetInstanceProcAddress(instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction;
+
+// Or provide a custom implementation.
+// This function is called with the unspecified Zig-internal calling convention.
+fn customGetInstanceProcAddress(instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction {
+    ...
+}
+
+// Both calls are valid, even
+const vkb = try BaseDispatch.load(glfwGetInstanceProcAddress);
+const vkb = try BaseDispatch.load(customGetInstanceProcAddress);
+```
+
 By default, wrapper `load` functions return `error.CommandLoadFailure` if a call to the loader resulted in `null`. If this behaviour is not desired, one can use `loadNoFail`. This function accepts the same parameters as `load`, but does not return an error any function pointer fails to load and sets its value to `undefined` instead. It is at the programmer's discretion not to invoke invalid functions, which can be tested for by checking whether the required core and extension versions the function requires are supported.
 
 One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
