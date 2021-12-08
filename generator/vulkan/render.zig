@@ -8,7 +8,6 @@ const CaseStyle = id_render.CaseStyle;
 const IdRenderer = id_render.IdRenderer;
 
 const preamble =
-    \\
     \\// This file is generated from the Khronos Vulkan XML API registry by vulkan-zig.
     \\
     \\const std = @import("std");
@@ -405,7 +404,6 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn render(self: *Self) !void {
-            try self.renderCopyright();
             try self.writer.writeAll(preamble);
             try self.renderCommandEnums();
 
@@ -502,13 +500,6 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll("};\n");
-        }
-
-        fn renderCopyright(self: *Self) !void {
-            var it = mem.split(u8, self.registry.copyright, "\n");
-            while (it.next()) |line| {
-                try self.writer.print("// {s}\n", .{line});
-            }
         }
 
         fn renderApiConstant(self: *Self, api_constant: reg.ApiConstant) !void {
