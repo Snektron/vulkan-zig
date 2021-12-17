@@ -163,7 +163,7 @@ fn parseBaseType(allocator: Allocator, ty: *xml.Element) !registry.Declaration {
     const name = ty.getCharData("name") orelse return error.InvalidRegistry;
     if (ty.getCharData("type")) |_| {
         var tok = cparse.XmlCTokenizer.init(ty);
-        return try cparse.parseTypedef(allocator, &tok);
+        return try cparse.parseTypedef(allocator, &tok, false);
     } else {
         // Either ANativeWindow, AHardwareBuffer or CAMetalLayer. The latter has a lot of
         // macros, which is why this part is not built into the xml/c parser.
@@ -193,7 +193,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool) !regis
     var maybe_stype: ?[]const u8 = null;
     while (it.next()) |member| {
         var xctok = cparse.XmlCTokenizer.init(member);
-        members[i] = try cparse.parseMember(allocator, &xctok);
+        members[i] = try cparse.parseMember(allocator, &xctok, false);
         if (mem.eql(u8, members[i].name, "sType")) {
             if (member.getAttribute("values")) |stype| {
                 maybe_stype = stype;
@@ -238,7 +238,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool) !regis
 
 fn parseFuncPointer(allocator: Allocator, ty: *xml.Element) !registry.Declaration {
     var xctok = cparse.XmlCTokenizer.init(ty);
-    return try cparse.parseTypedef(allocator, &xctok);
+    return try cparse.parseTypedef(allocator, &xctok, true);
 }
 
 // For some reason, the DeclarationType cannot be passed to lenToPointerSize, as
@@ -449,7 +449,7 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element) !registry.Declaration 
 
     const proto = elem.findChildByTag("proto") orelse return error.InvalidRegistry;
     var proto_xctok = cparse.XmlCTokenizer.init(proto);
-    const command_decl = try cparse.parseParamOrProto(allocator, &proto_xctok);
+    const command_decl = try cparse.parseParamOrProto(allocator, &proto_xctok, false);
 
     var params = try allocator.alloc(registry.Command.Param, elem.children.items.len);
 
@@ -457,7 +457,7 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element) !registry.Declaration 
     var it = elem.findChildrenByTag("param");
     while (it.next()) |param| {
         var xctok = cparse.XmlCTokenizer.init(param);
-        const decl = try cparse.parseParamOrProto(allocator, &xctok);
+        const decl = try cparse.parseParamOrProto(allocator, &xctok, false);
         params[i] = .{
             .name = decl.name,
             .param_type = decl.decl_type.typedef,
