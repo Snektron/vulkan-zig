@@ -218,7 +218,7 @@ Defaults are generated for certain fields of structs:
 ```zig
 pub const InstanceCreateInfo = extern struct {
     s_type: StructureType = .instance_create_info,
-    p_next: ?*const c_void = null,
+    p_next: ?*const anyopaque = null,
     flags: InstanceCreateFlags,
     ...
 };

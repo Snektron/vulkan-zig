@@ -679,7 +679,7 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             if (child_is_void) {
-                try self.writer.writeAll("c_void");
+                try self.writer.writeAll("anyopaque");
             } else {
                 try self.renderTypeInfo(pointer.child.*);
             }
@@ -1028,7 +1028,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\    }});
                 \\    return struct {{
                 \\        dispatch: Dispatch,
-                \\        
+                \\
                 \\        const Self = @This();
             , .{ name, name });
 
