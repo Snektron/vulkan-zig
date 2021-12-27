@@ -32,7 +32,7 @@ pub const ShaderCompileStep = struct {
         self.* = .{
             .step = Step.init(.custom, "shader-compile", builder.allocator, make),
             .builder = builder,
-            .glslc_cmd = glslc_cmd,
+            .glslc_cmd = builder.dupeStrings(glslc_cmd),
             .shaders = std.ArrayList(Shader).init(builder.allocator),
         };
         return self;
