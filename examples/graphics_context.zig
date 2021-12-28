@@ -9,10 +9,6 @@ const BaseDispatch = vk.BaseWrapper(.{
     .createInstance = true,
 });
 
-comptime {
-    std.debug.assert(vk.BaseWrapper(vk.BaseCommandFlags{}) == vk.BaseWrapper(.{}));
-}
-
 const InstanceDispatch = vk.InstanceWrapper(.{
     .destroyInstance = true,
     .createDevice = true,
