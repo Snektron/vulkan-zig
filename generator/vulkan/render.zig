@@ -1014,7 +1014,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\        const Self = @This();
                 \\        pub const commands = cmds;
                 \\        pub const Dispatch = Dispatch: {{
-                \\            @setEvalBranchQuota(2000);
+                \\            @setEvalBranchQuota(10_000);
                 \\            const TypeInfo = std.builtin.TypeInfo;
                 \\            const fields_len = fields_len: {{
                 \\                var fields_len = 0;
