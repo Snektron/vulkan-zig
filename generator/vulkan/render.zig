@@ -1006,31 +1006,51 @@ fn Renderer(comptime WriterType: type) type {
             };
 
             try self.writer.print(
-                \\pub fn {s}Wrapper(comptime cmds: []const {s}Command) type {{
-                \\    comptime var fields: [cmds.len]std.builtin.TypeInfo.StructField = undefined;
-                \\    inline for (cmds) |cmd, i| {{
-                \\        const PfnType = cmd.PfnType();
-                \\        fields[i] = .{{
-                \\            .name = cmd.symbol(),
-                \\            .field_type = PfnType,
-                \\            .default_value = null,
-                \\            .is_comptime = false,
-                \\            .alignment = @alignOf(PfnType),
-                \\        }};
-                \\    }}
-                \\    const Dispatch = @Type(.{{
-                \\        .Struct = .{{
-                \\            .layout = .Auto,
-                \\            .fields = &fields,
-                \\            .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
-                \\            .is_tuple = false,
-                \\        }},
-                \\    }});
+                \\pub const {0s}CommandFlags = std.enums.EnumFieldStruct({0s}Command, bool, false);
+                \\pub fn {0s}Wrapper(comptime cmds: {0s}CommandFlags) type {{
                 \\    return struct {{
                 \\        dispatch: Dispatch,
                 \\
                 \\        const Self = @This();
-            , .{ name, name });
+                \\        pub const commands = cmds;
+                \\        pub const Dispatch = Dispatch: {{
+                \\            @setEvalBranchQuota(2000);
+                \\            const TypeInfo = std.builtin.TypeInfo;
+                \\            const fields_len = fields_len: {{
+                \\                var fields_len = 0;
+                \\                for (std.meta.fieldNames({0s}Command)) |field_name| {{
+                \\                    fields_len += @boolToInt(@field(cmds, field_name));
+                \\                }}
+                \\                break :fields_len fields_len;
+                \\            }};
+                \\            var fields_array: [fields_len]TypeInfo.StructField = undefined;
+                \\            var fields: []TypeInfo.StructField = fields_array[0..];
+                \\            fields.len = 0;
+                \\            
+                \\            for (std.enums.values({0s}Command)) |cmd_tag| {{
+                \\                if (@field(cmds, @tagName(cmd_tag))) {{
+                \\                    const PfnType = cmd_tag.PfnType();
+                \\                    fields.len += 1;
+                \\                    fields[fields.len - 1] = TypeInfo.StructField{{
+                \\                        .name = cmd_tag.symbol(),
+                \\                        .field_type = PfnType,
+                \\                        .default_value = null,
+                \\                        .is_comptime = false,
+                \\                        .alignment = @alignOf(PfnType),
+                \\                    }};
+                \\                }}
+                \\            }}
+                \\            break :Dispatch @Type(.{{
+                \\                .Struct = .{{
+                \\                    .layout = .Auto,
+                \\                    .fields = fields,
+                \\                    .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
+                \\                    .is_tuple = false,
+                \\                }},
+                \\            }});
+                \\        }};
+                \\
+            , .{ name });
 
             try self.renderWrapperLoader(dispatch_type);
 
