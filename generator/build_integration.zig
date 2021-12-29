@@ -47,11 +47,12 @@ pub const ShaderCompileStep = struct {
     /// This path can then be used to include the binary into an executable, for example by passing it
     /// to @embedFile via an additional generated file.
     pub fn add(self: *ShaderCompileStep, src: []const u8) []const u8 {
+        const output_filename = std.fmt.allocPrint(self.builder.allocator, "{s}.spv", .{ src }) catch unreachable;
         const full_out_path = path.join(self.builder.allocator, &[_][]const u8{
             self.builder.build_root,
             self.builder.cache_root,
             self.output_dir,
-            src,
+            output_filename,
         }) catch unreachable;
         self.shaders.append(.{ .source_path = src, .full_out_path = full_out_path }) catch unreachable;
         return full_out_path;
