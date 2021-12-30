@@ -22,16 +22,20 @@ pub const ShaderCompileStep = struct {
     /// The command and optional arguments used to invoke the shader compiler.
     glslc_cmd: []const []const u8,
 
+    /// The directory within `zig-cache/` that the compiled shaders are placed in.
+    output_dir: []const u8,
+
     /// List of shaders that are to be compiled.
     shaders: std.ArrayList(Shader),
 
     /// Create a ShaderCompilerStep for `builder`. When this step is invoked by the build
     /// system, `<glcl_cmd...> <shader_source> -o <dst_addr>` is invoked for each shader.
-    pub fn init(builder: *Builder, glslc_cmd: []const []const u8) *ShaderCompileStep {
+    pub fn init(builder: *Builder, glslc_cmd: []const []const u8, output_dir: []const u8) *ShaderCompileStep {
         const self = builder.allocator.create(ShaderCompileStep) catch unreachable;
         self.* = .{
             .step = Step.init(.custom, "shader-compile", builder.allocator, make),
             .builder = builder,
+            .output_dir = output_dir,
             .glslc_cmd = builder.dupeStrings(glslc_cmd),
             .shaders = std.ArrayList(Shader).init(builder.allocator),
         };
@@ -43,11 +47,12 @@ pub const ShaderCompileStep = struct {
     /// This path can then be used to include the binary into an executable, for example by passing it
     /// to @embedFile via an additional generated file.
     pub fn add(self: *ShaderCompileStep, src: []const u8) []const u8 {
+        const output_filename = std.fmt.allocPrint(self.builder.allocator, "{s}.spv", .{ src }) catch unreachable;
         const full_out_path = path.join(self.builder.allocator, &[_][]const u8{
             self.builder.build_root,
             self.builder.cache_root,
-            "shaders",
-            src,
+            self.output_dir,
+            output_filename,
         }) catch unreachable;
         self.shaders.append(.{ .source_path = src, .full_out_path = full_out_path }) catch unreachable;
         return full_out_path;

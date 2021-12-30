@@ -21,7 +21,7 @@ pub const ResourceGenStep = struct {
 
         self.* = .{
             .step = Step.init(.custom, "resources", builder.allocator, make),
-            .shader_step = vkgen.ShaderCompileStep.init(builder, &[_][]const u8{ "glslc", "--target-env=vulkan1.2" }),
+            .shader_step = vkgen.ShaderCompileStep.init(builder, &[_][]const u8{ "glslc", "--target-env=vulkan1.2" }, "shaders"),
             .builder = builder,
             .package = .{
                 .name = "resources",
