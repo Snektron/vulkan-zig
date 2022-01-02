@@ -219,7 +219,7 @@ const SwapImage = struct {
         errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
 
         const render_finished = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
-        errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
+        errdefer gc.vkd.destroySemaphore(gc.dev, render_finished, null);
 
         const frame_fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{ .signaled_bit = true } }, null);
         errdefer gc.vkd.destroyFence(gc.dev, frame_fence, null);
