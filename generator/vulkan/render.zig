@@ -284,8 +284,8 @@ fn Renderer(comptime WriterType: type) type {
 
         fn isFlags(self: Self, name: []const u8) bool {
             const tag = self.id_renderer.getAuthorTag(name);
-            const base_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
-
+            const tagless_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
+            const base_name = std.mem.trimRight(u8, tagless_name, "0123456789");
             return mem.endsWith(u8, base_name, "Flags");
         }
 
