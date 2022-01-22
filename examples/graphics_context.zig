@@ -3,7 +3,7 @@ const vk = @import("vulkan");
 const c = @import("c.zig");
 const Allocator = std.mem.Allocator;
 
-const required_device_extensions = [_][]const u8{vk.extension_info.khr_swapchain.name};
+const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
 const BaseDispatch = vk.BaseWrapper(.{
     .createInstance = true,
@@ -343,7 +343,7 @@ fn checkExtensionSupport(
         for (propsv) |props| {
             const len = std.mem.indexOfScalar(u8, &props.extension_name, 0).?;
             const prop_ext_name = props.extension_name[0..len];
-            if (std.mem.eql(u8, ext, prop_ext_name)) {
+            if (std.mem.eql(u8, std.mem.span(ext), prop_ext_name)) {
                 break;
             }
         } else {
