@@ -107,6 +107,7 @@ pub const Swapchain = struct {
 
     pub fn deinit(self: Swapchain) void {
         self.deinitExceptSwapchain();
+        self.allocator.free(self.swap_images);
         self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
     }
 
