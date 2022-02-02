@@ -72,7 +72,10 @@ pub const Swapchain = struct {
         }
 
         const swap_images = try initSwapchainImages(gc, handle, surface_format.format, allocator);
-        errdefer for (swap_images) |si| si.deinit(gc);
+        errdefer {
+            for (swap_images) |si| si.deinit(gc);
+            allocator.free(swap_images);
+        }
 
         var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, next_image_acquired, null);
