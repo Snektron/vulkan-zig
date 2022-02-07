@@ -569,9 +569,9 @@ test "CTokenizer" {
 
 test "XmlCTokenizer" {
     const document = try xml.parse(testing.allocator,
-        \\<root>// comment <name>commented name</name> <type>commented type</type> trailing
-        \\    typedef void (VKAPI_PTR *<name>PFN_vkVoidFunction</name>)(void);
-        \\</root>
+           "<root>// comment <name>commented name</name> <type>commented type</type> trailing\n"
+        ++ "    typedef void (VKAPI_PTR *<name>PFN_vkVoidFunction</name>)(void);\n"
+        ++ "</root>\n"
     );
     defer document.deinit();
 
@@ -594,11 +594,10 @@ test "XmlCTokenizer" {
 
 test "parseTypedef" {
     const document = try xml.parse(testing.allocator,
-        \\<root> // comment <name>commented name</name> trailing
-        \\    typedef const struct <type>Python</type>* pythons[4];
-        \\ // more comments
-        \\</root>
-        \\
+           "<root> // comment <name>commented name</name> trailing\n"
+        ++ "    typedef const struct <type>Python</type>* pythons[4];\n"
+        ++ " // more comments\n"
+        ++ "</root>\n"
     );
     defer document.deinit();
 

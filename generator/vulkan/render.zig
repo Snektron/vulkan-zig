@@ -7,65 +7,64 @@ const Allocator = mem.Allocator;
 const CaseStyle = id_render.CaseStyle;
 const IdRenderer = id_render.IdRenderer;
 
-const preamble =
-    \\// This file is generated from the Khronos Vulkan XML API registry by vulkan-zig.
-    \\
-    \\const std = @import("std");
-    \\const builtin = @import("builtin");
-    \\const root = @import("root");
-    \\
-    \\pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .i386)
-    \\        .Stdcall
-    \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
-    \\        // On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
-    \\        // calling convention, i.e. float parameters are passed in registers. This
-    \\        // is true even if the rest of the application passes floats on the stack,
-    \\        // as it does by default when compiling for the armeabi-v7a NDK ABI.
-    \\        .AAPCSVFP
-    \\    else
-    \\        .C;
-    \\pub fn FlagsMixin(comptime FlagsType: type, comptime Int: type) type {
-    \\    return struct {
-    \\        pub const IntType = Int;
-    \\        pub fn toInt(self: FlagsType) IntType {
-    \\            return @bitCast(IntType, self);
-    \\        }
-    \\        pub fn fromInt(flags: IntType) FlagsType {
-    \\            return @bitCast(FlagsType, flags);
-    \\        }
-    \\        pub fn merge(lhs: FlagsType, rhs: FlagsType) FlagsType {
-    \\            return fromInt(toInt(lhs) | toInt(rhs));
-    \\        }
-    \\        pub fn intersect(lhs: FlagsType, rhs: FlagsType) FlagsType {
-    \\            return fromInt(toInt(lhs) & toInt(rhs));
-    \\        }
-    \\        pub fn complement(self: FlagsType) FlagsType {
-    \\            return fromInt(~toInt(self));
-    \\        }
-    \\        pub fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {
-    \\            return fromInt(toInt(lhs) & toInt(rhs.complement()));
-    \\        }
-    \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) bool {
-    \\            return toInt(intersect(lhs, rhs)) == toInt(rhs);
-    \\        }
-    \\    };
-    \\}
-    \\pub fn makeApiVersion(variant: u3, major: u7, minor: u10, patch: u12) u32 {
-    \\    return (@as(u32, variant) << 29) | (@as(u32, major) << 22) | (@as(u32, minor) << 12) | patch;
-    \\}
-    \\pub fn apiVersionVariant(version: u32) u3 {
-    \\    return @truncate(u3, version >> 29);
-    \\}
-    \\pub fn apiVersionMajor(version: u32) u7 {
-    \\    return @truncate(u7, version >> 22);
-    \\}
-    \\pub fn apiVersionMinor(version: u32) u10 {
-    \\    return @truncate(u10, version >> 12);
-    \\}
-    \\pub fn apiVersionPatch(version: u32) u12 {
-    \\    return @truncate(u12, version);
-    \\}
-    \\
+const preamble = 
+       "// This file is generated from the Khronos Vulkan XML API registry by vulkan-zig.\n"
+    ++ "\n"
+    ++ "const std = @import(\"std\");\n"
+    ++ "const builtin = @import(\"builtin\");\n"
+    ++ "const root = @import(\"root\");\n"
+    ++ "\n"
+    ++ "pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .i386)\n"
+    ++ "        .Stdcall\n"
+    ++ "    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)\n"
+    ++ "        // On Android 32-bit ARM targets, Vulkan functions use the \"hardfloat\"\n"
+    ++ "        // calling convention, i.e. float parameters are passed in registers. This\n"
+    ++ "        // is true even if the rest of the application passes floats on the stack,\n"
+    ++ "        // as it does by default when compiling for the armeabi-v7a NDK ABI.\n"
+    ++ "        .AAPCSVFP\n"
+    ++ "    else\n"
+    ++ "        .C;\n"
+    ++ "pub fn FlagsMixin(comptime FlagsType: type, comptime Int: type) type {\n"
+    ++ "    return struct {\n"
+    ++ "        pub const IntType = Int;\n"
+    ++ "        pub fn toInt(self: FlagsType) IntType {\n"
+    ++ "            return @bitCast(IntType, self);\n"
+    ++ "        }\n"
+    ++ "        pub fn fromInt(flags: IntType) FlagsType {\n"
+    ++ "            return @bitCast(FlagsType, flags);\n"
+    ++ "        }\n"
+    ++ "        pub fn merge(lhs: FlagsType, rhs: FlagsType) FlagsType {\n"
+    ++ "            return fromInt(toInt(lhs) | toInt(rhs));\n"
+    ++ "        }\n"
+    ++ "        pub fn intersect(lhs: FlagsType, rhs: FlagsType) FlagsType {\n"
+    ++ "            return fromInt(toInt(lhs) & toInt(rhs));\n"
+    ++ "        }\n"
+    ++ "        pub fn complement(self: FlagsType) FlagsType {\n"
+    ++ "            return fromInt(~toInt(self));\n"
+    ++ "        }\n"
+    ++ "        pub fn subtract(lhs: FlagsType, rhs: FlagsType) FlagsType {\n"
+    ++ "            return fromInt(toInt(lhs) & toInt(rhs.complement()));\n"
+    ++ "        }\n"
+    ++ "        pub fn contains(lhs: FlagsType, rhs: FlagsType) bool {\n"
+    ++ "            return toInt(intersect(lhs, rhs)) == toInt(rhs);\n"
+    ++ "        }\n"
+    ++ "    };\n"
+    ++ "}\n"
+    ++ "pub fn makeApiVersion(variant: u3, major: u7, minor: u10, patch: u12) u32 {\n"
+    ++ "    return (@as(u32, variant) << 29) | (@as(u32, major) << 22) | (@as(u32, minor) << 12) | patch;\n"
+    ++ "}\n"
+    ++ "pub fn apiVersionVariant(version: u32) u3 {\n"
+    ++ "    return @truncate(u3, version >> 29);\n"
+    ++ "}\n"
+    ++ "pub fn apiVersionMajor(version: u32) u7 {\n"
+    ++ "    return @truncate(u7, version >> 22);\n"
+    ++ "}\n"
+    ++ "pub fn apiVersionMinor(version: u32) u10 {\n"
+    ++ "    return @truncate(u10, version >> 12);\n"
+    ++ "}\n"
+    ++ "pub fn apiVersionPatch(version: u32) u12 {\n"
+    ++ "    return @truncate(u12, version);\n"
+    ++ "}\n"
 ;
 
 const builtin_types = std.ComptimeStringMap([]const u8, .{
@@ -449,10 +448,9 @@ fn Renderer(comptime WriterType: type) type {
 
             {
                 try self.writer.print(
-                    \\
-                    \\pub fn symbol(self: {s}Command) [:0]const u8 {{
-                    \\    return switch (self) {{
-                    \\
+                       "\n"
+                    ++ "pub fn symbol(self: {s}Command) [:0]const u8 {{\n"
+                    ++ "    return switch (self) {{\n"
                 ,
                     .{dispatch_type_name},
                 );
@@ -475,10 +473,9 @@ fn Renderer(comptime WriterType: type) type {
 
             {
                 try self.writer.print(
-                    \\
-                    \\pub fn PfnType(comptime self: {s}Command) type {{
-                    \\    return switch (self) {{
-                    \\
+                       "\n"
+                    ++ "pub fn PfnType(comptime self: {s}Command) type {{\n"
+                    ++ "    return switch (self) {{\n"
                 ,
                     .{dispatch_type_name},
                 );
@@ -887,15 +884,14 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll("pub const ");
                 try self.renderName(name);
                 try self.writer.print(
-                    \\ = packed struct {{
-                    \\_reserved_bits: {s} = 0,
-                    \\pub usingnamespace FlagsMixin(
+                       " = packed struct {{\n"
+                    ++ "_reserved_bits: {s} = 0,\n"
+                    ++ "pub usingnamespace FlagsMixin(\n"
                 , .{flags_type});
                 try self.renderName(name);
                 try self.writer.print(
-                    \\, {s});
-                    \\}};
-                    \\
+                       ", {s});\n"
+                    ++ "}};\n"
                 , .{flags_type});
             }
         }
@@ -976,11 +972,11 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderExtensionInfo(self: *Self) !void {
             try self.writer.writeAll(
-                \\pub const extension_info = struct {
-                \\    const Info = struct {
-                \\        name: [:0]const u8,
-                \\        version: u32,
-                \\    };
+                   "pub const extension_info = struct {\n"
+                ++ "    const Info = struct {\n"
+                ++ "        name: [:0]const u8,\n"
+                ++ "        version: u32,\n"
+                ++ "    };\n"
             );
             for (self.registry.extensions) |ext| {
                 try self.writer.writeAll("pub const ");
@@ -1006,50 +1002,49 @@ fn Renderer(comptime WriterType: type) type {
             };
 
             try self.writer.print(
-                \\pub const {0s}CommandFlags = std.enums.EnumFieldStruct({0s}Command, bool, false);
-                \\pub fn {0s}Wrapper(comptime cmds: {0s}CommandFlags) type {{
-                \\    return struct {{
-                \\        dispatch: Dispatch,
-                \\
-                \\        const Self = @This();
-                \\        pub const commands = cmds;
-                \\        pub const Dispatch = Dispatch: {{
-                \\            @setEvalBranchQuota(10_000);
-                \\            const TypeInfo = std.builtin.TypeInfo;
-                \\            const fields_len = fields_len: {{
-                \\                var fields_len = 0;
-                \\                for (std.meta.fieldNames({0s}Command)) |field_name| {{
-                \\                    fields_len += @boolToInt(@field(cmds, field_name));
-                \\                }}
-                \\                break :fields_len fields_len;
-                \\            }};
-                \\            var fields_array: [fields_len]TypeInfo.StructField = undefined;
-                \\            var fields: []TypeInfo.StructField = fields_array[0..];
-                \\            fields.len = 0;
-                \\            
-                \\            for (std.enums.values({0s}Command)) |cmd_tag| {{
-                \\                if (@field(cmds, @tagName(cmd_tag))) {{
-                \\                    const PfnType = cmd_tag.PfnType();
-                \\                    fields.len += 1;
-                \\                    fields[fields.len - 1] = TypeInfo.StructField{{
-                \\                        .name = cmd_tag.symbol(),
-                \\                        .field_type = PfnType,
-                \\                        .default_value = null,
-                \\                        .is_comptime = false,
-                \\                        .alignment = @alignOf(PfnType),
-                \\                    }};
-                \\                }}
-                \\            }}
-                \\            break :Dispatch @Type(.{{
-                \\                .Struct = .{{
-                \\                    .layout = .Auto,
-                \\                    .fields = fields,
-                \\                    .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
-                \\                    .is_tuple = false,
-                \\                }},
-                \\            }});
-                \\        }};
-                \\
+                   "pub const {0s}CommandFlags = std.enums.EnumFieldStruct({0s}Command, bool, false);\n"
+                ++ "pub fn {0s}Wrapper(comptime cmds: {0s}CommandFlags) type {{\n"
+                ++ "    return struct {{\n"
+                ++ "        dispatch: Dispatch,\n"
+                ++ "\n"
+                ++ "        const Self = @This();\n"
+                ++ "        pub const commands = cmds;\n"
+                ++ "        pub const Dispatch = Dispatch: {{\n"
+                ++ "            @setEvalBranchQuota(10_000);\n"
+                ++ "            const TypeInfo = std.builtin.TypeInfo;\n"
+                ++ "            const fields_len = fields_len: {{\n"
+                ++ "                var fields_len = 0;\n"
+                ++ "                for (std.meta.fieldNames({0s}Command)) |field_name| {{\n"
+                ++ "                    fields_len += @boolToInt(@field(cmds, field_name));\n"
+                ++ "                }}\n"
+                ++ "                break :fields_len fields_len;\n"
+                ++ "            }};\n"
+                ++ "            var fields_array: [fields_len]TypeInfo.StructField = undefined;\n"
+                ++ "            var fields: []TypeInfo.StructField = fields_array[0..];\n"
+                ++ "            fields.len = 0;\n"
+                ++ "            \n"
+                ++ "            for (std.enums.values({0s}Command)) |cmd_tag| {{\n"
+                ++ "                if (@field(cmds, @tagName(cmd_tag))) {{\n"
+                ++ "                    const PfnType = cmd_tag.PfnType();\n"
+                ++ "                    fields.len += 1;\n"
+                ++ "                    fields[fields.len - 1] = TypeInfo.StructField{{\n"
+                ++ "                        .name = cmd_tag.symbol(),\n"
+                ++ "                        .field_type = PfnType,\n"
+                ++ "                        .default_value = null,\n"
+                ++ "                        .is_comptime = false,\n"
+                ++ "                        .alignment = @alignOf(PfnType),\n"
+                ++ "                    }};\n"
+                ++ "                }}\n"
+                ++ "            }}\n"
+                ++ "            break :Dispatch @Type(.{{\n"
+                ++ "                .Struct = .{{\n"
+                ++ "                    .layout = .Auto,\n"
+                ++ "                    .fields = fields,\n"
+                ++ "                    .decls = &[_]std.builtin.TypeInfo.Declaration{{}},\n"
+                ++ "                    .is_tuple = false,\n"
+                ++ "                }},\n"
+                ++ "            }});\n"
+                ++ "        }};\n"
             , .{ name });
 
             try self.renderWrapperLoader(dispatch_type);
@@ -1082,24 +1077,24 @@ fn Renderer(comptime WriterType: type) type {
             @setEvalBranchQuota(2000);
 
             try self.writer.print(
-                \\pub fn load({[params]s}) error{{CommandLoadFailure}}!Self {{
-                \\    var self: Self = undefined;
-                \\    inline for (std.meta.fields(Dispatch)) |field| {{
-                \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
-                \\        const cmd_ptr = loader({[first_arg]s}, name) orelse return error.CommandLoadFailure;
-                \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
-                \\    }}
-                \\    return self;
-                \\}}
-                \\pub fn loadNoFail({[params]s}) Self {{
-                \\    var self: Self = undefined;
-                \\    inline for (std.meta.fields(Dispatch)) |field| {{
-                \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
-                \\        const cmd_ptr = loader({[first_arg]s}, name) orelse undefined;
-                \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
-                \\    }}
-                \\    return self;
-                \\}}
+                   "pub fn load({[params]s}) error{{CommandLoadFailure}}!Self {{\n"
+                ++ "    var self: Self = undefined;\n"
+                ++ "    inline for (std.meta.fields(Dispatch)) |field| {{\n"
+                ++ "        const name = @ptrCast([*:0]const u8, field.name ++ \"\\x00\");\n"
+                ++ "        const cmd_ptr = loader({[first_arg]s}, name) orelse return error.CommandLoadFailure;\n"
+                ++ "        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);\n"
+                ++ "    }}\n"
+                ++ "    return self;\n"
+                ++ "}}\n"
+                ++ "pub fn loadNoFail({[params]s}) Self {{\n"
+                ++ "    var self: Self = undefined;\n"
+                ++ "    inline for (std.meta.fields(Dispatch)) |field| {{\n"
+                ++ "        const name = @ptrCast([*:0]const u8, field.name ++ \"\\x00\");\n"
+                ++ "        const cmd_ptr = loader({[first_arg]s}, name) orelse undefined;\n"
+                ++ "        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);\n"
+                ++ "    }}\n"
+                ++ "    return self;\n"
+                ++ "}}\n"
             , .{ .params = params, .first_arg = loader_first_arg });
         }
 

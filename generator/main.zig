@@ -20,14 +20,13 @@ pub fn main() !void {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             @setEvalBranchQuota(2000);
             try stderr.writer().print(
-                \\Utility to generate a Zig binding from the Vulkan XML API registry.
-                \\
-                \\The most recent Vulkan XML API registry can be obtained from
-                \\https://github.com/KhronosGroup/Vulkan-Docs/blob/master/xml/vk.xml,
-                \\and the most recent LunarG Vulkan SDK version can be found at
-                \\$VULKAN_SDK/x86_64/share/vulkan/registry/vk.xml.
-                \\
-                \\
+                   "Utility to generate a Zig binding from the Vulkan XML API registry.\n"
+                ++ "\n"
+                ++ "The most recent Vulkan XML API registry can be obtained from\n"
+                ++ "https://github.com/KhronosGroup/Vulkan-Docs/blob/master/xml/vk.xml,\n"
+                ++ "and the most recent LunarG Vulkan SDK version can be found at\n"
+                ++ "$VULKAN_SDK/x86_64/share/vulkan/registry/vk.xml.\n"
+                ++ "\n"
                 ++ usage,
                 .{prog_name},
             );
