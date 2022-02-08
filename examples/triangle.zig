@@ -56,7 +56,9 @@ pub fn main() !void {
     ) orelse return error.WindowInitFailed;
     defer c.glfwDestroyWindow(window);
 
-    const allocator = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
     const gc = try GraphicsContext.init(allocator, app_name, window);
     defer gc.deinit();
