@@ -1026,7 +1026,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            var fields_array: [fields_len]TypeInfo.StructField = undefined;
                 \\            var fields: []TypeInfo.StructField = fields_array[0..];
                 \\            fields.len = 0;
-                \\            
+                \\
                 \\            for (std.enums.values({0s}Command)) |cmd_tag| {{
                 \\                if (@field(cmds, @tagName(cmd_tag))) {{
                 \\                    const PfnType = cmd_tag.PfnType();
@@ -1130,7 +1130,8 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll(") ");
 
-            if (command.error_codes.len > 0) {
+            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+            if (returns_vk_result) {
                 try self.renderErrorSetName(name);
                 try self.writer.writeByte('!');
             }
@@ -1245,7 +1246,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.renderReturnStruct(name, returns);
             }
 
-            if (command.error_codes.len > 0) {
+            if (returns_vk_result) {
                 try self.writer.writeAll("pub const ");
                 try self.renderErrorSetName(name);
                 try self.writer.writeAll(" = ");
