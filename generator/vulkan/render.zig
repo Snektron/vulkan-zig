@@ -289,22 +289,24 @@ fn Renderer(comptime WriterType: type) type {
             return mem.endsWith(u8, base_name, "Flags");
         }
 
-        fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
-            if (ptr.child.* != .name) {
-                return false;
-            }
-
-            var name = ptr.child.name;
-
-            const decl = while (true) {
-                const decl = self.declarations_by_name.get(name) orelse return error.InvalidRegistry;
+        fn resolveDeclaration(self: Self, start_name: []const u8) ?*const reg.DeclarationType {
+            var name = start_name;
+            return while (true) {
+                const decl = self.declarations_by_name.get(name) orelse return null;
                 if (decl.* != .alias) {
                     break decl;
                 }
 
                 name = decl.alias.name;
             } else unreachable;
+        }
 
+        fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
+            if (ptr.child.* != .name) {
+                return false;
+            }
+
+            const decl = self.resolveDeclaration(ptr.child.name) orelse return error.InvalidRegistry;
             if (decl.* != .container) {
                 return false;
             }
@@ -742,11 +744,27 @@ fn Renderer(comptime WriterType: type) type {
                 } else {
                     try self.renderTypeInfo(field.field_type);
                     try self.renderContainerDefaultField(name, container, field);
+                    try self.renderContainerFieldAlignment(field);
                     try self.writer.writeAll(", ");
                 }
             }
 
             try self.writer.writeAll("};\n");
+        }
+
+        fn renderContainerFieldAlignment(self: *Self, field: reg.Container.Field) !void {
+            // Flags structures need to explicitly get their proper alignment: alignOf Flags for 32-bit flags, and alignOf Flag64 for 64-bit flags.
+            const field_type_name = switch (field.field_type) {
+                .name => |name| name,
+                else => return,
+            };
+            const decl = self.resolveDeclaration(field_type_name) orelse return;
+            switch (decl.*) {
+                .bitmask => |mask| {
+                    try self.writer.print(" align(@alignOf({s}))", .{bitmaskFlagsType(mask.bitwidth)});
+                },
+                else => {},
+            }
         }
 
         fn renderContainerDefaultField(self: *Self, name: []const u8, container: reg.Container, field: reg.Container.Field) !void {
@@ -865,11 +883,7 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writer.print("_reserved_bit_{}", .{bitpos});
                     }
 
-                    try self.writer.writeAll(": bool ");
-                    if (bitpos == 0) { // Force alignment to integer boundaries
-                        try self.writer.print("align(@alignOf({s})) ", .{flags_type});
-                    }
-                    try self.writer.writeAll("= false, ");
+                    try self.writer.writeAll(": bool = false,");
                 }
             }
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
