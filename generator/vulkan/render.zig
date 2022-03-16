@@ -1027,7 +1027,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\
                 \\        const Self = @This();
                 \\        pub const commands = cmds;
-                \\        pub const Dispatch = Dispatch: {{
+                \\        pub const Dispatch = blk: {{
                 \\            @setEvalBranchQuota(10_000);
                 \\            const TypeInfo = std.builtin.TypeInfo;
                 \\            const fields_len = fields_len: {{
@@ -1037,27 +1037,25 @@ fn Renderer(comptime WriterType: type) type {
                 \\                }}
                 \\                break :fields_len fields_len;
                 \\            }};
-                \\            var fields_array: [fields_len]TypeInfo.StructField = undefined;
-                \\            var fields: []TypeInfo.StructField = fields_array[0..];
-                \\            fields.len = 0;
-                \\
+                \\            var fields: [fields_len]TypeInfo.StructField = undefined;
+                \\            var i: usize = 0;
                 \\            for (std.enums.values({0s}Command)) |cmd_tag| {{
                 \\                if (@field(cmds, @tagName(cmd_tag))) {{
                 \\                    const PfnType = cmd_tag.PfnType();
-                \\                    fields.len += 1;
-                \\                    fields[fields.len - 1] = TypeInfo.StructField{{
+                \\                    fields[i] = .{{
                 \\                        .name = cmd_tag.symbol(),
                 \\                        .field_type = PfnType,
                 \\                        .default_value = null,
                 \\                        .is_comptime = false,
                 \\                        .alignment = @alignOf(PfnType),
                 \\                    }};
+                \\                    i += 1;
                 \\                }}
                 \\            }}
-                \\            break :Dispatch @Type(.{{
+                \\            break :blk @Type(.{{
                 \\                .Struct = .{{
                 \\                    .layout = .Auto,
-                \\                    .fields = fields,
+                \\                    .fields = &fields,
                 \\                    .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
                 \\                    .is_tuple = false,
                 \\                }},
