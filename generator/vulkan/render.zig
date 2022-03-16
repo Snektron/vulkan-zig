@@ -1356,6 +1356,9 @@ fn Renderer(comptime WriterType: type) type {
         fn renderErrorSet(self: *Self, errors: []const []const u8) !void {
             try self.writer.writeAll("error{");
             for (errors) |name| {
+                if (std.mem.eql(u8, name, "VK_ERROR_UNKNOWN")) {
+                    continue;
+                }
                 try self.renderResultAsErrorName(name);
                 try self.writer.writeAll(", ");
             }
