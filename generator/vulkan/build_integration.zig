@@ -40,7 +40,7 @@ pub const GenerateStep = struct {
             .spec_path = spec_path,
             .package = .{
                 .name = "vulkan",
-                .path = .{ .generated = &self.output_file },
+                .source = .{ .generated = &self.output_file },
                 .dependencies = null,
             },
             .output_file = .{

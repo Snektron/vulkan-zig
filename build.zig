@@ -25,7 +25,7 @@ pub const ResourceGenStep = struct {
             .builder = builder,
             .package = .{
                 .name = "resources",
-                .path = .{ .generated = &self.output_file },
+                .source = .{ .generated = &self.output_file },
                 .dependencies = null,
             },
             .output_file = .{
