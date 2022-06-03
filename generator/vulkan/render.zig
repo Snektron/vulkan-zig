@@ -923,6 +923,49 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrappers(self: *Self) !void {
+            try self.writer.writeAll(
+                \\pub fn CommandFlagsMixin(comptime CommandFlags: type) type {
+                \\    return struct {
+                \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn complement(self: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = !@field(self, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
+                \\                    return false;
+                \\                }
+                \\            }
+                \\            return true;
+                \\        }
+                \\    };
+                \\}
+                \\
+            );
             try self.renderWrappersOfDispatchType(.base);
             try self.renderWrappersOfDispatchType(.instance);
             try self.renderWrappersOfDispatchType(.device);
@@ -951,8 +994,12 @@ fn Renderer(comptime WriterType: type) type {
                     try self.writer.writeAll(": bool = false,\n");
                 }
             }
-            // TODO: Add methods for merging/intersecting/etc the flag struct here
-            try self.writer.writeAll("};\n");
+
+            try self.writer.print(
+                \\    pub usingnamespace CommandFlagsMixin({s}CommandFlags);
+                \\}};
+                \\
+            , .{name});
 
             try self.writer.print(
                 \\pub fn {0s}Wrapper(comptime cmds: {0s}CommandFlags) type {{
