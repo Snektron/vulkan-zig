@@ -13,6 +13,7 @@ const preamble =
     \\const std = @import("std");
     \\const builtin = @import("builtin");
     \\const root = @import("root");
+    \\const vk = @This();
     \\
     \\pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .i386)
     \\        .Stdcall
@@ -407,7 +408,6 @@ fn Renderer(comptime WriterType: type) type {
 
         fn render(self: *Self) !void {
             try self.writer.writeAll(preamble);
-            try self.renderCommandEnums();
 
             for (self.registry.api_constants) |api_constant| {
                 try self.renderApiConstant(api_constant);
@@ -420,90 +420,6 @@ fn Renderer(comptime WriterType: type) type {
             try self.renderCommandPtrs();
             try self.renderExtensionInfo();
             try self.renderWrappers();
-        }
-
-        fn renderCommandEnums(self: *Self) !void {
-            try self.renderCommandEnumOfDispatchType(.base);
-            try self.renderCommandEnumOfDispatchType(.instance);
-            try self.renderCommandEnumOfDispatchType(.device);
-            try self.writer.writeAll("\n");
-        }
-
-        fn renderCommandEnumOfDispatchType(self: *Self, dispatch_type: CommandDispatchType) !void {
-            const dispatch_type_name = switch (dispatch_type) {
-                .base => "Base",
-                .instance => "Instance",
-                .device => "Device",
-            };
-
-            try self.writer.print("pub const {s}Command = enum {{\n", .{dispatch_type_name});
-            for (self.registry.decls) |decl| {
-                const command = switch (decl.decl_type) {
-                    .command => |cmd| cmd,
-                    else => continue,
-                };
-
-                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
-                    try self.writer.writeAll(",\n");
-                }
-            }
-
-            {
-                try self.writer.print(
-                    \\
-                    \\pub fn symbol(self: {s}Command) [:0]const u8 {{
-                    \\    return switch (self) {{
-                    \\
-                ,
-                    .{dispatch_type_name},
-                );
-
-                for (self.registry.decls) |decl| {
-                    const command = switch (decl.decl_type) {
-                        .command => |cmd| cmd,
-                        else => continue,
-                    };
-
-                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        try self.writer.writeAll(".");
-                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
-                        try self.writer.print(" => \"{s}\",\n", .{decl.name});
-                    }
-                }
-
-                try self.writer.writeAll("};\n}\n");
-            }
-
-            {
-                try self.writer.print(
-                    \\
-                    \\pub fn PfnType(comptime self: {s}Command) type {{
-                    \\    return switch (self) {{
-                    \\
-                ,
-                    .{dispatch_type_name},
-                );
-
-                for (self.registry.decls) |decl| {
-                    const command = switch (decl.decl_type) {
-                        .command => |cmd| cmd,
-                        else => continue,
-                    };
-
-                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        try self.writer.writeAll(".");
-                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
-                        try self.writer.writeAll(" => ");
-                        try self.renderCommandPtrName(decl.name);
-                        try self.writer.writeAll(",\n");
-                    }
-                }
-
-                try self.writer.writeAll("};\n}\n");
-            }
-
-            try self.writer.writeAll("};\n");
         }
 
         fn renderApiConstant(self: *Self, api_constant: reg.ApiConstant) !void {
@@ -1007,6 +923,49 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrappers(self: *Self) !void {
+            try self.writer.writeAll(
+                \\pub fn CommandFlagsMixin(comptime CommandFlags: type) type {
+                \\    return struct {
+                \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn complement(self: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = !@field(self, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+                \\            var result: CommandFlags = .{};
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
+                \\            }
+                \\            return result;
+                \\        }
+                \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
+                \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
+                \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
+                \\                    return false;
+                \\                }
+                \\            }
+                \\            return true;
+                \\        }
+                \\    };
+                \\}
+                \\
+            );
             try self.renderWrappersOfDispatchType(.base);
             try self.renderWrappersOfDispatchType(.instance);
             try self.renderWrappersOfDispatchType(.device);
@@ -1020,7 +979,72 @@ fn Renderer(comptime WriterType: type) type {
             };
 
             try self.writer.print(
-                \\pub const {0s}CommandFlags = std.enums.EnumFieldStruct({0s}Command, bool, false);
+                \\pub const {0s}CommandFlags = packed struct {{
+                \\
+            , .{name});
+            for (self.registry.decls) |decl| {
+                const command = switch (decl.decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    try self.writer.writeAll("    ");
+                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                    try self.writer.writeAll(": bool = false,\n");
+                }
+            }
+
+            try self.writer.print(
+                \\pub fn CmdType(comptime tag: std.meta.FieldEnum({0s}CommandFlags)) type {{
+                \\    return switch (tag) {{
+                \\
+            , .{name});
+            for (self.registry.decls) |decl| {
+                const command = switch (decl.decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    try self.writer.writeAll((" " ** 8) ++ ".");
+                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                    try self.writer.writeAll(" => ");
+                    try self.renderCommandPtrName(decl.name);
+                    try self.writer.writeAll(",\n");
+                }
+            }
+            try self.writer.writeAll("    };\n}");
+
+            try self.writer.print(
+                \\pub fn cmdName(tag: std.meta.FieldEnum({0s}CommandFlags)) [:0]const u8 {{
+                \\    return switch(tag) {{
+                \\
+            , .{name});
+            for (self.registry.decls) |decl| {
+                const command = switch (decl.decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    try self.writer.writeAll((" " ** 8) ++ ".");
+                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                    try self.writer.print(
+                        \\ => "{s}",
+                        \\
+                    , .{decl.name});
+                }
+            }
+            try self.writer.writeAll("    };\n}");
+
+            try self.writer.print(
+                \\    pub usingnamespace CommandFlagsMixin({s}CommandFlags);
+                \\}};
+                \\
+            , .{name});
+
+            try self.writer.print(
                 \\pub fn {0s}Wrapper(comptime cmds: {0s}CommandFlags) type {{
                 \\    return struct {{
                 \\        dispatch: Dispatch,
@@ -1029,21 +1053,22 @@ fn Renderer(comptime WriterType: type) type {
                 \\        pub const commands = cmds;
                 \\        pub const Dispatch = blk: {{
                 \\            @setEvalBranchQuota(10_000);
-                \\            const TypeInfo = std.builtin.TypeInfo;
+                \\            const Type = std.builtin.Type;
                 \\            const fields_len = fields_len: {{
                 \\                var fields_len = 0;
-                \\                for (std.meta.fieldNames({0s}Command)) |field_name| {{
-                \\                    fields_len += @boolToInt(@field(cmds, field_name));
+                \\                for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
+                \\                    fields_len += @boolToInt(@field(cmds, field.name));
                 \\                }}
                 \\                break :fields_len fields_len;
                 \\            }};
-                \\            var fields: [fields_len]TypeInfo.StructField = undefined;
+                \\            var fields: [fields_len]Type.StructField = undefined;
                 \\            var i: usize = 0;
-                \\            for (std.enums.values({0s}Command)) |cmd_tag| {{
-                \\                if (@field(cmds, @tagName(cmd_tag))) {{
-                \\                    const PfnType = cmd_tag.PfnType();
+                \\            for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
+                \\                if (@field(cmds, field.name)) {{
+                \\                    const field_tag = std.enums.nameCast(std.meta.FieldEnum({0s}CommandFlags), field.name);
+                \\                    const PfnType = {0s}CommandFlags.CmdType(field_tag);
                 \\                    fields[i] = .{{
-                \\                        .name = cmd_tag.symbol(),
+                \\                        .name = {0s}CommandFlags.cmdName(field_tag),
                 \\                        .field_type = PfnType,
                 \\                        .default_value = null,
                 \\                        .is_comptime = false,
@@ -1062,7 +1087,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            }});
                 \\        }};
                 \\
-            , .{ name });
+            , .{name});
 
             try self.renderWrapperLoader(dispatch_type);
 
