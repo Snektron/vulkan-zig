@@ -996,6 +996,49 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.print(
+                \\pub fn CmdType(comptime tag: std.meta.FieldEnum({0s}CommandFlags)) type {{
+                \\    return switch (tag) {{
+                \\
+            , .{name});
+            for (self.registry.decls) |decl| {
+                const command = switch (decl.decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    try self.writer.writeAll((" " ** 8) ++ ".");
+                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                    try self.writer.writeAll(" => ");
+                    try self.renderCommandPtrName(decl.name);
+                    try self.writer.writeAll(",\n");
+                }
+            }
+            try self.writer.writeAll("    };\n}");
+
+            try self.writer.print(
+                \\pub fn cmdName(tag: std.meta.FieldEnum({0s}CommandFlags)) [:0]const u8 {{
+                \\    return switch(tag) {{
+                \\
+            , .{name});
+            for (self.registry.decls) |decl| {
+                const command = switch (decl.decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
+                    try self.writer.writeAll((" " ** 8) ++ ".");
+                    try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                    try self.writer.print(
+                        \\ => "{s}",
+                        \\
+                    , .{decl.name});
+                }
+            }
+            try self.writer.writeAll("    };\n}");
+
+            try self.writer.print(
                 \\    pub usingnamespace CommandFlagsMixin({s}CommandFlags);
                 \\}};
                 \\
@@ -1022,10 +1065,10 @@ fn Renderer(comptime WriterType: type) type {
                 \\            var i: usize = 0;
                 \\            for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
                 \\                if (@field(cmds, field.name)) {{
-                \\                    const title_case_name = [_]u8{{std.ascii.toUpper(field.name[0])}} ++ field.name[1..];
-                \\                    const PfnType = @field(vk, "Pfn" ++ title_case_name);
+                \\                    const field_tag = std.enums.nameCast(std.meta.FieldEnum({0s}CommandFlags), field.name);
+                \\                    const PfnType = {0s}CommandFlags.CmdType(field_tag);
                 \\                    fields[i] = .{{
-                \\                        .name = "vk" ++ title_case_name,
+                \\                        .name = {0s}CommandFlags.cmdName(field_tag),
                 \\                        .field_type = PfnType,
                 \\                        .default_value = null,
                 \\                        .is_comptime = false,
