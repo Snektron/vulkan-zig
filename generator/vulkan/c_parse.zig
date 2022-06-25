@@ -164,11 +164,11 @@ pub const XmlCTokenizer = struct {
     }
 
     fn elemToToken(elem: *xml.Element) !?Token {
-        if (elem.children.items.len != 1 or elem.children.items[0] != .CharData) {
+        if (elem.children.len != 1 or elem.children[0] != .char_data) {
             return error.InvalidXml;
         }
 
-        const text = elem.children.items[0].CharData;
+        const text = elem.children[0].char_data;
         if (mem.eql(u8, elem.tag, "type")) {
             return Token{ .kind = .type_name, .text = text };
         } else if (mem.eql(u8, elem.tag, "enum")) {
@@ -203,9 +203,9 @@ pub const XmlCTokenizer = struct {
 
             if (self.it.next()) |child| {
                 switch (child.*) {
-                    .CharData => |cdata| self.ctok = CTokenizer{ .source = cdata, .in_comment = in_comment },
-                    .Comment => {}, // xml comment
-                    .Element => |elem| if (!in_comment) if (try elemToToken(elem)) |tok| return tok,
+                    .char_data => |cdata| self.ctok = CTokenizer{ .source = cdata, .in_comment = in_comment },
+                    .comment => {}, // xml comment
+                    .element => |elem| if (!in_comment) if (try elemToToken(elem)) |tok| return tok,
                 }
             } else {
                 return null;

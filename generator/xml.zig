@@ -3,7 +3,6 @@ const mem = std.mem;
 const testing = std.testing;
 const Allocator = mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
-const ArrayList = std.ArrayList;
 
 pub const Attribute = struct {
     name: []const u8,
@@ -11,29 +10,18 @@ pub const Attribute = struct {
 };
 
 pub const Content = union(enum) {
-    CharData: []const u8,
-    Comment: []const u8,
-    Element: *Element,
+    char_data: []const u8,
+    comment: []const u8,
+    element: *Element,
 };
 
 pub const Element = struct {
-    pub const AttributeList = ArrayList(*Attribute);
-    pub const ContentList = ArrayList(Content);
-
     tag: []const u8,
-    attributes: AttributeList,
-    children: ContentList,
+    attributes: []Attribute = &.{},
+    children: []Content = &.{},
 
-    fn init(tag: []const u8, alloc: Allocator) Element {
-        return .{
-            .tag = tag,
-            .attributes = AttributeList.init(alloc),
-            .children = ContentList.init(alloc),
-        };
-    }
-
-    pub fn getAttribute(self: *Element, attrib_name: []const u8) ?[]const u8 {
-        for (self.attributes.items) |child| {
+    pub fn getAttribute(self: Element, attrib_name: []const u8) ?[]const u8 {
+        for (self.attributes) |child| {
             if (mem.eql(u8, child.name, attrib_name)) {
                 return child.value;
             }
@@ -42,36 +30,36 @@ pub const Element = struct {
         return null;
     }
 
-    pub fn getCharData(self: *Element, child_tag: []const u8) ?[]const u8 {
+    pub fn getCharData(self: Element, child_tag: []const u8) ?[]const u8 {
         const child = self.findChildByTag(child_tag) orelse return null;
-        if (child.children.items.len != 1) {
+        if (child.children.len != 1) {
             return null;
         }
 
-        return switch (child.children.items[0]) {
-            .CharData => |char_data| char_data,
+        return switch (child.children[0]) {
+            .char_data => |char_data| char_data,
             else => null,
         };
     }
 
-    pub fn iterator(self: *Element) ChildIterator {
+    pub fn iterator(self: Element) ChildIterator {
         return .{
-            .items = self.children.items,
+            .items = self.children,
             .i = 0,
         };
     }
 
-    pub fn elements(self: *Element) ChildElementIterator {
+    pub fn elements(self: Element) ChildElementIterator {
         return .{
             .inner = self.iterator(),
         };
     }
 
-    pub fn findChildByTag(self: *Element, tag: []const u8) ?*Element {
+    pub fn findChildByTag(self: Element, tag: []const u8) ?*Element {
         return self.findChildrenByTag(tag).next();
     }
 
-    pub fn findChildrenByTag(self: *Element, tag: []const u8) FindChildrenByTagIterator {
+    pub fn findChildrenByTag(self: Element, tag: []const u8) FindChildrenByTagIterator {
         return .{
             .inner = self.elements(),
             .tag = tag,
@@ -97,11 +85,11 @@ pub const Element = struct {
 
         pub fn next(self: *ChildElementIterator) ?*Element {
             while (self.inner.next()) |child| {
-                if (child.* != .Element) {
+                if (child.* != .element) {
                     continue;
                 }
 
-                return child.*.Element;
+                return child.*.element;
             }
 
             return null;
@@ -126,15 +114,9 @@ pub const Element = struct {
     };
 };
 
-pub const XmlDecl = struct {
-    version: []const u8,
-    encoding: ?[]const u8,
-    standalone: ?bool,
-};
-
 pub const Document = struct {
     arena: ArenaAllocator,
-    xml_decl: ?*XmlDecl,
+    xml_decl: ?*Element,
     root: *Element,
 
     pub fn deinit(self: Document) void {
@@ -143,13 +125,13 @@ pub const Document = struct {
     }
 };
 
-const ParseContext = struct {
+const Parser = struct {
     source: []const u8,
     offset: usize,
     line: usize,
     column: usize,
 
-    fn init(source: []const u8) ParseContext {
+    fn init(source: []const u8) Parser {
         return .{
             .source = source,
             .offset = 0,
@@ -158,11 +140,11 @@ const ParseContext = struct {
         };
     }
 
-    fn peek(self: *ParseContext) ?u8 {
+    fn peek(self: *Parser) ?u8 {
         return if (self.offset < self.source.len) self.source[self.offset] else null;
     }
 
-    fn consume(self: *ParseContext) !u8 {
+    fn consume(self: *Parser) !u8 {
         if (self.offset < self.source.len) {
             return self.consumeNoEof();
         }
@@ -170,7 +152,7 @@ const ParseContext = struct {
         return error.UnexpectedEof;
     }
 
-    fn consumeNoEof(self: *ParseContext) u8 {
+    fn consumeNoEof(self: *Parser) u8 {
         std.debug.assert(self.offset < self.source.len);
         const c = self.source[self.offset];
         self.offset += 1;
@@ -185,12 +167,12 @@ const ParseContext = struct {
         return c;
     }
 
-    fn eat(self: *ParseContext, char: u8) bool {
+    fn eat(self: *Parser, char: u8) bool {
         self.expect(char) catch return false;
         return true;
     }
 
-    fn expect(self: *ParseContext, expected: u8) !void {
+    fn expect(self: *Parser, expected: u8) !void {
         if (self.peek()) |actual| {
             if (expected != actual) {
                 return error.UnexpectedCharacter;
@@ -203,15 +185,15 @@ const ParseContext = struct {
         return error.UnexpectedEof;
     }
 
-    fn eatStr(self: *ParseContext, text: []const u8) bool {
+    fn eatStr(self: *Parser, text: []const u8) bool {
         self.expectStr(text) catch return false;
         return true;
     }
 
-    fn expectStr(self: *ParseContext, text: []const u8) !void {
+    fn expectStr(self: *Parser, text: []const u8) !void {
         if (self.source.len < self.offset + text.len) {
             return error.UnexpectedEof;
-        } else if (std.mem.startsWith(u8, self.source[self.offset..], text)) {
+        } else if (mem.startsWith(u8, self.source[self.offset..], text)) {
             var i: usize = 0;
             while (i < text.len) : (i += 1) {
                 _ = self.consumeNoEof();
@@ -223,7 +205,7 @@ const ParseContext = struct {
         return error.UnexpectedCharacter;
     }
 
-    fn eatWs(self: *ParseContext) bool {
+    fn eatWs(self: *Parser) bool {
         var ws = false;
 
         while (self.peek()) |ch| {
@@ -239,11 +221,11 @@ const ParseContext = struct {
         return ws;
     }
 
-    fn expectWs(self: *ParseContext) !void {
+    fn expectWs(self: *Parser) !void {
         if (!self.eatWs()) return error.UnexpectedCharacter;
     }
 
-    fn currentLine(self: ParseContext) []const u8 {
+    fn currentLine(self: Parser) []const u8 {
         var begin: usize = 0;
         if (mem.lastIndexOfScalar(u8, self.source[0..self.offset], '\n')) |prev_nl| {
             begin = prev_nl + 1;
@@ -254,49 +236,49 @@ const ParseContext = struct {
     }
 };
 
-test "ParseContext" {
+test "xml: Parser" {
     {
-        var ctx = ParseContext.init("I like pythons");
-        try testing.expectEqual(@as(?u8, 'I'), ctx.peek());
-        try testing.expectEqual(@as(u8, 'I'), ctx.consumeNoEof());
-        try testing.expectEqual(@as(?u8, ' '), ctx.peek());
-        try testing.expectEqual(@as(u8, ' '), try ctx.consume());
+        var parser = Parser.init("I like pythons");
+        try testing.expectEqual(@as(?u8, 'I'), parser.peek());
+        try testing.expectEqual(@as(u8, 'I'), parser.consumeNoEof());
+        try testing.expectEqual(@as(?u8, ' '), parser.peek());
+        try testing.expectEqual(@as(u8, ' '), try parser.consume());
 
-        try testing.expect(ctx.eat('l'));
-        try testing.expectEqual(@as(?u8, 'i'), ctx.peek());
-        try testing.expectEqual(false, ctx.eat('a'));
-        try testing.expectEqual(@as(?u8, 'i'), ctx.peek());
+        try testing.expect(parser.eat('l'));
+        try testing.expectEqual(@as(?u8, 'i'), parser.peek());
+        try testing.expectEqual(false, parser.eat('a'));
+        try testing.expectEqual(@as(?u8, 'i'), parser.peek());
 
-        try ctx.expect('i');
-        try testing.expectEqual(@as(?u8, 'k'), ctx.peek());
-        try testing.expectError(error.UnexpectedCharacter, ctx.expect('a'));
-        try testing.expectEqual(@as(?u8, 'k'), ctx.peek());
+        try parser.expect('i');
+        try testing.expectEqual(@as(?u8, 'k'), parser.peek());
+        try testing.expectError(error.UnexpectedCharacter, parser.expect('a'));
+        try testing.expectEqual(@as(?u8, 'k'), parser.peek());
 
-        try testing.expect(ctx.eatStr("ke"));
-        try testing.expectEqual(@as(?u8, ' '), ctx.peek());
+        try testing.expect(parser.eatStr("ke"));
+        try testing.expectEqual(@as(?u8, ' '), parser.peek());
 
-        try testing.expect(ctx.eatWs());
-        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
-        try testing.expectEqual(false, ctx.eatWs());
-        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expect(parser.eatWs());
+        try testing.expectEqual(@as(?u8, 'p'), parser.peek());
+        try testing.expectEqual(false, parser.eatWs());
+        try testing.expectEqual(@as(?u8, 'p'), parser.peek());
 
-        try testing.expectEqual(false, ctx.eatStr("aaaaaaaaa"));
-        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
+        try testing.expectEqual(false, parser.eatStr("aaaaaaaaa"));
+        try testing.expectEqual(@as(?u8, 'p'), parser.peek());
 
-        try testing.expectError(error.UnexpectedEof, ctx.expectStr("aaaaaaaaa"));
-        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
-        try testing.expectError(error.UnexpectedCharacter, ctx.expectStr("pytn"));
-        try testing.expectEqual(@as(?u8, 'p'), ctx.peek());
-        try ctx.expectStr("python");
-        try testing.expectEqual(@as(?u8, 's'), ctx.peek());
+        try testing.expectError(error.UnexpectedEof, parser.expectStr("aaaaaaaaa"));
+        try testing.expectEqual(@as(?u8, 'p'), parser.peek());
+        try testing.expectError(error.UnexpectedCharacter, parser.expectStr("pytn"));
+        try testing.expectEqual(@as(?u8, 'p'), parser.peek());
+        try parser.expectStr("python");
+        try testing.expectEqual(@as(?u8, 's'), parser.peek());
     }
 
     {
-        var ctx = ParseContext.init("");
-        try testing.expectEqual(ctx.peek(), null);
-        try testing.expectError(error.UnexpectedEof, ctx.consume());
-        try testing.expectEqual(ctx.eat('p'), false);
-        try testing.expectError(error.UnexpectedEof, ctx.expect('p'));
+        var parser = Parser.init("");
+        try testing.expectEqual(parser.peek(), null);
+        try testing.expectError(error.UnexpectedEof, parser.consume());
+        try testing.expectEqual(parser.eat('p'), false);
+        try testing.expectError(error.UnexpectedEof, parser.expect('p'));
     }
 }
 
@@ -315,11 +297,11 @@ pub const ParseError = error{
 };
 
 pub fn parse(backing_allocator: Allocator, source: []const u8) !Document {
-    var ctx = ParseContext.init(source);
-    return try parseDocument(&ctx, backing_allocator);
+    var parser = Parser.init(source);
+    return try parseDocument(&parser, backing_allocator);
 }
 
-fn parseDocument(ctx: *ParseContext, backing_allocator: Allocator) !Document {
+fn parseDocument(parser: *Parser, backing_allocator: Allocator) !Document {
     var doc = Document{
         .arena = ArenaAllocator.init(backing_allocator),
         .xml_decl = null,
@@ -330,280 +312,269 @@ fn parseDocument(ctx: *ParseContext, backing_allocator: Allocator) !Document {
 
     const allocator = doc.arena.allocator();
 
-    try trySkipComments(ctx, allocator);
+    try skipComments(parser, allocator);
 
-    doc.xml_decl = try tryParseProlog(ctx, allocator);
-    _ = ctx.eatWs();
-    try trySkipComments(ctx, allocator);
+    doc.xml_decl = try parseElement(parser, allocator, .xml_decl);
+    _ = parser.eatWs();
+    try skipComments(parser, allocator);
 
-    doc.root = (try tryParseElement(ctx, allocator)) orelse return error.InvalidDocument;
-    _ = ctx.eatWs();
-    try trySkipComments(ctx, allocator);
+    doc.root = (try parseElement(parser, allocator, .element)) orelse return error.InvalidDocument;
+    _ = parser.eatWs();
+    try skipComments(parser, allocator);
 
-    if (ctx.peek() != null) return error.InvalidDocument;
+    if (parser.peek() != null) return error.InvalidDocument;
 
     return doc;
 }
 
-fn parseAttrValue(ctx: *ParseContext, alloc: Allocator) ![]const u8 {
-    const quote = try ctx.consume();
+fn parseAttrValue(parser: *Parser, alloc: Allocator) ![]const u8 {
+    const quote = try parser.consume();
     if (quote != '"' and quote != '\'') return error.UnexpectedCharacter;
 
-    const begin = ctx.offset;
+    const begin = parser.offset;
 
     while (true) {
-        const c = ctx.consume() catch return error.UnclosedValue;
+        const c = parser.consume() catch return error.UnclosedValue;
         if (c == quote) break;
     }
 
-    const end = ctx.offset - 1;
+    const end = parser.offset - 1;
 
-    return try dupeAndUnescape(alloc, ctx.source[begin..end]);
+    return try unescape(alloc, parser.source[begin..end]);
 }
 
-fn parseEqAttrValue(ctx: *ParseContext, alloc: Allocator) ![]const u8 {
-    _ = ctx.eatWs();
-    try ctx.expect('=');
-    _ = ctx.eatWs();
+fn parseEqAttrValue(parser: *Parser, alloc: Allocator) ![]const u8 {
+    _ = parser.eatWs();
+    try parser.expect('=');
+    _ = parser.eatWs();
 
-    return try parseAttrValue(ctx, alloc);
+    return try parseAttrValue(parser, alloc);
 }
 
-fn parseNameNoDupe(ctx: *ParseContext) ![]const u8 {
+fn parseNameNoDupe(parser: *Parser) ![]const u8 {
     // XML's spec on names is very long, so to make this easier
     // we just take any character that is not special and not whitespace
-    const begin = ctx.offset;
+    const begin = parser.offset;
 
-    while (ctx.peek()) |ch| {
+    while (parser.peek()) |ch| {
         switch (ch) {
             ' ', '\t', '\n', '\r' => break,
             '&', '"', '\'', '<', '>', '?', '=', '/' => break,
-            else => _ = ctx.consumeNoEof(),
+            else => _ = parser.consumeNoEof(),
         }
     }
 
-    const end = ctx.offset;
+    const end = parser.offset;
     if (begin == end) return error.InvalidName;
 
-    return ctx.source[begin..end];
+    return parser.source[begin..end];
 }
 
-fn tryParseCharData(ctx: *ParseContext, alloc: Allocator) !?[]const u8 {
-    const begin = ctx.offset;
+fn parseCharData(parser: *Parser, alloc: Allocator) !?[]const u8 {
+    const begin = parser.offset;
 
-    while (ctx.peek()) |ch| {
+    while (parser.peek()) |ch| {
         switch (ch) {
             '<' => break,
-            else => _ = ctx.consumeNoEof(),
+            else => _ = parser.consumeNoEof(),
         }
     }
 
-    const end = ctx.offset;
+    const end = parser.offset;
     if (begin == end) return null;
 
-    return try dupeAndUnescape(alloc, ctx.source[begin..end]);
+    return try unescape(alloc, parser.source[begin..end]);
 }
 
-fn parseContent(ctx: *ParseContext, alloc: Allocator) ParseError!Content {
-    if (try tryParseCharData(ctx, alloc)) |cd| {
-        return Content{ .CharData = cd };
-    } else if (try tryParseComment(ctx, alloc)) |comment| {
-        return Content{ .Comment = comment };
-    } else if (try tryParseElement(ctx, alloc)) |elem| {
-        return Content{ .Element = elem };
+fn parseContent(parser: *Parser, alloc: Allocator) ParseError!Content {
+    if (try parseCharData(parser, alloc)) |cd| {
+        return Content{ .char_data = cd };
+    } else if (try parseComment(parser, alloc)) |comment| {
+        return Content{ .comment = comment };
+    } else if (try parseElement(parser, alloc, .element)) |elem| {
+        return Content{ .element = elem };
     } else {
         return error.UnexpectedCharacter;
     }
 }
 
-fn tryParseAttr(ctx: *ParseContext, alloc: Allocator) !?*Attribute {
-    const name = parseNameNoDupe(ctx) catch return null;
-    _ = ctx.eatWs();
-    try ctx.expect('=');
-    _ = ctx.eatWs();
-    const value = try parseAttrValue(ctx, alloc);
+fn parseAttr(parser: *Parser, alloc: Allocator) !?Attribute {
+    const name = parseNameNoDupe(parser) catch return null;
+    _ = parser.eatWs();
+    try parser.expect('=');
+    _ = parser.eatWs();
+    const value = try parseAttrValue(parser, alloc);
 
-    const attr = try alloc.create(Attribute);
-    attr.name = try alloc.dupe(u8, name);
-    attr.value = value;
+    const attr = Attribute{
+        .name = try alloc.dupe(u8, name),
+        .value = value,
+    };
     return attr;
 }
 
-fn tryParseElement(ctx: *ParseContext, alloc: Allocator) !?*Element {
-    const start = ctx.offset;
-    if (!ctx.eat('<')) return null;
-    const tag = parseNameNoDupe(ctx) catch {
-        ctx.offset = start;
-        return null;
+const ElementKind = enum {
+    xml_decl,
+    element,
+};
+
+fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !?*Element {
+    const start = parser.offset;
+
+    const tag = switch (kind) {
+        .xml_decl => blk: {
+            if (!parser.eatStr("<?") or !mem.eql(u8, try parseNameNoDupe(parser), "xml")) {
+                parser.offset = start;
+                return null;
+            }
+            break :blk "xml";
+        },
+        .element => blk: {
+            if (!parser.eat('<')) return null;
+            const tag = parseNameNoDupe(parser) catch {
+                parser.offset = start;
+                return null;
+            };
+            break :blk tag;
+        }
     };
 
-    const element = try alloc.create(Element);
-    element.* = Element.init(try alloc.dupe(u8, tag), alloc);
+    var attributes = std.ArrayList(Attribute).init(alloc);
+    defer attributes.deinit();
 
-    while (ctx.eatWs()) {
-        const attr = (try tryParseAttr(ctx, alloc)) orelse break;
-        try element.attributes.append(attr);
+    var children = std.ArrayList(Content).init(alloc);
+    defer children.deinit();
+
+    while (parser.eatWs()) {
+        const attr = (try parseAttr(parser, alloc)) orelse break;
+        try attributes.append(attr);
     }
 
-    if (ctx.eatStr("/>")) {
-        return element;
-    }
+    switch (kind) {
+        .xml_decl => try parser.expectStr("?>"),
+        .element => {
+            if (!parser.eatStr("/>")) {
+                try parser.expect('>');
 
-    try ctx.expect('>');
+                while (true) {
+                    if (parser.peek() == null) {
+                        return error.UnexpectedEof;
+                    } else if (parser.eatStr("</")) {
+                        break;
+                    }
 
-    while (true) {
-        if (ctx.peek() == null) {
-            return error.UnexpectedEof;
-        } else if (ctx.eatStr("</")) {
-            break;
+                    const content = try parseContent(parser, alloc);
+                    try children.append(content);
+                }
+
+                const closing_tag = try parseNameNoDupe(parser);
+                if (!mem.eql(u8, tag, closing_tag)) {
+                    return error.NonMatchingClosingTag;
+                }
+
+                _ = parser.eatWs();
+                try parser.expect('>');
+            }
         }
-
-        const content = try parseContent(ctx, alloc);
-        try element.children.append(content);
     }
 
-    const closing_tag = try parseNameNoDupe(ctx);
-    if (!std.mem.eql(u8, tag, closing_tag)) {
-        return error.NonMatchingClosingTag;
-    }
-
-    _ = ctx.eatWs();
-    try ctx.expect('>');
+    const element = try alloc.create(Element);
+    element.* = .{
+        .tag = try alloc.dupe(u8, tag),
+        .attributes = attributes.toOwnedSlice(),
+        .children = children.toOwnedSlice(),
+    };
     return element;
 }
 
-test "tryParseElement" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+test "xml: parseElement" {
+    var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
 
     {
-        var ctx = ParseContext.init("<= a='b'/>");
-        try testing.expectEqual(@as(?*Element, null), try tryParseElement(&ctx, alloc));
-        try testing.expectEqual(@as(?u8, '<'), ctx.peek());
+        var parser = Parser.init("<= a='b'/>");
+        try testing.expectEqual(@as(?*Element, null), try parseElement(&parser, alloc, .element));
+        try testing.expectEqual(@as(?u8, '<'), parser.peek());
     }
 
     {
-        var ctx = ParseContext.init("<python size='15' color = \"green\"/>");
-        const elem = try tryParseElement(&ctx, alloc);
+        var parser = Parser.init("<python size='15' color = \"green\"/>");
+        const elem = try parseElement(&parser, alloc, .element);
         try testing.expectEqualSlices(u8, elem.?.tag, "python");
 
-        const size_attr = elem.?.attributes.items[0];
+        const size_attr = elem.?.attributes[0];
         try testing.expectEqualSlices(u8, size_attr.name, "size");
         try testing.expectEqualSlices(u8, size_attr.value, "15");
 
-        const color_attr = elem.?.attributes.items[1];
+        const color_attr = elem.?.attributes[1];
         try testing.expectEqualSlices(u8, color_attr.name, "color");
         try testing.expectEqualSlices(u8, color_attr.value, "green");
     }
 
     {
-        var ctx = ParseContext.init("<python>test</python>");
-        const elem = try tryParseElement(&ctx, alloc);
+        var parser = Parser.init("<python>test</python>");
+        const elem = try parseElement(&parser, alloc, .element);
         try testing.expectEqualSlices(u8, elem.?.tag, "python");
-        try testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "test");
+        try testing.expectEqualSlices(u8, elem.?.children[0].char_data, "test");
     }
 
     {
-        var ctx = ParseContext.init("<a>b<c/>d<e/>f<!--g--></a>");
-        const elem = try tryParseElement(&ctx, alloc);
+        var parser = Parser.init("<a>b<c/>d<e/>f<!--g--></a>");
+        const elem = try parseElement(&parser, alloc, .element);
         try testing.expectEqualSlices(u8, elem.?.tag, "a");
-        try testing.expectEqualSlices(u8, elem.?.children.items[0].CharData, "b");
-        try testing.expectEqualSlices(u8, elem.?.children.items[1].Element.tag, "c");
-        try testing.expectEqualSlices(u8, elem.?.children.items[2].CharData, "d");
-        try testing.expectEqualSlices(u8, elem.?.children.items[3].Element.tag, "e");
-        try testing.expectEqualSlices(u8, elem.?.children.items[4].CharData, "f");
-        try testing.expectEqualSlices(u8, elem.?.children.items[5].Comment, "g");
+        try testing.expectEqualSlices(u8, elem.?.children[0].char_data, "b");
+        try testing.expectEqualSlices(u8, elem.?.children[1].element.tag, "c");
+        try testing.expectEqualSlices(u8, elem.?.children[2].char_data, "d");
+        try testing.expectEqualSlices(u8, elem.?.children[3].element.tag, "e");
+        try testing.expectEqualSlices(u8, elem.?.children[4].char_data, "f");
+        try testing.expectEqualSlices(u8, elem.?.children[5].comment, "g");
     }
 }
 
-fn tryParseProlog(ctx: *ParseContext, alloc: Allocator) !?*XmlDecl {
-    const start = ctx.offset;
-    if (!ctx.eatStr("<?") or !mem.eql(u8, try parseNameNoDupe(ctx), "xml")) {
-        ctx.offset = start;
-        return null;
-    }
-
-    const decl = try alloc.create(XmlDecl);
-    decl.encoding = null;
-    decl.standalone = null;
-
-    // Version info is mandatory
-    try ctx.expectWs();
-    try ctx.expectStr("version");
-    decl.version = try parseEqAttrValue(ctx, alloc);
-
-    if (ctx.eatWs()) {
-        // Optional encoding and standalone info
-        var require_ws = false;
-
-        if (ctx.eatStr("encoding")) {
-            decl.encoding = try parseEqAttrValue(ctx, alloc);
-            require_ws = true;
-        }
-
-        if (require_ws == ctx.eatWs() and ctx.eatStr("standalone")) {
-            const standalone = try parseEqAttrValue(ctx, alloc);
-            if (std.mem.eql(u8, standalone, "yes")) {
-                decl.standalone = true;
-            } else if (std.mem.eql(u8, standalone, "no")) {
-                decl.standalone = false;
-            } else {
-                return error.InvalidStandaloneValue;
-            }
-        }
-
-        _ = ctx.eatWs();
-    }
-
-    try ctx.expectStr("?>");
-    return decl;
-}
-
-test "tryParseProlog" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+test "xml: parse prolog" {
+    var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    const alloc = arena.allocator();
+    const a = arena.allocator();
 
     {
-        var ctx = ParseContext.init("<?xmla version='aa'?>");
-        try testing.expectEqual(@as(?*XmlDecl, null), try tryParseProlog(&ctx, alloc));
-        try testing.expectEqual(@as(?u8, '<'), ctx.peek());
+        var parser = Parser.init("<?xmla version='aa'?>");
+        try testing.expectEqual(@as(?*Element, null), try parseElement(&parser, a, .xml_decl));
+        try testing.expectEqual(@as(?u8, '<'), parser.peek());
     }
 
     {
-        var ctx = ParseContext.init("<?xml version='aa'?>");
-        const decl = try tryParseProlog(&ctx, alloc);
-        try testing.expectEqualSlices(u8, "aa", decl.?.version);
-        try testing.expectEqual(@as(?[]const u8, null), decl.?.encoding);
-        try testing.expectEqual(@as(?bool, null), decl.?.standalone);
+        var parser = Parser.init("<?xml version='aa'?>");
+        const decl = try parseElement(&parser, a, .xml_decl);
+        try testing.expectEqualSlices(u8, "aa", decl.?.getAttribute("version").?);
+        try testing.expectEqual(@as(?[]const u8, null), decl.?.getAttribute("encoding"));
+        try testing.expectEqual(@as(?[]const u8, null), decl.?.getAttribute("standalone"));
     }
 
     {
-        var ctx = ParseContext.init("<?xml version=\"aa\" encoding = 'bbb' standalone   \t =   'yes'?>");
-        const decl = try tryParseProlog(&ctx, alloc);
-        try testing.expectEqualSlices(u8, "aa", decl.?.version);
-        try testing.expectEqualSlices(u8, "bbb", decl.?.encoding.?);
-        try testing.expectEqual(@as(?bool, true), decl.?.standalone.?);
+        var parser = Parser.init("<?xml version=\"ccc\" encoding = 'bbb' standalone   \t =   'yes'?>");
+        const decl = try parseElement(&parser, a, .xml_decl);
+        try testing.expectEqualSlices(u8, "ccc", decl.?.getAttribute("version").?);
+        try testing.expectEqualSlices(u8, "bbb", decl.?.getAttribute("encoding").?);
+        try testing.expectEqualSlices(u8, "yes", decl.?.getAttribute("standalone").?);
     }
 }
 
-fn trySkipComments(ctx: *ParseContext, alloc: Allocator) !void {
-    while (try tryParseComment(ctx, alloc)) |_| {
-        _ = ctx.eatWs();
+fn skipComments(parser: *Parser, alloc: Allocator) !void {
+    while ((try parseComment(parser, alloc)) != null) {
+        _ = parser.eatWs();
     }
 }
 
-fn tryParseComment(ctx: *ParseContext, alloc: Allocator) !?[]const u8 {
-    if (!ctx.eatStr("<!--")) return null;
+fn parseComment(parser: *Parser, alloc: Allocator) !?[]const u8 {
+    if (!parser.eatStr("<!--")) return null;
 
-    const begin = ctx.offset;
-    while (!ctx.eatStr("-->")) {
-        _ = ctx.consume() catch return error.UnclosedComment;
+    const begin = parser.offset;
+    while (!parser.eatStr("-->")) {
+        _ = parser.consume() catch return error.UnclosedComment;
     }
 
-    const end = ctx.offset - "-->".len;
-    return try alloc.dupe(u8, ctx.source[begin..end]);
+    const end = parser.offset - "-->".len;
+    return try alloc.dupe(u8, parser.source[begin..end]);
 }
 
 fn unescapeEntity(text: []const u8) !u8 {
@@ -618,49 +589,49 @@ fn unescapeEntity(text: []const u8) !u8 {
     };
 
     for (entities) |entity| {
-        if (std.mem.eql(u8, text, entity.text)) return entity.replacement;
+        if (mem.eql(u8, text, entity.text)) return entity.replacement;
     }
 
     return error.InvalidEntity;
 }
 
-fn dupeAndUnescape(alloc: Allocator, text: []const u8) ![]const u8 {
-    const str = try alloc.alloc(u8, text.len);
+fn unescape(arena: Allocator, text: []const u8) ![]const u8 {
+    const unescaped = try arena.alloc(u8, text.len);
 
     var j: usize = 0;
     var i: usize = 0;
     while (i < text.len) : (j += 1) {
         if (text[i] == '&') {
             const entity_end = 1 + (mem.indexOfScalarPos(u8, text, i, ';') orelse return error.InvalidEntity);
-            str[j] = try unescapeEntity(text[i..entity_end]);
+            unescaped[j] = try unescapeEntity(text[i..entity_end]);
             i = entity_end;
         } else {
-            str[j] = text[i];
+            unescaped[j] = text[i];
             i += 1;
         }
     }
 
-    return alloc.shrink(str, j);
+    return unescaped[0..j];
 }
 
-test "dupeAndUnescape" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+test "xml: unescape" {
+    var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    const alloc = arena.allocator();
+    const a = arena.allocator();
 
-    try testing.expectEqualSlices(u8, "test", try dupeAndUnescape(alloc, "test"));
-    try testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try dupeAndUnescape(alloc, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
-    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&"));
-    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&&"));
-    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&test;"));
-    try testing.expectError(error.InvalidEntity, dupeAndUnescape(alloc, "python&boa"));
+    try testing.expectEqualSlices(u8, "test", try unescape(a, "test"));
+    try testing.expectEqualSlices(u8, "a<b&c>d\"e'f<", try unescape(a, "a&lt;b&amp;c&gt;d&quot;e&apos;f&lt;"));
+    try testing.expectError(error.InvalidEntity, unescape(a, "python&"));
+    try testing.expectError(error.InvalidEntity, unescape(a, "python&&"));
+    try testing.expectError(error.InvalidEntity, unescape(a, "python&test;"));
+    try testing.expectError(error.InvalidEntity, unescape(a, "python&boa"));
 }
 
-test "Top level comments" {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+test "xml: top level comments" {
+    var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    const alloc = arena.allocator();
+    const a = arena.allocator();
 
-    const doc = try parse(alloc, "<?xml version='aa'?><!--comment--><python color='green'/><!--another comment-->");
+    const doc = try parse(a, "<?xml version='aa'?><!--comment--><python color='green'/><!--another comment-->");
     try testing.expectEqualSlices(u8, "python", doc.root.tag);
 }

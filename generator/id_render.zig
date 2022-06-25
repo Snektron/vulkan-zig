@@ -23,7 +23,6 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
         "f32",
         "f64",
         "f128",
-        "c_longdouble",
         "noreturn",
         "type",
         "anyerror",
@@ -35,6 +34,7 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
         "c_ulong",
         "c_longlong",
         "c_ulonglong",
+        "c_longdouble",
         // Removed in stage 2 in https://github.com/ziglang/zig/commit/05cf44933d753f7a5a53ab289ea60fd43761de57,
         // but these are still invalid identifiers in stage 1.
         "undefined",
@@ -52,12 +52,12 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
     return false;
 }
 
-pub fn writeIdentifier(out: anytype, id: []const u8) !void {
+pub fn writeIdentifier(writer: anytype, id: []const u8) !void {
     // https://github.com/ziglang/zig/issues/2897
     if (isZigPrimitiveType(id)) {
-        try out.print("@\"{}\"", .{std.zig.fmtEscapes(id)});
+        try writer.print("@\"{}\"", .{std.zig.fmtEscapes(id)});
     } else {
-        try out.print("{}", .{std.zig.fmtId(id)});
+        try writer.print("{}", .{std.zig.fmtId(id)});
     }
 }
 
