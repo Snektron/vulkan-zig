@@ -677,7 +677,7 @@ fn Renderer(comptime WriterType: type) type {
             const decl = self.resolveDeclaration(field_type_name) orelse return;
             switch (decl.*) {
                 .bitmask => |mask| {
-                    try self.writer.print(" align(@alignOf({s}))", .{bitmaskFlagsType(mask.bitwidth)});
+                    try self.writer.print(" align(@alignOf({s}))", .{try bitmaskFlagsType(mask.bitwidth)});
                 },
                 else => {},
             }
