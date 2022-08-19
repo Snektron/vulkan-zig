@@ -547,7 +547,7 @@ fn Renderer(comptime WriterType: type) type {
             if (optional) {
                 try self.writer.writeByte('?');
             }
-            try self.writer.writeAll("fn(");
+            try self.writer.writeAll("*const fn(");
             for (command_ptr.params) |param| {
                 try self.writeIdentifierWithCase(.snake, param.name);
                 try self.writer.writeAll(": ");

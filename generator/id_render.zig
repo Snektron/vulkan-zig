@@ -142,7 +142,6 @@ pub const IdRenderer = struct {
     fn renderSnake(self: *IdRenderer, screaming: bool, id: []const u8, tag: ?[]const u8) !void {
         var it = SegmentIterator.init(id);
         var first = true;
-        const transform = if (screaming) std.ascii.toUpper else std.ascii.toLower;
 
         while (it.next()) |segment| {
             if (first) {
@@ -152,7 +151,7 @@ pub const IdRenderer = struct {
             }
 
             for (segment) |c| {
-                try self.text_cache.append(transform(c));
+                try self.text_cache.append(if (screaming) std.ascii.toUpper(c) else std.ascii.toLower(c));
             }
         }
 
@@ -160,7 +159,7 @@ pub const IdRenderer = struct {
             try self.text_cache.append('_');
 
             for (name) |c| {
-                try self.text_cache.append(transform(c));
+                try self.text_cache.append(if (screaming) std.ascii.toUpper(c) else std.ascii.toLower(c));
             }
         }
     }

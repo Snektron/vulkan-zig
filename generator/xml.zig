@@ -56,7 +56,8 @@ pub const Element = struct {
     }
 
     pub fn findChildByTag(self: Element, tag: []const u8) ?*Element {
-        return self.findChildrenByTag(tag).next();
+        var it = self.findChildrenByTag(tag);
+        return it.next();
     }
 
     pub fn findChildrenByTag(self: Element, tag: []const u8) FindChildrenByTagIterator {
