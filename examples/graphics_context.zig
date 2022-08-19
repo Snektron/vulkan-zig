@@ -144,7 +144,7 @@ pub const GraphicsContext = struct {
         self.vki.destroyInstance(self.instance, null);
     }
 
-    pub fn deviceName(self: GraphicsContext) []const u8 {
+    pub fn deviceName(self: *const GraphicsContext) []const u8 {
         const len = std.mem.indexOfScalar(u8, &self.props.device_name, 0).?;
         return self.props.device_name[0..len];
     }
