@@ -20,7 +20,7 @@ This branch (zig-stage1-compat) is compatible with the Zig stage 1 compiler.
 ### CLI-interface
 A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
 ```
-$ zig-cache/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
+$ zig-out/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
 ```
 This reads the xml file, parses its contents, renders the Vulkan bindings, and formats file, before writing the result to the output path. While the intended usage of vulkan-zig is through direct generation from build.zig (see below), the CLI-interface can be used for one-off generation and vendoring the result.
 
