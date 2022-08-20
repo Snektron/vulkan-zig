@@ -86,30 +86,26 @@ pub const ShaderCompileStep = struct {
         const self = @fieldParentPtr(ShaderCompileStep, "step", step);
         const cwd = std.fs.cwd();
 
-        const cmd = try self.builder.allocator.alloc([]const u8, self.glslc_cmd.len + 5);
-        for (self.glslc_cmd) |part, i| {
-            cmd[i] = part;
-        }
+        var cmd = std.ArrayList([]const u8).init(self.builder.allocator);
+        try cmd.appendSlice(self.glslc_cmd);
+        const base_cmd_len = cmd.items.len;
 
         for (self.shaders.items) |shader| {
-            var argc: usize = cmd.len - 2;
+            cmd.items.len = base_cmd_len;
 
             if (shader.entry_point) |entry_point| {
-                cmd[argc - 3] = try std.fmt.allocPrint(self.builder.allocator, "-fentry-point={s}", .{entry_point});
-                argc += 1;
+                try cmd.append(try std.fmt.allocPrint(self.builder.allocator, "-fentry-point={s}", .{entry_point}));
             }
 
             if (shader.stage) |stage| {
-                cmd[argc - 3] = try std.fmt.allocPrint(self.builder.allocator, "-fshader-stage={s}", .{@tagName(stage)});
-                argc += 1;
+                try cmd.append(try std.fmt.allocPrint(self.builder.allocator, "-fshader-stage={s}", .{@tagName(stage)}));
             }
 
             const dir = path.dirname(shader.full_out_path).?;
             try cwd.makePath(dir);
-            cmd[argc - 3] = shader.source_path;
-            cmd[argc - 2] = "-o";
-            cmd[argc - 1] = shader.full_out_path;
-            try self.builder.spawnChild(cmd[0..argc]);
+
+            try cmd.appendSlice(&.{shader.source_path, "-o", shader.full_out_path});
+            try self.builder.spawnChild(cmd.items);
         }
     }
 };
