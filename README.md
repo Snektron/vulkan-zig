@@ -14,6 +14,8 @@ vulkan-zig is automatically tested daily against the latest vk.xml and zig, and 
 
 vulkan-zig aims to be always compatible with the ever-changing Zig master branch (however, development may lag a few days behind). Sometimes, the Zig master branch breaks a bunch of functionality however, which may make the latest version vulkan-zig incompatible with older releases of Zig. This repository aims to have a version compatible for both the latest Zig master, and the latest Zig release. The `master` branch is compatible with the `master` branch of Zig, and versions for older versions of Zig are maintained in the `zig-<version>-compat` branch.
 
+`master` is compatible and tested with the Zig self-hosted compiler. The `zig-stage1-compat` branch contains a version which is compatible with the Zig stage 1 compiler.
+
 ## Features
 ### CLI-interface
 A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
