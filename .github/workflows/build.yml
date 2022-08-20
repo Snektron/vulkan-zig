@@ -2,9 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ zig-stage1-compat ]
   pull_request:
-    branches: [ master ]
+    branches: [ zig-stage1-compat ]
   schedule:
     - cron: '0 6 * * *'
 
@@ -22,7 +22,7 @@ jobs:
 
     - name: Test
       run: |
-        zig build test
+        zig build -fstage1 test
 
     - name: Fetch Vulkan SDK
       run: |
@@ -37,7 +37,7 @@ jobs:
 
     - name: Build with latest zig & vk.xml
       run: |
-        zig build -Dvulkan-registry=./vk.xml
+        zig build -fstage1 -Dvulkan-registry=./vk.xml
 
     - name: Archive vk.xml
       uses: actions/upload-artifact@v2
