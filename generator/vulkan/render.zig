@@ -25,9 +25,9 @@ const preamble =
     \\        .AAPCSVFP
     \\    else
     \\        .C;
-    \\pub fn FlagsMixin(comptime FlagsType: type, comptime Int: type) type {
+    \\pub fn FlagsMixin(comptime FlagsType: type) type {
     \\    return struct {
-    \\        pub const IntType = Int;
+    \\        pub const IntType = @typeInfo(FlagsType).Struct.backing_integer.?;
     \\        pub fn toInt(self: FlagsType) IntType {
     \\            return @bitCast(IntType, self);
     \\        }
@@ -560,11 +560,9 @@ fn Renderer(comptime WriterType: type) type {
                                 @as([]const u8, if (bitflag_name.revision) |revision| revision else ""),
                                 @as([]const u8, if (bitflag_name.tag) |tag| tag else ""),
                             });
-                            try self.writer.writeAll(".IntType");
                             break :blk;
                         } else if (self.isFlags(param.param_type.name)) {
                             try self.renderTypeInfo(param.param_type);
-                            try self.writer.writeAll(".IntType");
                             break :blk;
                         }
                     }
@@ -660,27 +658,11 @@ fn Renderer(comptime WriterType: type) type {
                 } else {
                     try self.renderTypeInfo(field.field_type);
                     try self.renderContainerDefaultField(name, container, field);
-                    try self.renderContainerFieldAlignment(field);
                     try self.writer.writeAll(", ");
                 }
             }
 
             try self.writer.writeAll("};\n");
-        }
-
-        fn renderContainerFieldAlignment(self: *Self, field: reg.Container.Field) !void {
-            // Flags structures need to explicitly get their proper alignment: alignOf Flags for 32-bit flags, and alignOf Flag64 for 64-bit flags.
-            const field_type_name = switch (field.field_type) {
-                .name => |name| name,
-                else => return,
-            };
-            const decl = self.resolveDeclaration(field_type_name) orelse return;
-            switch (decl.*) {
-                .bitmask => |mask| {
-                    try self.writer.print(" align(@alignOf({s}))", .{try bitmaskFlagsType(mask.bitwidth)});
-                },
-                else => {},
-            }
         }
 
         fn renderContainerDefaultField(self: *Self, name: []const u8, container: reg.Container, field: reg.Container.Field) !void {
@@ -766,20 +748,13 @@ fn Renderer(comptime WriterType: type) type {
             };
         }
 
-        fn renderUsingFlagsMixin(self: *Self, name: []const u8, bitwidth: u8) !void {
-            const flags_type = try bitmaskFlagsType(bitwidth);
-            try self.writer.writeAll("pub usingnamespace FlagsMixin(");
-            try self.renderName(name);
-            try self.writer.print(", {s});\n", .{flags_type});
-        }
-
         fn renderBitmaskBits(self: *Self, name: []const u8, bits: reg.Enum) !void {
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
-            try self.writer.writeAll(" = packed struct {");
+            const flags_type = try bitmaskFlagsType(bits.bitwidth);
+            try self.writer.print(" = packed struct({s}) {{", .{flags_type});
 
             const bitflag_name = (try self.extractBitflagName(name)) orelse return error.InvalidRegistry;
-            const flags_type = try bitmaskFlagsType(bits.bitwidth);
 
             if (bits.fields.len == 0) {
                 try self.writer.print("_reserved_bits: {s} = 0,", .{flags_type});
@@ -804,7 +779,7 @@ fn Renderer(comptime WriterType: type) type {
             }
             try self.writer.writeAll("pub usingnamespace FlagsMixin(");
             try self.renderName(name);
-            try self.writer.print(", {s});\n}};\n", .{flags_type});
+            try self.writer.writeAll(");\n};\n");
         }
 
         fn renderBitmask(self: *Self, name: []const u8, bitmask: reg.Bitmask) !void {
@@ -822,11 +797,7 @@ fn Renderer(comptime WriterType: type) type {
                     \\pub usingnamespace FlagsMixin(
                 , .{flags_type});
                 try self.renderName(name);
-                try self.writer.print(
-                    \\, {s});
-                    \\}};
-                    \\
-                , .{flags_type});
+                try self.writer.writeAll(");\n};\n");
             }
         }
 
@@ -1196,11 +1167,7 @@ fn Renderer(comptime WriterType: type) type {
                         }
                         try self.writeIdentifierWithCase(.snake, derefName(param.name));
                     },
-                    .bitflags => {
-                        try self.writeIdentifierWithCase(.snake, param.name);
-                        try self.writer.writeAll(".toInt()");
-                    },
-                    .in_pointer, .in_out_pointer, .buffer_len, .mut_buffer_len, .other => {
+                    .bitflags, .in_pointer, .in_out_pointer, .buffer_len, .mut_buffer_len, .other => {
                         try self.writeIdentifierWithCase(.snake, param.name);
                     },
                 }
