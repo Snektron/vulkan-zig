@@ -139,7 +139,7 @@ pub const IdRenderer = struct {
         self.text_cache.deinit();
     }
 
-    fn renderSnake(self: *IdRenderer, screaming: bool, id: []const u8, tag: ?[]const u8) !void {
+    fn renderSnake(self: *IdRenderer, comptime screaming: bool, id: []const u8, tag: ?[]const u8) !void {
         var it = SegmentIterator.init(id);
         var first = true;
         const transform = if (screaming) std.ascii.toUpper else std.ascii.toLower;

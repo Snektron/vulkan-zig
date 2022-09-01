@@ -56,7 +56,8 @@ pub const Element = struct {
     }
 
     pub fn findChildByTag(self: Element, tag: []const u8) ?*Element {
-        return self.findChildrenByTag(tag).next();
+        var children = self.findChildrenByTag(tag);
+        return children.next();
     }
 
     pub fn findChildrenByTag(self: Element, tag: []const u8) FindChildrenByTagIterator {
@@ -435,7 +436,7 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
                 return null;
             };
             break :blk tag;
-        }
+        },
     };
 
     var attributes = std.ArrayList(Attribute).init(alloc);
@@ -474,7 +475,7 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
                 _ = parser.eatWs();
                 try parser.expect('>');
             }
-        }
+        },
     }
 
     const element = try alloc.create(Element);
