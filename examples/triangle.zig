@@ -236,13 +236,6 @@ fn createCommandBuffers(
     const cmdbufs = try allocator.alloc(vk.CommandBuffer, framebuffers.len);
     errdefer allocator.free(cmdbufs);
 
-    _ = pipeline;
-    _ = render_pass;
-    _ = extent;
-    _ = buffer;
-    _ = pool;
-    _ = gc;
-
     try gc.vkd.allocateCommandBuffers(gc.dev, &.{
         .command_pool = pool,
         .level = .primary,
@@ -269,7 +262,6 @@ fn createCommandBuffers(
     };
 
     for (cmdbufs) |cmdbuf, i| {
-        _ = i;
         try gc.vkd.beginCommandBuffer(cmdbuf, &.{
             .flags = .{},
             .p_inheritance_info = null,
