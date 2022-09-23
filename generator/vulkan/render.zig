@@ -1052,7 +1052,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\                .Struct = .{{
                 \\                    .layout = .Auto,
                 \\                    .fields = &fields,
-                \\                    .decls = &[_]std.builtin.TypeInfo.Declaration{{}},
+                \\                    .decls = &[_]std.builtin.Type.Declaration{{}},
                 \\                    .is_tuple = false,
                 \\                }},
                 \\            }});
