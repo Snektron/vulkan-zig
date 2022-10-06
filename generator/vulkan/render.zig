@@ -97,7 +97,7 @@ const foreign_types = std.ComptimeStringMap([]const u8, .{
     .{ "HWND", "std.os.windows.HWND" },
     .{ "HMONITOR", "*opaque {}" },
     .{ "HANDLE", "std.os.windows.HANDLE" },
-    .{ "SECURITY_ATTRIBUTES", "std.os.SECURITY_ATTRIBUTES" },
+    .{ "SECURITY_ATTRIBUTES", "std.os.windows.SECURITY_ATTRIBUTES" },
     .{ "DWORD", "std.os.windows.DWORD" },
     .{ "LPCWSTR", "std.os.windows.LPCWSTR" },
     .{ "xcb_connection_t", "opaque {}" },
@@ -106,6 +106,8 @@ const foreign_types = std.ComptimeStringMap([]const u8, .{
     .{ "zx_handle_t", @typeName(u32) },
     .{ "_screen_context", "opaque {}" },
     .{ "_screen_window", "opaque {}" },
+    .{ "IDirectFB", "opaque {}" },
+    .{ "IDirectFBSurface", "opaque {}" },
 });
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
