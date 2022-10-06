@@ -104,7 +104,7 @@ pub const ShaderCompileStep = struct {
             const dir = path.dirname(shader.full_out_path).?;
             try cwd.makePath(dir);
 
-            try cmd.appendSlice(&.{shader.source_path, "-o", shader.full_out_path});
+            try cmd.appendSlice(&.{ shader.source_path, "-o", shader.full_out_path });
             try self.builder.spawnChild(cmd.items);
         }
     }

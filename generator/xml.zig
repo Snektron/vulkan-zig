@@ -436,7 +436,7 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
                 return null;
             };
             break :blk tag;
-        }
+        },
     };
 
     var attributes = std.ArrayList(Attribute).init(alloc);
@@ -475,7 +475,7 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
                 _ = parser.eatWs();
                 try parser.expect('>');
             }
-        }
+        },
     }
 
     const element = try alloc.create(Element);

@@ -75,7 +75,25 @@ pub const GenerateStep = struct {
         const spec = try cwd.readFileAlloc(self.builder.allocator, self.spec_path, std.math.maxInt(usize));
 
         var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
-        try generate(self.builder.allocator, spec, out_buffer.writer());
+        generate(self.builder.allocator, spec, out_buffer.writer()) catch |err| switch (err) {
+            error.InvalidXml => {
+                std.log.err("invalid vulkan registry - invalid xml", .{});
+                std.log.err("please check that the correct vk.xml file is passed", .{});
+                return err;
+            },
+            error.InvalidRegistry => {
+                std.log.err("invalid vulkan registry - registry is valid xml but contents are invalid", .{});
+                std.log.err("please check that the correct vk.xml file is passed", .{});
+                return err;
+            },
+            error.UnhandledBitfieldStruct => {
+                std.log.err("unhandled struct with bit fields detected in vk.xml", .{});
+                std.log.err("this is a bug in vulkan-zig", .{});
+                std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
+                return err;
+            },
+            error.OutOfMemory => return error.OutOfMemory,
+        };
         try out_buffer.append(0);
 
         const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];

@@ -625,15 +625,85 @@ fn Renderer(comptime WriterType: type) type {
             }
         }
 
+        fn renderSpecialContainer(self: *Self, name: []const u8) !bool {
+            const maybe_author = self.id_renderer.getAuthorTag(name);
+            const basename = self.id_renderer.stripAuthorTag(name);
+            if (std.mem.eql(u8, basename, "VkAccelerationStructureInstance")) {
+                try self.writer.print(
+                    \\extern struct {{
+                    \\    transform: TransformMatrix{s},
+                    \\    instance_custom_index_and_mask: packed struct(u32) {{
+                    \\        instance_custom_index: u24,
+                    \\        mask: u8,
+                    \\    }},
+                    \\    instance_shader_binding_table_record_offset_and_flags: packed struct(u32) {{
+                    \\        instance_shader_binding_table_record_offset: u24,
+                    \\        flags: u8, // GeometryInstanceFlagsKHR
+                    \\    }},
+                    \\    acceleration_structure_reference: u64,
+                    \\}};
+                    \\
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
+            } else if (std.mem.eql(u8, basename, "VkAccelerationStructureSRTMotionInstance")) {
+                try self.writer.print(
+                    \\extern struct {{
+                    \\    transform_t0: SRTData{0s},
+                    \\    transform_t1: SRTData{0s},
+                    \\    instance_custom_index_and_mask: packed struct(u32) {{
+                    \\        instance_custom_index: u24,
+                    \\        mask: u8,
+                    \\    }},
+                    \\    instance_shader_binding_table_record_offset_and_flags: packed struct(u32) {{
+                    \\        instance_shader_binding_table_record_offset: u24,
+                    \\        flags: u8, // GeometryInstanceFlagsKHR
+                    \\    }},
+                    \\    acceleration_structure_reference: u64,
+                    \\}};
+                    \\
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
+            } else if (std.mem.eql(u8, basename, "VkAccelerationStructureMatrixMotionInstance")) {
+                try self.writer.print(
+                    \\extern struct {{
+                    \\    transform_t0: TransformMatrix{0s},
+                    \\    transform_t1: TransformMatrix{0s},
+                    \\    instance_custom_index_and_mask: packed struct(u32) {{
+                    \\        instance_custom_index: u24,
+                    \\        mask: u8,
+                    \\    }},
+                    \\    instance_shader_binding_table_record_offset_and_flags: packed struct(u32) {{
+                    \\        instance_shader_binding_table_record_offset: u24,
+                    \\        flags: u8, // GeometryInstanceFlagsKHR
+                    \\    }},
+                    \\    acceleration_structure_reference: u64,
+                    \\}};
+                    \\
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
+            }
+
+            return false;
+        }
+
         fn renderContainer(self: *Self, name: []const u8, container: reg.Container) !void {
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
             try self.writer.writeAll(" = ");
 
+            if (try self.renderSpecialContainer(name)) {
+                return;
+            }
+
             for (container.fields) |field| {
                 if (field.bits != null) {
-                    try self.writer.writeAll("packed ");
-                    break;
+                    return error.UnhandledBitfieldStruct;
                 }
             } else {
                 try self.writer.writeAll("extern ");

@@ -175,13 +175,49 @@ pub const Generator = struct {
 /// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
 /// directly.
 pub fn generate(allocator: Allocator, spec_xml: []const u8, writer: anytype) !void {
-    const spec = try xml.parse(allocator, spec_xml);
+    const spec = xml.parse(allocator, spec_xml) catch |err| switch (err) {
+        error.InvalidDocument,
+        error.UnexpectedEof,
+        error.UnexpectedCharacter,
+        error.IllegalCharacter,
+        error.InvalidEntity,
+        error.InvalidName,
+        error.InvalidStandaloneValue,
+        error.NonMatchingClosingTag,
+        error.UnclosedComment,
+        error.UnclosedValue,
+        => return error.InvalidXml,
+        error.OutOfMemory => return error.OutOfMemory,
+    };
     defer spec.deinit();
 
-    var gen = try Generator.init(allocator, spec.root);
+    var gen = Generator.init(allocator, spec.root) catch |err| switch (err) {
+        error.InvalidXml,
+        error.InvalidCharacter,
+        error.Overflow,
+        error.InvalidFeatureLevel,
+        error.InvalidSyntax,
+        error.InvalidTag,
+        error.MissingTypeIdentifier,
+        error.UnexpectedCharacter,
+        error.UnexpectedEof,
+        error.UnexpectedToken,
+        error.InvalidRegistry,
+        => return error.InvalidRegistry,
+        error.OutOfMemory => return error.OutOfMemory,
+    };
     defer gen.deinit();
 
     try gen.mergeEnumFields();
     try gen.fixupBitFlags();
-    try gen.render(writer);
+    gen.render(writer) catch |err| switch (err) {
+        error.InvalidApiConstant,
+        error.InvalidConstantExpr,
+        error.InvalidRegistry,
+        error.UnexpectedCharacter,
+        error.InvalidCharacter,
+        error.Overflow,
+        => return error.InvalidRegistry,
+        else => |others| return others,
+    };
 }
