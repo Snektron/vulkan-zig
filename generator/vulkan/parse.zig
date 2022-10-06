@@ -168,7 +168,7 @@ fn parseBaseType(allocator: Allocator, ty: *xml.Element) !registry.Declaration {
         // macros, which is why this part is not built into the xml/c parser.
         return registry.Declaration{
             .name = name,
-            .decl_type = .{ .external = {} },
+            .decl_type = .{ .foreign = .{ .depends = &.{} } },
         };
     }
 }
