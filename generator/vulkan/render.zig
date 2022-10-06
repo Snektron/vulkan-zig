@@ -181,6 +181,7 @@ fn Renderer(comptime WriterType: type) type {
         registry: *const reg.Registry,
         id_renderer: *IdRenderer,
         declarations_by_name: std.StringHashMap(*const reg.DeclarationType),
+        structure_types: std.StringHashMap(void),
 
         fn init(writer: WriterType, allocator: Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
             var declarations_by_name = std.StringHashMap(*const reg.DeclarationType).init(allocator);
@@ -195,12 +196,25 @@ fn Renderer(comptime WriterType: type) type {
                 result.value_ptr.* = &decl.decl_type;
             }
 
+            const vk_structure_type_decl = declarations_by_name.get("VkStructureType") orelse return error.InvalidRegistry;
+            const vk_structure_type = switch (vk_structure_type_decl.*) {
+                .enumeration => |e| e,
+                else => return error.InvalidRegistry,
+            };
+            var structure_types = std.StringHashMap(void).init(allocator);
+            errdefer structure_types.deinit();
+
+            for (vk_structure_type.fields) |field| {
+                try structure_types.put(field.name, {});
+            }
+
             return Self{
                 .writer = writer,
                 .allocator = allocator,
                 .registry = registry,
                 .id_renderer = id_renderer,
                 .declarations_by_name = declarations_by_name,
+                .structure_types = structure_types,
             };
         }
 
@@ -747,6 +761,10 @@ fn Renderer(comptime WriterType: type) type {
                 if (!mem.startsWith(u8, stype, "VK_STRUCTURE_TYPE_")) {
                     return error.InvalidRegistry;
                 }
+
+                // Some structures dont have a VK_STRUCTURE_TYPE for some reason apparently...
+                // See https://github.com/KhronosGroup/Vulkan-Docs/issues/1225
+                _ = self.structure_types.get(stype) orelse return;
 
                 try self.writer.writeAll(" = .");
                 try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
