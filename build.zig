@@ -75,9 +75,6 @@ pub const ResourceGenStep = struct {
 };
 
 pub fn build(b: *Builder) void {
-    var test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&b.addTest("generator/index.zig").step);
-
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
@@ -107,4 +104,13 @@ pub fn build(b: *Builder) void {
     triangle_run_cmd.step.dependOn(b.getInstallStep());
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
+
+    var test_step = b.step("test", "Run all the tests");
+    test_step.dependOn(&b.addTest("generator/index.zig").step);
+
+    // This test needs to be an object so that vulkan-zig can import types from the root.
+    // It does not need to run anyway.
+    const ref_all_decls_test = b.addObject("ref-all-decls-test", "test/ref_all_decls.zig");
+    ref_all_decls_test.addPackage(gen.package);
+    test_step.dependOn(&ref_all_decls_test.step);
 }
