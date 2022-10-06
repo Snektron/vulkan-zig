@@ -236,13 +236,6 @@ fn createCommandBuffers(
     const cmdbufs = try allocator.alloc(vk.CommandBuffer, framebuffers.len);
     errdefer allocator.free(cmdbufs);
 
-    _ = pipeline;
-    _ = render_pass;
-    _ = extent;
-    _ = buffer;
-    _ = pool;
-    _ = gc;
-
     try gc.vkd.allocateCommandBuffers(gc.dev, &.{
         .command_pool = pool,
         .level = .primary,
@@ -269,7 +262,6 @@ fn createCommandBuffers(
     };
 
     for (cmdbufs) |cmdbuf, i| {
-        _ = i;
         try gc.vkd.beginCommandBuffer(cmdbuf, &.{
             .flags = .{},
             .p_inheritance_info = null,
@@ -387,14 +379,14 @@ fn createPipeline(
     const vert = try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
         .code_size = resources.triangle_vert.len,
-        .p_code = @ptrCast([*]const u32, resources.triangle_vert),
+        .p_code = @ptrCast([*]const u32, &resources.triangle_vert),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
 
     const frag = try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
         .code_size = resources.triangle_frag.len,
-        .p_code = @ptrCast([*]const u32, resources.triangle_frag),
+        .p_code = @ptrCast([*]const u32, &resources.triangle_frag),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
