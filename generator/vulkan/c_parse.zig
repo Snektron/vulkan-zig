@@ -285,10 +285,29 @@ pub fn parseMember(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: b
 }
 
 pub fn parseParamOrProto(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: bool) !registry.Declaration {
-    const decl = try parseDeclaration(allocator, xctok, ptrs_optional);
+    var decl = try parseDeclaration(allocator, xctok, ptrs_optional);
     if (try xctok.peek()) |_| {
         return error.InvalidSyntax;
     }
+
+    // Decay pointers
+    switch (decl.decl_type) {
+        .array => {
+            const child = try allocator.create(TypeInfo);
+            child.* = decl.decl_type;
+
+            decl.decl_type = .{
+                .pointer = .{
+                    .is_const = decl.is_const,
+                    .is_optional = false,
+                    .size = .one,
+                    .child = child,
+                },
+            };
+        },
+        else => {},
+    }
+
     return registry.Declaration{
         .name = decl.name orelse return error.MissingTypeIdentifier,
         .decl_type = .{ .typedef = decl.decl_type },
@@ -298,6 +317,7 @@ pub fn parseParamOrProto(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optio
 pub const Declaration = struct {
     name: ?[]const u8, // Parameter names may be optional, especially in case of func(void)
     decl_type: TypeInfo,
+    is_const: bool,
 };
 
 pub const ParseError = error{
@@ -338,7 +358,11 @@ fn parseDeclaration(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: 
     // Parse name / fn ptr
 
     if (try parseFnPtrSuffix(allocator, xctok, type_info, ptrs_optional)) |decl| {
-        return decl;
+        return Declaration{
+            .name = decl.name,
+            .decl_type = decl.decl_type,
+            .is_const = inner_is_const,
+        };
     }
 
     const name = blk: {
@@ -373,6 +397,7 @@ fn parseDeclaration(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: 
     return Declaration{
         .name = name,
         .decl_type = type_info,
+        .is_const = inner_is_const,
     };
 }
 
@@ -402,6 +427,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
                 .error_codes = &[_][]const u8{},
             },
         },
+        .is_const = false,
     };
 
     const first_param = try parseDeclaration(allocator, xctok, ptrs_optional);
