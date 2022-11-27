@@ -286,7 +286,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
             // TODO: Check altlen
-            const size = if (it.next()) |len_str| lenToPointerSize(fields, len_str) else .one;
+            const size = if (it.next()) |len_str| lenToPointerSize(fields, len_str) else .many;
             current_type_info.pointer.size = size;
             current_type_info = current_type_info.pointer.child;
         }
