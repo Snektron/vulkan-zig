@@ -1305,7 +1305,7 @@ fn Renderer(comptime WriterType: type) type {
                 }
             }
 
-            return returns.toOwnedSlice();
+            return try returns.toOwnedSlice();
         }
 
         fn renderReturnStructName(self: *Self, command_name: []const u8) !void {

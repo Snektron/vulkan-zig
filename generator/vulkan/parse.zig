@@ -48,7 +48,7 @@ fn parseDeclarations(allocator: Allocator, root: *xml.Element) ![]registry.Decla
     count += try parseTypes(allocator, decls, types_elem);
     count += try parseEnums(allocator, decls[count..], root);
     count += try parseCommands(allocator, decls[count..], commands_elem);
-    return allocator.shrink(decls, count);
+    return decls[0..count];
 }
 
 fn parseTypes(allocator: Allocator, out: []registry.Declaration, types_elem: *xml.Element) !usize {
@@ -202,7 +202,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool) !regis
         i += 1;
     }
 
-    members = allocator.shrink(members, i);
+    members = members[0..i];
 
     var maybe_extends: ?[][]const u8 = null;
     if (ty.getAttribute("structextends")) |extends| {
@@ -370,7 +370,7 @@ fn parseEnumFields(allocator: Allocator, elem: *xml.Element) !registry.Enum {
     }
 
     return registry.Enum{
-        .fields = allocator.shrink(fields, i),
+        .fields = fields[0..i],
         .bitwidth = bitwidth,
         .is_bitmask = is_bitmask,
     };
@@ -483,7 +483,7 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element) !registry.Declaration 
     else
         &[_][]const u8{};
 
-    params = allocator.shrink(params, i);
+    params = params[0..i];
 
     it = elem.findChildrenByTag("param");
     for (params) |*param| {
@@ -552,7 +552,7 @@ fn parseApiConstants(allocator: Allocator, root: *xml.Element) ![]registry.ApiCo
     }
 
     i += try parseDefines(types, constants[i..]);
-    return allocator.shrink(constants, i);
+    return constants[0..i];
 }
 
 fn parseDefines(types: *xml.Element, out: []registry.ApiConstant) !usize {
@@ -598,7 +598,7 @@ fn parseTags(allocator: Allocator, root: *xml.Element) ![]registry.Tag {
         i += 1;
     }
 
-    return allocator.shrink(tags, i);
+    return tags[0..i];
 }
 
 fn parseFeatures(allocator: Allocator, root: *xml.Element) ![]registry.Feature {
@@ -635,7 +635,7 @@ fn parseFeature(allocator: Allocator, feature: *xml.Element) !registry.Feature {
     return registry.Feature{
         .name = name,
         .level = feature_level,
-        .requires = allocator.shrink(requires, i),
+        .requires = requires[0..i],
     };
 }
 
@@ -738,7 +738,7 @@ fn parseRequire(allocator: Allocator, require: *xml.Element, extnumber: ?u31) !r
     };
 
     return registry.Require{
-        .extends = allocator.shrink(extends, i_extends),
+        .extends = extends[0..i_extends],
         .types = types,
         .commands = commands,
         .required_feature_level = required_feature_level,
@@ -764,7 +764,7 @@ fn parseExtensions(allocator: Allocator, root: *xml.Element) ![]registry.Extensi
         i += 1;
     }
 
-    return allocator.shrink(extensions, i);
+    return extensions[0..i];
 }
 
 fn findExtVersion(extension: *xml.Element) !u32 {
@@ -844,7 +844,7 @@ fn parseExtension(allocator: Allocator, extension: *xml.Element) !registry.Exten
         .promoted_to = promoted_to,
         .platform = platform,
         .required_feature_level = requires_core,
-        .requires = allocator.shrink(requires, i),
+        .requires = requires[0..i],
     };
 }
 

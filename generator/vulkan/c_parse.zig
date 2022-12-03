@@ -466,7 +466,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
     }
 
     _ = try xctok.nextNoEof();
-    command_ptr.decl_type.command_ptr.params = params.toOwnedSlice();
+    command_ptr.decl_type.command_ptr.params = try params.toOwnedSlice();
     return command_ptr;
 }
 

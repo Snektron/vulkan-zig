@@ -481,8 +481,8 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
     const element = try alloc.create(Element);
     element.* = .{
         .tag = try alloc.dupe(u8, tag),
-        .attributes = attributes.toOwnedSlice(),
-        .children = children.toOwnedSlice(),
+        .attributes = try attributes.toOwnedSlice(),
+        .children = try children.toOwnedSlice(),
     };
     return element;
 }
