@@ -77,7 +77,10 @@ pub const ShaderCompileStep = struct {
             self.builder.cache_root,
             if (params.output_filename) |out| out else std.fmt.allocPrint(self.builder.allocator, "{s}.spv", .{src}) catch unreachable,
         }) catch unreachable;
-        self.shaders.append(.{ .source_path = src, .full_out_path = full_out_path, .entry_point = params.entry_point, .stage = params.stage }) catch unreachable;
+        var src_cpy = self.builder.allocator.alloc(u8, src.len) catch unreachable;
+        _ = std.mem.copy(u8, src_cpy, src);
+
+        self.shaders.append(.{ .source_path = src_cpy, .full_out_path = full_out_path, .entry_point = params.entry_point, .stage = params.stage }) catch unreachable;
         return full_out_path;
     }
 
