@@ -1130,7 +1130,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\                    const PfnType = {0s}CommandFlags.CmdType(field_tag);
                 \\                    fields[i] = .{{
                 \\                        .name = {0s}CommandFlags.cmdName(field_tag),
-                \\                        .field_type = PfnType,
+                \\                        .type = PfnType,
                 \\                        .default_value = null,
                 \\                        .is_comptime = false,
                 \\                        .alignment = @alignOf(PfnType),
@@ -1185,7 +1185,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\    inline for (std.meta.fields(Dispatch)) |field| {{
                 \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
                 \\        const cmd_ptr = loader({[first_arg]s}, name) orelse return error.CommandLoadFailure;
-                \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
+                \\        @field(self.dispatch, field.name) = @ptrCast(field.type, cmd_ptr);
                 \\    }}
                 \\    return self;
                 \\}}
@@ -1194,7 +1194,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\    inline for (std.meta.fields(Dispatch)) |field| {{
                 \\        const name = @ptrCast([*:0]const u8, field.name ++ "\x00");
                 \\        const cmd_ptr = loader({[first_arg]s}, name) orelse undefined;
-                \\        @field(self.dispatch, field.name) = @ptrCast(field.field_type, cmd_ptr);
+                \\        @field(self.dispatch, field.name) = @ptrCast(field.type, cmd_ptr);
                 \\    }}
                 \\    return self;
                 \\}}
