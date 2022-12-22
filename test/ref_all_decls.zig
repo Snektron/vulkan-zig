@@ -91,7 +91,7 @@ fn reallyRefAllDecls(comptime T: type) void {
         .Struct, .Union => {
             reallyRefAllContainerDecls(T);
             inline for (std.meta.fields(T)) |field| {
-                reallyRefAllDecls(field.field_type);
+                reallyRefAllDecls(field.type);
             }
         },
         .Enum, .Opaque => {
