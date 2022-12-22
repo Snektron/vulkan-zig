@@ -2,6 +2,7 @@ const std = @import("std");
 const vkgen = @import("generator/index.zig");
 const Step = std.build.Step;
 const Builder = std.build.Builder;
+const Encoder = std.base64.standard_no_pad.Encoder;
 
 pub const ResourceGenStep = struct {
     step: Step,
@@ -10,6 +11,11 @@ pub const ResourceGenStep = struct {
     package: std.build.Pkg,
     output_file: std.build.GeneratedFile,
     resources: std.ArrayList(u8),
+    base64_sources: std.ArrayList(Base64Source),
+    const Base64Source = struct {
+        file_name: []u8,
+        str_name: []const u8,
+    };
 
     pub fn init(builder: *Builder, out: []const u8) *ResourceGenStep {
         const self = builder.allocator.create(ResourceGenStep) catch unreachable;
@@ -33,6 +39,7 @@ pub const ResourceGenStep = struct {
                 .path = full_out_path,
             },
             .resources = std.ArrayList(u8).init(builder.allocator),
+            .base64_sources = std.ArrayList(Base64Source).init(builder.allocator),
         };
 
         self.step.dependOn(&self.shader_step.step);
@@ -64,9 +71,42 @@ pub const ResourceGenStep = struct {
         writer.writeAll("\").*;\n") catch unreachable;
     }
 
+    /// Instead of using @embedFile as addShader does, write SPIR-V binaries to resources as base64-encoded strings
+    pub fn addShaderBase64(self: *ResourceGenStep, name: []const u8, source: []const u8) void {
+        const shader_out_path = self.shader_step.add(source, .{});
+        var fixed_shader_out_path = std.ArrayList(u8).init(self.builder.allocator);
+        defer fixed_shader_out_path.deinit();
+        var path_writer = fixed_shader_out_path.writer();
+        renderPath(shader_out_path, path_writer);
+
+        var base64_source = self.base64_sources.addOne() catch unreachable;
+        base64_source.str_name = name;
+        base64_source.file_name = fixed_shader_out_path.toOwnedSlice() catch unreachable;
+    }
+
     fn make(step: *Step) !void {
         const self = @fieldParentPtr(ResourceGenStep, "step", step);
         const cwd = std.fs.cwd();
+
+        // Read SPIR-V binaries, encode as base64 string, and write the base64 string to resources
+        for (self.base64_sources.items) |base64_source| {
+            const spv_file = std.fs.cwd().readFileAllocOptions(
+                self.builder.allocator,
+                base64_source.file_name,
+                std.math.pow(u32, 2, 21), // max spv file size 2^21 bytes ~= 2 MB
+                std.math.pow(u32, 2, 13), // size hint 2^13 ~= 8 KB
+                @alignOf(u32),
+                null,
+            ) catch unreachable;
+            defer self.builder.allocator.free(spv_file);
+
+            const base64_len = Encoder.calcSize(spv_file.len);
+            var base64_str_mem = self.builder.allocator.alloc(u8, base64_len) catch unreachable;
+            const base64_str = Encoder.encode(base64_str_mem, spv_file);
+
+            var writer = self.resources.writer();
+            writer.print("pub const {s} = \"{s}\";\n", .{base64_source.str_name, base64_str}) catch unreachable;
+        }
 
         const dir = std.fs.path.dirname(self.output_file.path.?).?;
         try cwd.makePath(dir);
