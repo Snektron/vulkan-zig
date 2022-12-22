@@ -136,8 +136,8 @@ pub fn build(b: *Builder) void {
     triangle_exe.addPackage(gen.package);
 
     const res = ResourceGenStep.init(b, "resources.zig");
-    res.addShader("triangle_vert", "examples/shaders/triangle.vert");
-    res.addShader("triangle_frag", "examples/shaders/triangle.frag");
+    res.addShaderBase64("triangle_vert", "examples/shaders/triangle.vert");
+    res.addShaderBase64("triangle_frag", "examples/shaders/triangle.frag");
     triangle_exe.addPackage(res.package);
 
     const triangle_run_cmd = triangle_exe.run();
