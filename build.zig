@@ -21,8 +21,8 @@ pub fn build(b: *Builder) void {
 
     const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the path to the Vulkan registry") orelse "examples/vk.xml";
 
-    const gen = vkgen.VkGenerateStep.init(b, vk_xml_path, "vk.zig");
-    triangle_exe.addPackage(gen.package);
+    const gen = vkgen.VkGenerateStep.create(b, vk_xml_path, "vk.zig");
+    triangle_exe.addPackage(gen.getPackage("vulkan"));
 
     const shaders = vkgen.ShaderCompileStep.create(
         b,
@@ -43,6 +43,6 @@ pub fn build(b: *Builder) void {
     // This test needs to be an object so that vulkan-zig can import types from the root.
     // It does not need to run anyway.
     const ref_all_decls_test = b.addObject("ref-all-decls-test", "test/ref_all_decls.zig");
-    ref_all_decls_test.addPackage(gen.package);
+    ref_all_decls_test.addPackage(gen.getPackage("vulkan"));
     test_step.dependOn(&ref_all_decls_test.step);
 }

@@ -15,18 +15,12 @@ pub const GenerateStep = struct {
     /// The path to vk.xml
     spec_path: []const u8,
 
-    /// The package representing the generated bindings. The generated bindings will be placed
-    /// in `package.path`. When using this step, this member should be passed to
-    /// `std.build.Builder.addPackage`, which causes the bindings to become available under the
-    /// name `vulkan`.
-    package: std.build.Pkg,
-
-    output_file: std.build.GeneratedFile,
+    generated_file: std.build.GeneratedFile,
 
     /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
     /// vk.xml, relative to the project root. The generated bindings will be placed at
     /// `out_path`, which is relative to the zig-cache directory.
-    pub fn init(builder: *Builder, spec_path: []const u8, out_path: []const u8) *GenerateStep {
+    pub fn create(builder: *Builder, spec_path: []const u8, out_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
         const full_out_path = path.join(builder.allocator, &[_][]const u8{
             builder.build_root,
@@ -38,12 +32,7 @@ pub const GenerateStep = struct {
             .step = Step.init(.custom, "vulkan-generate", builder.allocator, make),
             .builder = builder,
             .spec_path = spec_path,
-            .package = .{
-                .name = "vulkan",
-                .source = .{ .generated = &self.output_file },
-                .dependencies = null,
-            },
-            .output_file = .{
+            .generated_file = .{
                 .step = &self.step,
                 .path = full_out_path,
             },
@@ -55,13 +44,23 @@ pub const GenerateStep = struct {
     /// root. Typically, the location of the LunarG SDK root can be retrieved by querying for the VULKAN_SDK
     /// environment variable, set by activating the environment setup script located in the SDK root.
     /// `builder` and `out_path` are used in the same manner as `init`.
-    pub fn initFromSdk(builder: *Builder, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
+    pub fn createFromSdk(builder: *Builder, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
         const spec_path = std.fs.path.join(
             builder.allocator,
             &[_][]const u8{ sdk_path, "share/vulkan/registry/vk.xml" },
         ) catch unreachable;
 
-        return init(builder, spec_path, out_path);
+        return create(builder, spec_path, out_path);
+    }
+
+    /// Returns the package with the generated budings, with name `package_name`.
+    pub fn getPackage(self: *GenerateStep, package_name: []const u8) std.build.Pkg {
+        return .{ .name = package_name, .source = self.getSource() };
+    }
+
+    /// Returns the file source for the generated bindings.
+    pub fn getSource(self: *GenerateStep) std.build.FileSource {
+        return .{ .generated = &self.generated_file };
     }
 
     /// Internal build function. This reads `vk.xml`, and passes it to `generate`, which then generates
@@ -102,8 +101,8 @@ pub const GenerateStep = struct {
 
         var formatted = try tree.render(self.builder.allocator);
 
-        const dir = path.dirname(self.output_file.path.?).?;
+        const dir = path.dirname(self.generated_file.path.?).?;
         try cwd.makePath(dir);
-        try cwd.writeFile(self.output_file.path.?, formatted);
+        try cwd.writeFile(self.generated_file.path.?, formatted);
     }
 };

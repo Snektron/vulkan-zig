@@ -34,13 +34,13 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("my-executable", "src/main.zig");
 
     // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
-    const gen = vkgen.VkGenerateStep.init(b, "path/to/vk.xml", "vk.zig");
+    const gen = vkgen.VkGenerateStep.create(b, "path/to/vk.xml", "vk.zig");
 
     // Add the generated file as package to the final executable
-    exe.addPackage(gen.package);
+    exe.addPackage(gen.getPackage("vulkan"));
 }
 ```
-This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackage`, after which the bindings will be made available to the executable under the name `vulkan`.
+This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addPackage`, after which the bindings will be made available to the executable under the name passed to `getPackage`.
 
 ### Function & field renaming
 Functions and fields are renamed to be more or less in line with [Zig's standard library style](https://ziglang.org/documentation/master/#Style-Guide):
