@@ -1,7 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const c = @import("c.zig");
-const resources = @import("resources");
+const shaders = @import("shaders");
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Swapchain = @import("swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
@@ -43,6 +43,11 @@ const vertices = [_]Vertex{
 pub fn main() !void {
     if (c.glfwInit() != c.GLFW_TRUE) return error.GlfwInitFailed;
     defer c.glfwTerminate();
+
+    if (c.glfwVulkanSupported() != c.GLFW_TRUE) {
+        std.log.err("GLFW could not find libvulkan", .{});
+        return error.NoVulkan;
+    }
 
     var extent = vk.Extent2D{ .width = 800, .height = 600 };
 
@@ -338,7 +343,7 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
         .store_op = .store,
         .stencil_load_op = .dont_care,
         .stencil_store_op = .dont_care,
-        .initial_layout = .@"undefined",
+        .initial_layout = .undefined,
         .final_layout = .present_src_khr,
     };
 
@@ -378,15 +383,15 @@ fn createPipeline(
 ) !vk.Pipeline {
     const vert = try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
-        .code_size = resources.triangle_vert.len,
-        .p_code = @ptrCast([*]const u32, &resources.triangle_vert),
+        .code_size = shaders.triangle_vert.len,
+        .p_code = @ptrCast([*]const u32, &shaders.triangle_vert),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
 
     const frag = try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
-        .code_size = resources.triangle_frag.len,
-        .p_code = @ptrCast([*]const u32, &resources.triangle_frag),
+        .code_size = shaders.triangle_frag.len,
+        .p_code = @ptrCast([*]const u32, &shaders.triangle_frag),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 

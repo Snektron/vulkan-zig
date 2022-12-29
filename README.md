@@ -242,7 +242,7 @@ pub const xcb_connection_t = if (@hasDecl(root, "xcb_connection_t")) root.xcb_co
 For some times (such as those from Google Games Platform) no default is known. Usage of these without providing a concrete type in the project root generates a compile error.
 
 ### Shader compilation
-vulkan-zig provides functionality to help compiling shaders using glslc. It can be used from build.zig as follows:
+vulkan-zig provides functionality to help compiling shaders to spir-v using glslc. It can be used from build.zig as follows:
 
 ```zig
 const vkgen = @import("vulkan-zig/generator/index.zig");
@@ -254,15 +254,20 @@ pub fn build(b: *Builder) void {
     const gen = vkgen.VkGenerateStep(b, "path/to/vk.xml", "vk.zig");
     exe.addPackage(gen.package);
 
-    const shader_comp = vkgen.ShaderCompileStep.init(
+    const shader_comp = vkgen.ShaderCompileStep.create(
         builder,
         &[_][]const u8{"glslc", "--target-env=vulkan1.2"}, // Path to glslc and additional parameters
     );
-    exe.step.dependOn(&shader_comp.step);
-    const spv_path = shader_comp.addShader("path/to/shader.frag");
+    exe.addPackage(shader_comp.getPackage("shaders"));
+    shader_comp.add("shader", "path/to/shader.frag", .{});
 }
 ```
-Upon compilation, glslc is then invoked to compile each shader, and the result is placed within `zig-cache`. `addShader` returns the full path to the compiled shader code. This file can then be included in the project, as is done in [build.zig for the example](build.zig) by generating an additional file which uses `@embedFile`.
+Upon compilation, glslc is then invoked to compile each shader, and the result is placed within `zig-cache`. All shaders which are compiled using a particular `ShaderCompileStep` are imported in a single Zig file using `@embedFile`, and this file can be added to an executable as a package using `getPackage`. To slightly improve compile times, shader compilation is cached; as long as a shader's source and its compile commands stay the same, the shader is not recompiled. The spir-v code for any particular shader is aligned to that of a 32-bit integer as follows, as required by vkCreateShaderModule:
+```zig
+pub const ${name} align(@alignOf(u32)) = @embedFile("${path}").*;
+```
+
+See [build.zig](build.zig) for a working example.
 
 ## Limitations
 * Currently, the self-hosted version of Zig's cache-hash API is not yet ready for usage, which means that the bindings are regenerated every time an executable is built.
