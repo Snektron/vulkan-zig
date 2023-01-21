@@ -4,42 +4,24 @@ const Builder = std.build.Builder;
 const Step = std.build.Step;
 const GeneratedFile = std.build.GeneratedFile;
 
-/// Stage the shader should be built for. This is passed to the -fshader-stage
-/// argument when invoking glslc.
-pub const ShaderStage = enum {
-    vertex,
-    fragment,
-    tesscontrol,
-    tesseval,
-    geometry,
-    compute,
-};
-
 /// Utility functionality to help with compiling shaders from build.zig.
-/// Invokes glslc (or another shader compiler passed to `init`) for each shader
+/// Invokes a shader compile command (e.g., glslc ...) for each shader
 /// added via `addShader`.
 pub const ShaderCompileStep = struct {
     /// The directory within the zig-cache directory that is used to store
     /// shader artifacts.
     pub const cache_dir = "shaders";
 
-    /// This structure contains additional options that can be passed to glslc when shaders are compiled.
+    /// This structure contains additional options that pertain to specific shaders only.
     pub const ShaderOptions = struct {
-        /// The entry point to use when compiling the shader.
-        entry_point: ?[]const u8 = null,
-
-        /// The stage to use when building. If not null, this is passed to
-        /// the -fshader-stage argument.
-        stage: ?ShaderStage = null,
+        /// Additional arguments that should be passed to the shader compiler.
+        additional_args: [][]const u8 = &.{},
 
         /// To ensure that if compilation options change, the shader is recompiled
         /// properly.
         fn hash(self: ShaderOptions, hasher: anytype) void {
-            if (self.entry_point) |entry_point| {
-                hasher.update(entry_point);
-            }
-            if (self.stage) |stage| {
-                hasher.update(std.mem.asBytes(&@enumToInt(stage)));
+            for (self.additional_args) |arg| {
+                hasher.update(arg);
             }
         }
     };
@@ -61,7 +43,10 @@ pub const ShaderCompileStep = struct {
     b: *Builder,
 
     /// The command and optional arguments used to invoke the shader compiler.
-    glslc_cmd: []const []const u8,
+    compile_command: []const []const u8,
+
+    /// The compiler flag used to specify the output path, `-o` most of the time
+    output_flag: []u8,
 
     /// List of shaders that are to be compiled.
     shaders: std.ArrayList(Shader),
@@ -71,13 +56,16 @@ pub const ShaderCompileStep = struct {
     generated_file: GeneratedFile,
 
     /// Create a ShaderCompileStep for `builder`. When this step is invoked by the build
-    /// system, `<glcl_cmd...> <shader_source> -o <path>` is invoked for each shader.
-    pub fn create(builder: *Builder, glslc_cmd: []const []const u8) *ShaderCompileStep {
+    /// system, `<compile_command...> <shader_source> <output_flag> <path>` is invoked for each shader.
+    /// For example, if one calls this with `create(b, "glslc", "-o")` and then
+    /// `c.addShader("vertex", "vertex.glsl", .{})`, the command will be `glslc vertex.glsl -o <path>`
+    pub fn create(builder: *Builder, compile_command: []const []const u8, output_flag: []const u8) *ShaderCompileStep {
         const self = builder.allocator.create(ShaderCompileStep) catch unreachable;
         self.* = .{
             .step = Step.init(.custom, "shaders", builder.allocator, make),
             .b = builder,
-            .glslc_cmd = builder.dupeStrings(glslc_cmd),
+            .compile_command = builder.dupeStrings(compile_command),
+            .output_flag = builder.dupe(output_flag),
             .shaders = std.ArrayList(Shader).init(builder.allocator),
             .generated_file = undefined,
         };
@@ -98,8 +86,7 @@ pub const ShaderCompileStep = struct {
     /// Add a shader to be compiled. `src` is shader source path, relative to the project root.
     /// Returns the full path where the compiled binary will be stored upon successful compilation.
     /// This path can then be used to include the binary into an executable, for example by passing it
-    /// to @embedFile via an additional generated file. `entry_point` is the entry point to pass to the compiler.
-    /// `stage` is an optional shader stage to pass to the compiler with the flag `-fshader-stage` when building the shader.
+    /// to @embedFile via an additional generated file.
     pub fn add(self: *ShaderCompileStep, name: []const u8, src: []const u8, options: ShaderOptions) void {
         const full_source_path = std.fs.path.join(self.b.allocator, &.{
             self.b.build_root,
@@ -136,7 +123,7 @@ pub const ShaderCompileStep = struct {
         // the compilation options must be the same as well!
         shader.options.hash(&hasher);
         // And the compile command, too.
-        for (self.glslc_cmd) |cmd| {
+        for (self.compile_command) |cmd| {
             hasher.update(cmd);
         }
 
@@ -158,7 +145,7 @@ pub const ShaderCompileStep = struct {
         const cwd = std.fs.cwd();
 
         var cmd = std.ArrayList([]const u8).init(self.b.allocator);
-        try cmd.appendSlice(self.glslc_cmd);
+        try cmd.appendSlice(self.compile_command);
         const base_cmd_len = cmd.items.len;
 
         var shaders_file_contents = std.ArrayList(u8).init(self.b.allocator);
@@ -183,7 +170,7 @@ pub const ShaderCompileStep = struct {
                 &shader_basename,
             });
 
-            // If we have a cache hit, we can save some compile time by not invoking glslc.
+            // If we have a cache hit, we can save some compile time by not invoking the compile command.
             compile_shader: {
                 std.fs.accessAbsolute(shader_out_path, .{}) catch |err| switch (err) {
                     error.FileNotFound => break :compile_shader,
@@ -195,15 +182,8 @@ pub const ShaderCompileStep = struct {
 
             cmd.items.len = base_cmd_len;
 
-            if (shader.options.entry_point) |entry_point| {
-                try cmd.append(try std.fmt.allocPrint(self.b.allocator, "-fentry-point={s}", .{entry_point}));
-            }
-
-            if (shader.options.stage) |stage| {
-                try cmd.append(try std.fmt.allocPrint(self.b.allocator, "-fshader-stage={s}", .{@tagName(stage)}));
-            }
-
-            try cmd.appendSlice(&.{ shader.source_path, "-o", shader_out_path });
+            try cmd.appendSlice(shader.options.additional_args);
+            try cmd.appendSlice(&.{ shader.source_path, self.output_flag, shader_out_path });
             try self.b.spawnChild(cmd.items);
         }
 
