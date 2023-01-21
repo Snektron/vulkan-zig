@@ -27,6 +27,7 @@ pub fn build(b: *Builder) void {
     const shaders = vkgen.ShaderCompileStep.create(
         b,
         &[_][]const u8{ "glslc", "--target-env=vulkan1.2" },
+        "-o",
     );
     shaders.add("triangle_vert", "examples/shaders/triangle.vert", .{});
     shaders.add("triangle_frag", "examples/shaders/triangle.frag", .{});
