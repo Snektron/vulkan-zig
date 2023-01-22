@@ -15,13 +15,36 @@ pub const ShaderCompileStep = struct {
     /// This structure contains additional options that pertain to specific shaders only.
     pub const ShaderOptions = struct {
         /// Additional arguments that should be passed to the shader compiler.
-        additional_args: [][]const u8 = &.{},
+        args: []const []const u8 = &.{},
+
+        /// Paths of additional files that should be watched for changes to
+        /// trigger recompilation.
+        watched_files: []const []const u8 = &.{},
 
         /// To ensure that if compilation options change, the shader is recompiled
         /// properly.
-        fn hash(self: ShaderOptions, hasher: anytype) void {
-            for (self.additional_args) |arg| {
+        fn hash(self: ShaderOptions, b: *Builder, hasher: anytype) !void {
+            for (self.args) |arg| {
                 hasher.update(arg);
+            }
+            for (self.watched_files) |file_path| {
+                const full_path = std.fs.path.join(b.allocator, &.{
+                    b.build_root,
+                    file_path,
+                }) catch unreachable;
+
+                const source = std.fs.cwd().readFileAlloc(
+                    b.allocator,
+                    full_path,
+                    std.math.maxInt(usize),
+                ) catch |err| switch (err) {
+                    error.FileNotFound => {
+                        std.log.err("could not open file '{s}'", .{file_path});
+                        return error.FileNotFound;
+                    },
+                    else => |e| return e,
+                };
+                hasher.update(source);
             }
         }
     };
@@ -121,7 +144,7 @@ pub const ShaderCompileStep = struct {
         hasher.update(source);
         // Not only the shader source must be the same to ensure uniqueness -
         // the compilation options must be the same as well!
-        shader.options.hash(&hasher);
+        try shader.options.hash(self.b, &hasher);
         // And the compile command, too.
         for (self.compile_command) |cmd| {
             hasher.update(cmd);
@@ -182,7 +205,7 @@ pub const ShaderCompileStep = struct {
 
             cmd.items.len = base_cmd_len;
 
-            try cmd.appendSlice(shader.options.additional_args);
+            try cmd.appendSlice(shader.options.args);
             try cmd.appendSlice(&.{ shader.source_path, self.output_flag, shader_out_path });
             try self.b.spawnChild(cmd.items);
         }
