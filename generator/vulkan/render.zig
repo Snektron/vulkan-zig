@@ -306,16 +306,22 @@ fn Renderer(comptime WriterType: type) type {
             return mem.endsWith(u8, base_name, "Flags");
         }
 
-        fn resolveDeclaration(self: Self, start_name: []const u8) ?*const reg.DeclarationType {
-            var name = start_name;
-            return while (true) {
-                const decl = self.declarations_by_name.get(name) orelse return null;
-                if (decl.* != .alias) {
-                    break decl;
-                }
+        fn resolveDeclaration(self: Self, name: []const u8) ?reg.DeclarationType {
+            const decl = self.declarations_by_name.get(name) orelse return null;
+            return self.resolveAlias(decl.*) catch return null;
+        }
 
-                name = decl.alias.name;
-            } else unreachable;
+        fn resolveAlias(self: Self, start_decl: reg.DeclarationType) !reg.DeclarationType {
+            var decl = start_decl;
+            while (true) {
+                const name = switch (decl) {
+                    .alias => |alias| alias.name,
+                    else => return decl,
+                };
+
+                const decl_ptr = self.declarations_by_name.get(name) orelse return error.InvalidRegistry;
+                decl = decl_ptr.*;
+            }
         }
 
         fn isInOutPointer(self: Self, ptr: reg.Pointer) !bool {
@@ -324,7 +330,7 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             const decl = self.resolveDeclaration(ptr.child.name) orelse return error.InvalidRegistry;
-            if (decl.* != .container) {
+            if (decl != .container) {
                 return false;
             }
 
@@ -953,15 +959,23 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderCommandPtrs(self: *Self) !void {
             for (self.registry.decls) |decl| {
-                if (decl.decl_type != .command) {
-                    continue;
+                switch (decl.decl_type) {
+                    .command => {
+                        try self.writer.writeAll("pub const ");
+                        try self.renderCommandPtrName(decl.name);
+                        try self.writer.writeAll(" = ");
+                        try self.renderCommandPtr(decl.decl_type.command, false);
+                        try self.writer.writeAll(";\n");
+                    },
+                    .alias => |alias| if (alias.target == .other_command) {
+                        try self.writer.writeAll("pub const ");
+                        try self.renderCommandPtrName(decl.name);
+                        try self.writer.writeAll(" = ");
+                        try self.renderCommandPtrName(alias.name);
+                        try self.writer.writeAll(";\n");
+                    },
+                    else => {},
                 }
-
-                try self.writer.writeAll("pub const ");
-                try self.renderCommandPtrName(decl.name);
-                try self.writer.writeAll(" = ");
-                try self.renderCommandPtr(decl.decl_type.command, false);
-                try self.writer.writeAll(";\n");
             }
         }
 
@@ -1044,7 +1058,10 @@ fn Renderer(comptime WriterType: type) type {
                 \\
             , .{name});
             for (self.registry.decls) |decl| {
-                const command = switch (decl.decl_type) {
+                // If the target type does not exist, it was likely an empty enum -
+                // assume spec is correct and that this was not a function alias.
+                const decl_type = self.resolveAlias(decl.decl_type) catch continue;
+                const command = switch (decl_type) {
                     .command => |cmd| cmd,
                     else => continue,
                 };
@@ -1062,7 +1079,10 @@ fn Renderer(comptime WriterType: type) type {
                 \\
             , .{name});
             for (self.registry.decls) |decl| {
-                const command = switch (decl.decl_type) {
+                // If the target type does not exist, it was likely an empty enum -
+                // assume spec is correct and that this was not a function alias.
+                const decl_type = self.resolveAlias(decl.decl_type) catch continue;
+                const command = switch (decl_type) {
                     .command => |cmd| cmd,
                     else => continue,
                 };
@@ -1083,7 +1103,10 @@ fn Renderer(comptime WriterType: type) type {
                 \\
             , .{name});
             for (self.registry.decls) |decl| {
-                const command = switch (decl.decl_type) {
+                // If the target type does not exist, it was likely an empty enum -
+                // assume spec is correct and that this was not a function alias.
+                const decl_type = self.resolveAlias(decl.decl_type) catch continue;
+                const command = switch (decl_type) {
                     .command => |cmd| cmd,
                     else => continue,
                 };
@@ -1153,11 +1176,27 @@ fn Renderer(comptime WriterType: type) type {
             try self.renderWrapperLoader(dispatch_type);
 
             for (self.registry.decls) |decl| {
-                if (decl.decl_type == .command) {
-                    const command = decl.decl_type.command;
-                    if (classifyCommandDispatch(decl.name, command) == dispatch_type) {
-                        try self.renderWrapper(decl.name, decl.decl_type.command);
-                    }
+                // If the target type does not exist, it was likely an empty enum -
+                // assume spec is correct and that this was not a function alias.
+                const decl_type = self.resolveAlias(decl.decl_type) catch continue;
+                const command = switch (decl_type) {
+                    .command => |cmd| cmd,
+                    else => continue,
+                };
+
+                if (classifyCommandDispatch(decl.name, command) != dispatch_type) {
+                    continue;
+                }
+                switch (decl.decl_type) {
+                    .command => try self.renderWrapper(decl.name, decl.decl_type.command),
+                    .alias => |alias| {
+                        try self.writer.writeAll("pub const ");
+                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
+                        try self.writer.writeAll(" = ");
+                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(alias.name));
+                        try self.writer.writeAll(";\n");
+                    },
+                    else => unreachable,
                 }
             }
 
