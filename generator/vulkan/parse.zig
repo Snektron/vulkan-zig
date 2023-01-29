@@ -199,6 +199,15 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool) !regis
             }
         }
 
+        if (member.getAttribute("optional")) |optionals| {
+            var optional_it = mem.split(u8, optionals, ",");
+            if (optional_it.next()) |first_optional| {
+                members[i].is_optional = mem.eql(u8, first_optional, "true");
+            } else {
+                // Optional is empty, probably incorrect.
+                return error.InvalidRegistry;
+            }
+        }
         i += 1;
     }
 
@@ -245,7 +254,7 @@ fn parseFuncPointer(allocator: Allocator, ty: *xml.Element) !registry.Declaratio
     return try cparse.parseTypedef(allocator, &xctok, true);
 }
 
-// For some reason, the DeclarationType cannot be passed to lenToPointerSize, as
+// For some reason, the DeclarationType cannot be passed to lenToPointer, as
 // that causes the Zig compiler to generate invalid code for the function. Using a
 // dedicated enum fixes the issue...
 const Fields = union(enum) {
@@ -253,13 +262,14 @@ const Fields = union(enum) {
     container: []registry.Container.Field,
 };
 
-fn lenToPointerSize(fields: Fields, len: []const u8) registry.Pointer.PointerSize {
+// returns .{ size, nullable }
+fn lenToPointer(fields: Fields, len: []const u8) std.meta.Tuple(&.{ registry.Pointer.PointerSize, bool }) {
     switch (fields) {
         .command => |params| {
             for (params) |*param| {
                 if (mem.eql(u8, param.name, len)) {
                     param.is_buffer_len = true;
-                    return .{ .other_field = param.name };
+                    return .{ .{ .other_field = param.name }, false };
                 }
             }
         },
@@ -267,16 +277,16 @@ fn lenToPointerSize(fields: Fields, len: []const u8) registry.Pointer.PointerSiz
             for (members) |*member| {
                 if (mem.eql(u8, member.name, len)) {
                     member.is_buffer_len = true;
-                    return .{ .other_field = member.name };
+                    return .{ .{ .other_field = member.name }, member.is_optional };
                 }
             }
         },
     }
 
     if (mem.eql(u8, len, "null-terminated")) {
-        return .zero_terminated;
+        return .{ .zero_terminated, false };
     } else {
-        return .many;
+        return .{ .many, false };
     }
 }
 
@@ -286,7 +296,11 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
             // TODO: Check altlen
-            const size = if (it.next()) |len_str| lenToPointerSize(fields, len_str) else .many;
+            const size = if (it.next()) |len_str| blk: {
+                const size_optional = lenToPointer(fields, len_str);
+                current_type_info.pointer.is_optional = size_optional[1];
+                break :blk size_optional[0];
+            }  else .many;
             current_type_info.pointer.size = size;
             current_type_info = current_type_info.pointer.child;
         }
