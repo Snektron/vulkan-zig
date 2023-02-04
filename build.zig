@@ -1,20 +1,25 @@
 const std = @import("std");
 const vkgen = @import("generator/index.zig");
 const Step = std.build.Step;
-const Builder = std.build.Builder;
 
-pub fn build(b: *Builder) void {
+pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const mode = b.standardReleaseOptions();
+    const optimize = b.standardOptimizeOption(.{});
 
-    const generator_exe = b.addExecutable("vulkan-zig-generator", "generator/main.zig");
-    generator_exe.setTarget(target);
-    generator_exe.setBuildMode(mode);
+    const generator_exe = b.addExecutable(.{
+        .name = "vulkan-zig-generator",
+        .root_source_file = .{ .path = "generator/main.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
     generator_exe.install();
 
-    const triangle_exe = b.addExecutable("triangle", "examples/triangle.zig");
-    triangle_exe.setTarget(target);
-    triangle_exe.setBuildMode(mode);
+    const triangle_exe = b.addExecutable(.{
+        .name = "triangle",
+        .root_source_file = .{ .path = "examples/triangle.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
     triangle_exe.install();
     triangle_exe.linkLibC();
     triangle_exe.linkSystemLibrary("glfw");
@@ -38,12 +43,21 @@ pub fn build(b: *Builder) void {
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
 
+    var test_target = b.addTest(.{
+        .root_source_file = .{ .path = "generator/index.zig" },
+    });
+
     var test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&b.addTest("generator/index.zig").step);
+    test_step.dependOn(&test_target.step);
 
     // This test needs to be an object so that vulkan-zig can import types from the root.
     // It does not need to run anyway.
-    const ref_all_decls_test = b.addObject("ref-all-decls-test", "test/ref_all_decls.zig");
+    const ref_all_decls_test = b.addObject(.{
+        .name = "ref-all-decls-test",
+        .root_source_file = .{ .path = "test/ref_all_decls.zig" },
+        .target = target,
+        .optimize = optimize,
+    });
     ref_all_decls_test.addPackage(gen.getPackage("vulkan"));
     test_step.dependOn(&ref_all_decls_test.step);
 }
