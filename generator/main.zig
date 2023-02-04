@@ -62,7 +62,7 @@ pub fn main() !void {
     try out_buffer.append(0);
 
     const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];
-    const tree = try std.zig.parse(allocator, src);
+    const tree = try std.zig.Ast.parse(allocator, src, .zig);
     const formatted = try tree.render(allocator);
     defer allocator.free(formatted);
 
