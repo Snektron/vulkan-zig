@@ -47,7 +47,6 @@ pub const Swapchain = struct {
             .exclusive;
 
         const handle = try gc.vkd.createSwapchainKHR(gc.dev, &.{
-            .flags = .{},
             .surface = gc.surface,
             .min_image_count = image_count,
             .image_format = surface_format.format,
@@ -77,7 +76,7 @@ pub const Swapchain = struct {
             allocator.free(swap_images);
         }
 
-        var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
+        var next_image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{}, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, next_image_acquired, null);
 
         const result = try gc.vkd.acquireNextImageKHR(gc.dev, handle, std.math.maxInt(u64), next_image_acquired, .null_handle);
@@ -172,7 +171,6 @@ pub const Swapchain = struct {
             .swapchain_count = 1,
             .p_swapchains = @ptrCast([*]const vk.SwapchainKHR, &self.handle),
             .p_image_indices = @ptrCast([*]const u32, &self.image_index),
-            .p_results = null,
         });
 
         // Step 4: Acquire next frame
@@ -204,7 +202,6 @@ const SwapImage = struct {
 
     fn init(gc: *const GraphicsContext, image: vk.Image, format: vk.Format) !SwapImage {
         const view = try gc.vkd.createImageView(gc.dev, &.{
-            .flags = .{},
             .image = image,
             .view_type = .@"2d",
             .format = format,
@@ -219,10 +216,10 @@ const SwapImage = struct {
         }, null);
         errdefer gc.vkd.destroyImageView(gc.dev, view, null);
 
-        const image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
+        const image_acquired = try gc.vkd.createSemaphore(gc.dev, &.{}, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, image_acquired, null);
 
-        const render_finished = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
+        const render_finished = try gc.vkd.createSemaphore(gc.dev, &.{}, null);
         errdefer gc.vkd.destroySemaphore(gc.dev, render_finished, null);
 
         const frame_fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{ .signaled_bit = true } }, null);

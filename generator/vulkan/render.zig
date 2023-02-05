@@ -749,7 +749,9 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 } else {
                     try self.renderTypeInfo(field.field_type);
-                    try self.renderContainerDefaultField(name, container, field);
+                    if (!container.is_union) {
+                        try self.renderContainerDefaultField(name, container, field);
+                    }
                     try self.writer.writeAll(", ");
                 }
             }
@@ -758,9 +760,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderContainerDefaultField(self: *Self, name: []const u8, container: reg.Container, field: reg.Container.Field) !void {
-            if (mem.eql(u8, field.name, "pNext")) {
-                try self.writer.writeAll(" = null");
-            } else if (mem.eql(u8, field.name, "sType")) {
+            if (mem.eql(u8, field.name, "sType")) {
                 if (container.stype == null) {
                     return;
                 }
@@ -776,8 +776,30 @@ fn Renderer(comptime WriterType: type) type {
 
                 try self.writer.writeAll(" = .");
                 try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
-            } else if (field.field_type == .name and !container.is_union and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(name, container.extends)) {
+            } else if (field.field_type == .name and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(name, container.extends)) {
                 try self.writer.writeAll(" = FALSE");
+            } else if (field.is_optional) {
+                if (field.field_type == .name) {
+                    const field_type_name = field.field_type.name;
+                    if (self.resolveDeclaration(field_type_name)) |decl_type| {
+                        if (decl_type == .handle) {
+                            try self.writer.writeAll(" = .null_handle");
+                        } else if (decl_type == .bitmask) {
+                            try self.writer.writeAll(" = .{}");
+                        } else if (decl_type == .typedef and decl_type.typedef == .command_ptr) {
+                            try self.writer.writeAll(" = null");
+                        } else if ((decl_type == .typedef and builtin_types.has(decl_type.typedef.name)) or
+                            (decl_type == .foreign and builtin_types.has(field_type_name)))
+                        {
+                            try self.writer.writeAll(" = 0");
+                        }
+                    }
+                } else if (field.field_type == .pointer) {
+                    try self.writer.writeAll(" = null");
+                }
+            } else if (field.field_type == .pointer and field.field_type.pointer.is_optional) {
+                // pointer nullability could be here or above
+                try self.writer.writeAll(" = null");
             }
         }
 

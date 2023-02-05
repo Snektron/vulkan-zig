@@ -109,10 +109,7 @@ pub const GraphicsContext = struct {
         };
 
         self.instance = try self.vkb.createInstance(&.{
-            .flags = .{},
             .p_application_info = &app_info,
-            .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
             .enabled_extension_count = glfw_exts_count,
             .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, glfw_exts),
         }, null);
@@ -192,13 +189,11 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
     const priority = [_]f32{1};
     const qci = [_]vk.DeviceQueueCreateInfo{
         .{
-            .flags = .{},
             .queue_family_index = candidate.queues.graphics_family,
             .queue_count = 1,
             .p_queue_priorities = &priority,
         },
         .{
-            .flags = .{},
             .queue_family_index = candidate.queues.present_family,
             .queue_count = 1,
             .p_queue_priorities = &priority,
@@ -211,14 +206,10 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
         2;
 
     return try vki.createDevice(candidate.pdev, &.{
-        .flags = .{},
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,
-        .enabled_layer_count = 0,
-        .pp_enabled_layer_names = undefined,
         .enabled_extension_count = required_device_extensions.len,
         .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &required_device_extensions),
-        .p_enabled_features = null,
     }, null);
 }
 

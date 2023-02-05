@@ -263,6 +263,7 @@ pub fn parseMember(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: b
         .field_type = decl.decl_type,
         .bits = null,
         .is_buffer_len = false,
+        .is_optional = false,
     };
 
     if (try xctok.peek()) |tok| {

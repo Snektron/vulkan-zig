@@ -61,6 +61,7 @@ pub const Container = struct {
         field_type: TypeInfo,
         bits: ?usize,
         is_buffer_len: bool,
+        is_optional: bool,
     };
 
     stype: ?[]const u8,

@@ -92,18 +92,14 @@ pub fn main() !void {
     defer destroyFramebuffers(&gc, allocator, framebuffers);
 
     const pool = try gc.vkd.createCommandPool(gc.dev, &.{
-        .flags = .{},
         .queue_family_index = gc.graphics_queue.family,
     }, null);
     defer gc.vkd.destroyCommandPool(gc.dev, pool, null);
 
     const buffer = try gc.vkd.createBuffer(gc.dev, &.{
-        .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
         .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
         .sharing_mode = .exclusive,
-        .queue_family_index_count = 0,
-        .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, buffer, null);
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, buffer);
@@ -166,12 +162,9 @@ pub fn main() !void {
 
 fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer) !void {
     const staging_buffer = try gc.vkd.createBuffer(gc.dev, &.{
-        .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
         .usage = .{ .transfer_src_bit = true },
         .sharing_mode = .exclusive,
-        .queue_family_index_count = 0,
-        .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, staging_buffer, null);
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, staging_buffer);
@@ -203,7 +196,6 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
 
     try gc.vkd.beginCommandBuffer(cmdbuf, &.{
         .flags = .{ .one_time_submit_bit = true },
-        .p_inheritance_info = null,
     });
 
     const region = vk.BufferCopy{
@@ -216,13 +208,8 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
     try gc.vkd.endCommandBuffer(cmdbuf);
 
     const si = vk.SubmitInfo{
-        .wait_semaphore_count = 0,
-        .p_wait_semaphores = undefined,
-        .p_wait_dst_stage_mask = undefined,
         .command_buffer_count = 1,
         .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
-        .signal_semaphore_count = 0,
-        .p_signal_semaphores = undefined,
     };
     try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &si), .null_handle);
     try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
@@ -267,10 +254,7 @@ fn createCommandBuffers(
     };
 
     for (cmdbufs) |cmdbuf, i| {
-        try gc.vkd.beginCommandBuffer(cmdbuf, &.{
-            .flags = .{},
-            .p_inheritance_info = null,
-        });
+        try gc.vkd.beginCommandBuffer(cmdbuf, &.{});
 
         gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
         gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &scissor));
@@ -315,7 +299,6 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
 
     for (framebuffers) |*fb| {
         fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
-            .flags = .{},
             .render_pass = render_pass,
             .attachment_count = 1,
             .p_attachments = @ptrCast([*]const vk.ImageView, &swapchain.swap_images[i].view),
@@ -336,7 +319,6 @@ fn destroyFramebuffers(gc: *const GraphicsContext, allocator: Allocator, framebu
 
 fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
-        .flags = .{},
         .format = swapchain.surface_format.format,
         .samples = .{ .@"1_bit" = true },
         .load_op = .clear,
@@ -353,26 +335,16 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     };
 
     const subpass = vk.SubpassDescription{
-        .flags = .{},
         .pipeline_bind_point = .graphics,
-        .input_attachment_count = 0,
-        .p_input_attachments = undefined,
         .color_attachment_count = 1,
         .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_ref),
-        .p_resolve_attachments = null,
-        .p_depth_stencil_attachment = null,
-        .preserve_attachment_count = 0,
-        .p_preserve_attachments = undefined,
     };
 
     return try gc.vkd.createRenderPass(gc.dev, &.{
-        .flags = .{},
         .attachment_count = 1,
         .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &color_attachment),
         .subpass_count = 1,
         .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
-        .dependency_count = 0,
-        .p_dependencies = undefined,
     }, null);
 }
 
@@ -382,14 +354,12 @@ fn createPipeline(
     render_pass: vk.RenderPass,
 ) !vk.Pipeline {
     const vert = try gc.vkd.createShaderModule(gc.dev, &.{
-        .flags = .{},
         .code_size = shaders.triangle_vert.len,
         .p_code = @ptrCast([*]const u32, &shaders.triangle_vert),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
 
     const frag = try gc.vkd.createShaderModule(gc.dev, &.{
-        .flags = .{},
         .code_size = shaders.triangle_frag.len,
         .p_code = @ptrCast([*]const u32, &shaders.triangle_frag),
     }, null);
@@ -397,23 +367,18 @@ fn createPipeline(
 
     const pssci = [_]vk.PipelineShaderStageCreateInfo{
         .{
-            .flags = .{},
             .stage = .{ .vertex_bit = true },
             .module = vert,
             .p_name = "main",
-            .p_specialization_info = null,
         },
         .{
-            .flags = .{},
             .stage = .{ .fragment_bit = true },
             .module = frag,
             .p_name = "main",
-            .p_specialization_info = null,
         },
     };
 
     const pvisci = vk.PipelineVertexInputStateCreateInfo{
-        .flags = .{},
         .vertex_binding_description_count = 1,
         .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &Vertex.binding_description),
         .vertex_attribute_description_count = Vertex.attribute_description.len,
@@ -421,13 +386,11 @@ fn createPipeline(
     };
 
     const piasci = vk.PipelineInputAssemblyStateCreateInfo{
-        .flags = .{},
         .topology = .triangle_list,
         .primitive_restart_enable = vk.FALSE,
     };
 
     const pvsci = vk.PipelineViewportStateCreateInfo{
-        .flags = .{},
         .viewport_count = 1,
         .p_viewports = undefined, // set in createCommandBuffers with cmdSetViewport
         .scissor_count = 1,
@@ -435,7 +398,6 @@ fn createPipeline(
     };
 
     const prsci = vk.PipelineRasterizationStateCreateInfo{
-        .flags = .{},
         .depth_clamp_enable = vk.FALSE,
         .rasterizer_discard_enable = vk.FALSE,
         .polygon_mode = .fill,
@@ -449,11 +411,9 @@ fn createPipeline(
     };
 
     const pmsci = vk.PipelineMultisampleStateCreateInfo{
-        .flags = .{},
         .rasterization_samples = .{ .@"1_bit" = true },
         .sample_shading_enable = vk.FALSE,
         .min_sample_shading = 1,
-        .p_sample_mask = null,
         .alpha_to_coverage_enable = vk.FALSE,
         .alpha_to_one_enable = vk.FALSE,
     };
@@ -470,7 +430,6 @@ fn createPipeline(
     };
 
     const pcbsci = vk.PipelineColorBlendStateCreateInfo{
-        .flags = .{},
         .logic_op_enable = vk.FALSE,
         .logic_op = .copy,
         .attachment_count = 1,
