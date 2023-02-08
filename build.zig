@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
     const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the path to the Vulkan registry") orelse "examples/vk.xml";
 
     const gen = vkgen.VkGenerateStep.create(b, vk_xml_path, "vk.zig");
-    triangle_exe.addPackage(gen.getPackage("vulkan"));
+    triangle_exe.addModule("vulkan", gen.getModule());
 
     const shaders = vkgen.ShaderCompileStep.create(
         b,
@@ -36,7 +36,7 @@ pub fn build(b: *std.Build) void {
     );
     shaders.add("triangle_vert", "examples/shaders/triangle.vert", .{});
     shaders.add("triangle_frag", "examples/shaders/triangle.frag", .{});
-    triangle_exe.addPackage(shaders.getPackage("shaders"));
+    triangle_exe.addModule("shaders", shaders.getModule());
 
     const triangle_run_cmd = triangle_exe.run();
     triangle_run_cmd.step.dependOn(b.getInstallStep());
@@ -58,6 +58,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    ref_all_decls_test.addPackage(gen.getPackage("vulkan"));
+    ref_all_decls_test.addModule("vulkan", gen.getModule());
     test_step.dependOn(&ref_all_decls_test.step);
 }

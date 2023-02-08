@@ -96,9 +96,11 @@ pub const ShaderCompileStep = struct {
         return self;
     }
 
-    /// Returns the shaders package with name `package_name`.
-    pub fn getPackage(self: *ShaderCompileStep, package_name: []const u8) std.build.Pkg {
-        return .{ .name = package_name, .source = self.getSource() };
+    /// Returns the shaders module with name.
+    pub fn getModule(self: *ShaderCompileStep) *std.build.Module {
+        return self.b.createModule(.{
+            .source_file = self.getSource(),
+        });
     }
 
     /// Returns the file source for the generated shader resource code.

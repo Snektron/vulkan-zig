@@ -1,16 +1,16 @@
 const std = @import("std");
 const generate = @import("generator.zig").generate;
 const path = std.fs.path;
-const Builder = std.build.Builder;
-const Step = std.build.Step;
+const Build = std.Build;
+const Step = Build.Step;
 
 /// build.zig integration for Vulkan binding generation. This step can be used to generate
 /// Vulkan bindings at compiletime from vk.xml, by providing the path to vk.xml and the output
 /// path relative to zig-cache. The final package can then be obtained by `package()`, the result
-/// of which can be added to the project using `std.build.Builder.addPackage`.
+/// of which can be added to the project using `std.Build.addModule`.
 pub const GenerateStep = struct {
     step: Step,
-    builder: *Builder,
+    builder: *Build,
 
     /// The path to vk.xml
     spec_path: []const u8,
@@ -20,7 +20,7 @@ pub const GenerateStep = struct {
     /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
     /// vk.xml, relative to the project root. The generated bindings will be placed at
     /// `out_path`, which is relative to the zig-cache directory.
-    pub fn create(builder: *Builder, spec_path: []const u8, out_path: []const u8) *GenerateStep {
+    pub fn create(builder: *Build, spec_path: []const u8, out_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
         const full_out_path = path.join(builder.allocator, &[_][]const u8{
             builder.build_root,
@@ -44,7 +44,7 @@ pub const GenerateStep = struct {
     /// root. Typically, the location of the LunarG SDK root can be retrieved by querying for the VULKAN_SDK
     /// environment variable, set by activating the environment setup script located in the SDK root.
     /// `builder` and `out_path` are used in the same manner as `init`.
-    pub fn createFromSdk(builder: *Builder, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
+    pub fn createFromSdk(builder: *Build, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
         const spec_path = std.fs.path.join(
             builder.allocator,
             &[_][]const u8{ sdk_path, "share/vulkan/registry/vk.xml" },
@@ -53,9 +53,11 @@ pub const GenerateStep = struct {
         return create(builder, spec_path, out_path);
     }
 
-    /// Returns the package with the generated budings, with name `package_name`.
-    pub fn getPackage(self: *GenerateStep, package_name: []const u8) std.build.Pkg {
-        return .{ .name = package_name, .source = self.getSource() };
+    /// Returns the module with the generated budings, with name `module_name`.
+    pub fn getModule(self: *GenerateStep) *std.build.Module {
+        return self.builder.createModule(.{
+            .source_file = self.getSource(),
+        });
     }
 
     /// Returns the file source for the generated bindings.
