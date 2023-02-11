@@ -210,6 +210,7 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
     const si = vk.SubmitInfo{
         .command_buffer_count = 1,
         .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
+        .p_wait_dst_stage_mask = undefined,
     };
     try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &si), .null_handle);
     try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
