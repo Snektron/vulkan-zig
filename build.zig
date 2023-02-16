@@ -5,14 +5,35 @@ const Step = std.build.Step;
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const vk_xml_path: ?[]const u8 = b.option([]const u8, "registry", "Override the path to the Vulkan registry");
 
+    // using the package manager, this artifact can be obtained by the user
+    // through `b.dependency(<name in build.zig.zon>, .{}).artifact("generator")`.
+    // with that, the user need only `.addArg("path/to/vk.xml")`, and then obtain
+    // a file source to the generated code with `.addOutputArg("vk.zig")`
     const generator_exe = b.addExecutable(.{
-        .name = "vulkan-zig-generator",
+        .name = "generator",
         .root_source_file = .{ .path = "generator/main.zig" },
         .target = target,
         .optimize = optimize,
     });
     generator_exe.install();
+
+    // or they can skip all that, and just make sure to pass `.registry = "path/to/vk.xml"` to `b.dependency`,
+    // and then obtain the module directly via `.module("vulkan-zig")`.
+    if (vk_xml_path) |path| {
+        const generate_cmd = b.addRunArtifact(generator_exe);
+
+        if (!std.fs.path.isAbsolute(path)) @panic("Make sure to assign an absolute path to the `registry` option (see: std.Build.pathFromRoot).\n");
+        generate_cmd.addArg(path);
+
+        b.addModule(.{
+            .name = "vulkan-zig",
+            .source_file = generate_cmd.addOutputFileArg("vk.zig"),
+        });
+    }
+
+    // remaindure of the script is for local testing
 
     const triangle_exe = b.addExecutable(.{
         .name = "triangle",
@@ -24,9 +45,8 @@ pub fn build(b: *std.Build) void {
     triangle_exe.linkLibC();
     triangle_exe.linkSystemLibrary("glfw");
 
-    const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the path to the Vulkan registry") orelse "examples/vk.xml";
-
-    const gen = vkgen.VkGenerateStep.create(b, vk_xml_path, "vk.zig");
+    const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry") orelse "examples/vk.xml";
+    const gen = vkgen.VkGenerateStep.create(b, example_registry, "vk.zig");
     triangle_exe.addModule("vulkan", gen.getModule());
 
     const shaders = vkgen.ShaderCompileStep.create(
@@ -39,8 +59,9 @@ pub fn build(b: *std.Build) void {
     triangle_exe.addModule("shaders", shaders.getModule());
 
     const triangle_run_cmd = b.addRunArtifact(triangle_exe);
-    triangle_run_cmd.condition = .always;
     triangle_run_cmd.step.dependOn(b.getInstallStep());
+    triangle_run_cmd.condition = .always;
+
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
 
