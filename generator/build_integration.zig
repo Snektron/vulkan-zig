@@ -28,10 +28,7 @@ pub const ShaderCompileStep = struct {
                 hasher.update(arg);
             }
             for (self.watched_files) |file_path| {
-                const full_path = std.fs.path.join(b.allocator, &.{
-                    b.build_root,
-                    file_path,
-                }) catch unreachable;
+                const full_path = b.build_root.join(b.allocator, &.{file_path}) catch unreachable;
 
                 const source = std.fs.cwd().readFileAlloc(
                     b.allocator,
@@ -113,10 +110,7 @@ pub const ShaderCompileStep = struct {
     /// This path can then be used to include the binary into an executable, for example by passing it
     /// to @embedFile via an additional generated file.
     pub fn add(self: *ShaderCompileStep, name: []const u8, src: []const u8, options: ShaderOptions) void {
-        const full_source_path = std.fs.path.join(self.b.allocator, &.{
-            self.b.build_root,
-            src,
-        }) catch unreachable;
+        const full_source_path = self.b.build_root.join(self.b.allocator, &.{src}) catch unreachable;
         self.shaders.append(.{
             .name = name,
             .source_path = full_source_path,
@@ -176,9 +170,12 @@ pub const ShaderCompileStep = struct {
         var shaders_file_contents = std.ArrayList(u8).init(self.b.allocator);
         const shaders_out = shaders_file_contents.writer();
 
-        const shaders_dir = try std.fs.path.join(
+        const shaders_dir = try self.b.build_root.join(
             self.b.allocator,
-            &.{ self.b.build_root, self.b.cache_root, cache_dir },
+            &.{try self.b.cache_root.join(
+                self.b.allocator,
+                &.{cache_dir},
+            )},
         );
         try cwd.makePath(shaders_dir);
 

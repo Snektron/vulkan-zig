@@ -38,7 +38,8 @@ pub fn build(b: *std.Build) void {
     shaders.add("triangle_frag", "examples/shaders/triangle.frag", .{});
     triangle_exe.addModule("shaders", shaders.getModule());
 
-    const triangle_run_cmd = triangle_exe.run();
+    const triangle_run_cmd = b.addRunArtifact(triangle_exe);
+    triangle_run_cmd.condition = .always;
     triangle_run_cmd.step.dependOn(b.getInstallStep());
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
