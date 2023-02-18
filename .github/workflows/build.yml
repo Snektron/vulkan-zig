@@ -37,7 +37,7 @@ jobs:
 
     - name: Build with latest zig & vk.xml
       run: |
-        zig build -Dexample-registry=./vk.xml
+        zig build -Dexample-registry=./examples/vk.xml
 
     - name: Archive vk.xml
       uses: actions/upload-artifact@v2
