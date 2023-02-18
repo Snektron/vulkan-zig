@@ -12,15 +12,13 @@ pub const GenerateStep = struct {
     step: Step,
     builder: *Build,
     generated_file: std.build.GeneratedFile,
-    /// Name of the resulting file
-    output_name: []const u8,
     /// The path to vk.xml
     spec_path: []const u8,
 
     /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
     /// vk.xml, relative to the project root. The generated bindings will be placed at
     /// `out_path`, which is relative to the zig-cache directory.
-    pub fn create(builder: *Build, spec_path: []const u8, output_name: []const u8) *GenerateStep {
+    pub fn create(builder: *Build, spec_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
         self.* = .{
             .step = Step.init(.custom, "vulkan-generate", builder.allocator, make),
@@ -28,7 +26,6 @@ pub const GenerateStep = struct {
             .generated_file = .{
                 .step = &self.step,
             },
-            .output_name = output_name,
             .spec_path = spec_path,
         };
         return self;
@@ -74,9 +71,7 @@ pub const GenerateStep = struct {
         // TODO: Look into whether this is the right way to be doing
         // this - maybe the file-level caching API has some benefits I
         // don't understand.
-        man.hash.addBytes(self.spec_path);
         man.hash.addBytes(spec);
-        man.hash.addBytes(self.output_name);
 
         const already_exists = man.hit() catch |err| @panic(switch (err) {
             inline else => |e| "Cache error: " ++ @errorName(e),
@@ -84,7 +79,7 @@ pub const GenerateStep = struct {
         const digest = man.final();
         const output_file_path = try self.builder.cache_root.join(
             self.builder.allocator,
-            &.{ "o", &digest, self.output_name },
+            &.{ "o", &digest, "vk.zig" },
         );
         if (already_exists) {
             self.generated_file.path = output_file_path;

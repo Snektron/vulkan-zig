@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
     triangle_exe.linkSystemLibrary("glfw");
 
     const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry") orelse "examples/vk.xml";
-    const gen = vkgen.VkGenerateStep.create(b, example_registry, "vk.zig");
+    const gen = vkgen.VkGenerateStep.create(b, example_registry);
     triangle_exe.addModule("vulkan", gen.getModule());
 
     const shaders = vkgen.ShaderCompileStep.create(
