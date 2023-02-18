@@ -42,6 +42,44 @@ pub fn build(b: *Builder) void {
 ```
 This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addModule`, after which the bindings will be made available to the executable under the name passed to `getModule`.
 
+### Generation with the package manager from build.zig
+There is also support for adding this project as a dependency through zig package manager in its current form. In order to do this, add this repo as a dependency in your build.zig.zon:
+```zig
+.{
+    // -- snip --
+    .dependencies = .{
+        // -- snip --
+        .vulkan_zig = .{
+            .url = "https://github.com/Snektron/vulkan-zig/archive/<commit SHA>.tar.gz",
+            .hash = "<dependency hash>",
+        },
+    },
+}
+```
+And then in your build.zig file, you'll need to add a line like this to your build function:
+```zig
+const vkzig_dep = b.dependency("vulkan_zig", .{
+    .registry = b.pathFromRoot("path/to/vk.xml"),
+});
+const vkzig_bindings = vkzig_dep.module("vulkan-zig");
+exe.addModule("vulkan-zig", vkzig_bindings);
+```
+That will allow you to `@import("vulkan-zig")` in your executable's source.
+
+### Manual generation with the package manager from build.zig
+In the event you have a specific need for it, the generator executable is made available through the dependency, allowing you to run the executable as a build step in your own build.zig file.
+Doing so should look a bit like this:
+```zig
+const vkzig_dep = b.dependency("vulkan_zig", .{}); // passing the registry argument here not necessary when using the executable directly
+const vkzig_generator = vkzig_dep.artifact("generator");
+
+vkzig_generator.addArg("path/to/vk.xml");
+const vkzig_src = vkzig_generator.addOutputFileArg("vk.zig"); // this is the FileSource representing the generated bindings
+
+const vkzig_bindings = b.createModule("vulkan-zig", .{ .source_file = vkzig_src });
+exe.addModule("vulkan-zig", vkzig_bindings);
+```
+
 ### Function & field renaming
 Functions and fields are renamed to be more or less in line with [Zig's standard library style](https://ziglang.org/documentation/master/#Style-Guide):
 * The vk prefix is removed everywhere

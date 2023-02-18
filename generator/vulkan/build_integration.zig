@@ -11,31 +11,22 @@ const Step = Build.Step;
 pub const GenerateStep = struct {
     step: Step,
     builder: *Build,
-
+    generated_file: std.build.GeneratedFile,
     /// The path to vk.xml
     spec_path: []const u8,
-
-    generated_file: std.build.GeneratedFile,
 
     /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
     /// vk.xml, relative to the project root. The generated bindings will be placed at
     /// `out_path`, which is relative to the zig-cache directory.
-    pub fn create(builder: *Build, spec_path: []const u8, out_path: []const u8) *GenerateStep {
+    pub fn create(builder: *Build, spec_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
-        const full_out_path = path.join(builder.allocator, &[_][]const u8{
-            builder.build_root,
-            builder.cache_root,
-            out_path,
-        }) catch unreachable;
-
         self.* = .{
             .step = Step.init(.custom, "vulkan-generate", builder.allocator, make),
             .builder = builder,
-            .spec_path = spec_path,
             .generated_file = .{
                 .step = &self.step,
-                .path = full_out_path,
             },
+            .spec_path = spec_path,
         };
         return self;
     }
@@ -44,13 +35,13 @@ pub const GenerateStep = struct {
     /// root. Typically, the location of the LunarG SDK root can be retrieved by querying for the VULKAN_SDK
     /// environment variable, set by activating the environment setup script located in the SDK root.
     /// `builder` and `out_path` are used in the same manner as `init`.
-    pub fn createFromSdk(builder: *Build, sdk_path: []const u8, out_path: []const u8) *GenerateStep {
+    pub fn createFromSdk(builder: *Build, sdk_path: []const u8, output_name: []const u8) *GenerateStep {
         const spec_path = std.fs.path.join(
             builder.allocator,
             &[_][]const u8{ sdk_path, "share/vulkan/registry/vk.xml" },
         ) catch unreachable;
 
-        return create(builder, spec_path, out_path);
+        return create(builder, spec_path, output_name);
     }
 
     /// Returns the module with the generated budings, with name `module_name`.
@@ -73,7 +64,27 @@ pub const GenerateStep = struct {
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
 
+        var man = self.builder.cache.obtain();
+        defer man.deinit();
+
         const spec = try cwd.readFileAlloc(self.builder.allocator, self.spec_path, std.math.maxInt(usize));
+        // TODO: Look into whether this is the right way to be doing
+        // this - maybe the file-level caching API has some benefits I
+        // don't understand.
+        man.hash.addBytes(spec);
+
+        const already_exists = man.hit() catch |err| @panic(switch (err) {
+            inline else => |e| "Cache error: " ++ @errorName(e),
+        });
+        const digest = man.final();
+        const output_file_path = try self.builder.cache_root.join(
+            self.builder.allocator,
+            &.{ "o", &digest, "vk.zig" },
+        );
+        if (already_exists) {
+            self.generated_file.path = output_file_path;
+            return;
+        }
 
         var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
         generate(self.builder.allocator, spec, out_buffer.writer()) catch |err| switch (err) {
@@ -101,10 +112,16 @@ pub const GenerateStep = struct {
         const tree = try std.zig.Ast.parse(self.builder.allocator, src, .zig);
         std.debug.assert(tree.errors.len == 0); // If this triggers, vulkan-zig produced invalid code.
 
-        var formatted = try tree.render(self.builder.allocator);
+        const formatted = try tree.render(self.builder.allocator);
 
-        const dir = path.dirname(self.generated_file.path.?).?;
-        try cwd.makePath(dir);
-        try cwd.writeFile(self.generated_file.path.?, formatted);
+        const output_dir_path = std.fs.path.dirname(output_file_path).?;
+        cwd.makePath(output_dir_path) catch |err| {
+            std.debug.print("unable to make path {s}: {s}\n", .{ output_dir_path, @errorName(err) });
+            return err;
+        };
+
+        try cwd.writeFile(output_file_path, formatted);
+        self.generated_file.path = output_file_path;
+        try man.writeManifest();
     }
 };
