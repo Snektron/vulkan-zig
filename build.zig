@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
     triangle_exe.linkLibC();
     triangle_exe.linkSystemLibrary("glfw");
 
-    const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry") orelse "examples/vk.xml";
+    const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry used for the examples") orelse "examples/vk.xml";
     const gen = vkgen.VkGenerateStep.create(b, example_registry);
     triangle_exe.addModule("vulkan", gen.getModule());
 
