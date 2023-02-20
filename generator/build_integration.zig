@@ -170,12 +170,9 @@ pub const ShaderCompileStep = struct {
         var shaders_file_contents = std.ArrayList(u8).init(self.b.allocator);
         const shaders_out = shaders_file_contents.writer();
 
-        const shaders_dir = try self.b.build_root.join(
+        const shaders_dir = try self.b.cache_root.join(
             self.b.allocator,
-            &.{try self.b.cache_root.join(
-                self.b.allocator,
-                &.{cache_dir},
-            )},
+            &.{cache_dir},
         );
         try cwd.makePath(shaders_dir);
 
