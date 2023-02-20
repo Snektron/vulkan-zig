@@ -115,8 +115,8 @@ fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
         return false;
     }
 
-    for (lhs) |c, i| {
-        if (std.ascii.toLower(c) != std.ascii.toLower(rhs[i])) {
+    for (lhs, rhs) |l, r| {
+        if (std.ascii.toLower(l) != std.ascii.toLower(r)) {
             return false;
         }
     }
@@ -453,7 +453,7 @@ fn Renderer(comptime WriterType: type) type {
                 .expr => |expr| try self.renderApiConstantExpr(expr),
                 .version => |version| {
                     try self.writer.writeAll("makeApiVersion(");
-                    for (version) |part, i| {
+                    for (version, 0..) |part, i| {
                         if (i != 0) {
                             try self.writer.writeAll(", ");
                         }
@@ -884,7 +884,7 @@ fn Renderer(comptime WriterType: type) type {
                     }
                 }
 
-                for (flags_by_bitpos[0..bits.bitwidth]) |maybe_flag_name, bitpos| {
+                for (flags_by_bitpos[0..bits.bitwidth], 0..) |maybe_flag_name, bitpos| {
                     if (maybe_flag_name) |flag_name| {
                         const field_name = try extractBitflagFieldName(bitflag_name, flag_name);
                         try self.writeIdentifierWithCase(.snake, field_name);
