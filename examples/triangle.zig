@@ -177,7 +177,7 @@ fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.B
         defer gc.vkd.unmapMemory(gc.dev, staging_memory);
 
         const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
-        for (vertices) |vertex, i| {
+        for (vertices, 0..) |vertex, i| {
             gpu_vertices[i] = vertex;
         }
     }
@@ -254,7 +254,7 @@ fn createCommandBuffers(
         .extent = extent,
     };
 
-    for (cmdbufs) |cmdbuf, i| {
+    for (cmdbufs, framebuffers) |cmdbuf, framebuffer| {
         try gc.vkd.beginCommandBuffer(cmdbuf, &.{});
 
         gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
@@ -268,7 +268,7 @@ fn createCommandBuffers(
 
         gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
             .render_pass = render_pass,
-            .framebuffer = framebuffers[i],
+            .framebuffer = framebuffer,
             .render_area = render_area,
             .clear_value_count = 1,
             .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),

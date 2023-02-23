@@ -549,7 +549,7 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![4][]const u8 {
 
     _ = try xctok.expect(.lparen);
     var version: [4][]const u8 = undefined;
-    for (version) |*part, i| {
+    for (&version, 0..) |*part, i| {
         if (i != 0) {
             _ = try xctok.expect(.comma);
         }

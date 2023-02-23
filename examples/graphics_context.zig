@@ -147,7 +147,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
-        for (self.mem_props.memory_types[0..self.mem_props.memory_type_count]) |mem_type, i| {
+        for (self.mem_props.memory_types[0..self.mem_props.memory_type_count], 0..) |mem_type, i| {
             if (memory_type_bits & (@as(u32, 1) << @truncate(u5, i)) != 0 and mem_type.property_flags.contains(flags)) {
                 return @truncate(u32, i);
             }
@@ -285,7 +285,7 @@ fn allocateQueues(vki: InstanceDispatch, pdev: vk.PhysicalDevice, allocator: All
     var graphics_family: ?u32 = null;
     var present_family: ?u32 = null;
 
-    for (families) |properties, i| {
+    for (families, 0..) |properties, i| {
         const family = @intCast(u32, i);
 
         if (graphics_family == null and properties.queue_flags.graphics_bit) {
