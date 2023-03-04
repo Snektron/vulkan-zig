@@ -1,5 +1,5 @@
 const std = @import("std");
-const generate = @import("generator.zig").generate;
+const generator = @import("generator.zig");
 const path = std.fs.path;
 const Build = std.Build;
 const Step = Build.Step;
@@ -14,6 +14,10 @@ pub const GenerateStep = struct {
     generated_file: std.build.GeneratedFile,
     /// The path to vk.xml
     spec_path: []const u8,
+    /// The API to generate for.
+    /// Defaults to Vulkan.
+    // Note: VulkanSC is experimental.
+    api: generator.Api = .vulkan,
 
     /// Initialize a Vulkan generation step, for `builder`. `spec_path` is the path to
     /// vk.xml, relative to the project root. The generated bindings will be placed at
@@ -42,6 +46,11 @@ pub const GenerateStep = struct {
         ) catch unreachable;
 
         return create(builder, spec_path, output_name);
+    }
+
+    /// Set the API to generate for.
+    pub fn setApi(self: *GenerateStep, api_to_generate: generator.Api) void {
+        self.api = api_to_generate;
     }
 
     /// Returns the module with the generated budings, with name `module_name`.
@@ -87,7 +96,7 @@ pub const GenerateStep = struct {
         }
 
         var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
-        generate(self.builder.allocator, spec, out_buffer.writer()) catch |err| switch (err) {
+        generator.generate(self.builder.allocator, self.api, spec, out_buffer.writer()) catch |err| switch (err) {
             error.InvalidXml => {
                 std.log.err("invalid vulkan registry - invalid xml", .{});
                 std.log.err("please check that the correct vk.xml file is passed", .{});

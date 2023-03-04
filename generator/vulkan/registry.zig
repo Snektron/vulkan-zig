@@ -1,3 +1,8 @@
+pub const Api = enum {
+    vulkan,
+    vulkansc,
+};
+
 pub const Registry = struct {
     decls: []Declaration,
     api_constants: []ApiConstant,

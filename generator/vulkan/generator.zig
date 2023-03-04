@@ -99,8 +99,8 @@ pub const Generator = struct {
     registry: reg.Registry,
     id_renderer: IdRenderer,
 
-    fn init(allocator: Allocator, spec: *xml.Element) !Generator {
-        const result = try parseXml(allocator, spec);
+    fn init(allocator: Allocator, spec: *xml.Element, api: reg.Api) !Generator {
+        const result = try parseXml(allocator, spec, api);
 
         const tags = try allocator.alloc([]const u8, result.registry.tags.len);
         for (tags, result.registry.tags) |*tag, registry_tag| tag.* = registry_tag.name;
@@ -170,11 +170,15 @@ pub const Generator = struct {
     }
 };
 
+/// The vulkan registry contains the specification for multiple APIs: Vulkan and VulkanSC. This enum
+/// describes applicable APIs.
+pub const Api = reg.Api;
+
 /// Main function for generating the Vulkan bindings. vk.xml is to be provided via `spec_xml`,
 /// and the resulting binding is written to `writer`. `allocator` will be used to allocate temporary
 /// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
-/// directly.
-pub fn generate(allocator: Allocator, spec_xml: []const u8, writer: anytype) !void {
+/// directly. `api` is the API to generate the bindings for, usually `.vulkan`.
+pub fn generate(allocator: Allocator, api: Api, spec_xml: []const u8, writer: anytype) !void {
     const spec = xml.parse(allocator, spec_xml) catch |err| switch (err) {
         error.InvalidDocument,
         error.UnexpectedEof,
@@ -191,7 +195,7 @@ pub fn generate(allocator: Allocator, spec_xml: []const u8, writer: anytype) !vo
     };
     defer spec.deinit();
 
-    var gen = Generator.init(allocator, spec.root) catch |err| switch (err) {
+    var gen = Generator.init(allocator, spec.root, api) catch |err| switch (err) {
         error.InvalidXml,
         error.InvalidCharacter,
         error.Overflow,

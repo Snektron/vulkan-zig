@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
         });
     }
 
-    // remaindure of the script is for local testing
+    // remainder of the script is for local testing
 
     const triangle_exe = b.addExecutable(.{
         .name = "triangle",

@@ -1,7 +1,13 @@
 const std = @import("std");
-const generate = @import("vulkan/generator.zig").generate;
+const generator = @import("vulkan/generator.zig");
 
-const usage = "Usage: {s} [-h|--help] <spec xml path> <output zig source>\n";
+const usage =
+    \\Usage: {s} [options] <spec xml path> <output zig source>
+    \\Options:
+    \\-h --help        show this message and exit.
+    \\-a --api <api>   Generate API for 'vulkan' or 'vulkansc'. Defaults to 'vulkan'.
+    \\
+;
 
 pub fn main() !void {
     const stderr = std.io.getStdErr();
@@ -15,6 +21,7 @@ pub fn main() !void {
 
     var maybe_xml_path: ?[]const u8 = null;
     var maybe_out_path: ?[]const u8 = null;
+    var api = generator.Api.vulkan;
 
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
@@ -32,12 +39,22 @@ pub fn main() !void {
                 .{prog_name},
             );
             return;
+        } else if (std.mem.eql(u8, arg, "-a") or std.mem.eql(u8, arg, "--api")) {
+            const api_str = args.next() orelse {
+                try stderr.writer().print("Error: {s} expects argument <api>\n", .{arg});
+                return;
+            };
+            api = std.meta.stringToEnum(generator.Api, api_str) orelse {
+                try stderr.writer().print("Error: Invalid api '{s}'", .{api_str});
+                return;
+            };
         } else if (maybe_xml_path == null) {
             maybe_xml_path = arg;
         } else if (maybe_out_path == null) {
             maybe_out_path = arg;
         } else {
             try stderr.writer().print("Error: Superficial argument '{s}'\n", .{arg});
+            return;
         }
     }
 
@@ -58,7 +75,7 @@ pub fn main() !void {
     };
 
     var out_buffer = std.ArrayList(u8).init(allocator);
-    try generate(allocator, xml_src, out_buffer.writer());
+    try generator.generate(allocator, api, xml_src, out_buffer.writer());
     try out_buffer.append(0);
 
     const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];

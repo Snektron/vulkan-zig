@@ -192,6 +192,7 @@ fn Renderer(comptime WriterType: type) type {
             for (registry.decls) |*decl| {
                 const result = try declarations_by_name.getOrPut(decl.name);
                 if (result.found_existing) {
+                    std.log.err("duplicate registry entry '{s}'", .{decl.name});
                     return error.InvalidRegistry;
                 }
 
