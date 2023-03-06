@@ -27,8 +27,7 @@ pub fn build(b: *std.Build) void {
         if (!std.fs.path.isAbsolute(path)) @panic("Make sure to assign an absolute path to the `registry` option (see: std.Build.pathFromRoot).\n");
         generate_cmd.addArg(path);
 
-        b.addModule(.{
-            .name = "vulkan-zig",
+        _ = b.addModule("vulkan-zig", .{
             .source_file = generate_cmd.addOutputFileArg("vk.zig"),
         });
     }
