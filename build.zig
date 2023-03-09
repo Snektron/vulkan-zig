@@ -2,6 +2,9 @@ const std = @import("std");
 const vkgen = @import("generator/index.zig");
 const Step = std.build.Step;
 
+pub const ShaderCompileStep = vkgen.ShaderCompileStep;
+pub const VkGenerateStep = vkgen.VkGenerateStep;
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -45,10 +48,10 @@ pub fn build(b: *std.Build) void {
     triangle_exe.linkSystemLibrary("glfw");
 
     const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry used for the examples") orelse "examples/vk.xml";
-    const gen = vkgen.VkGenerateStep.create(b, example_registry);
+    const gen = VkGenerateStep.create(b, example_registry);
     triangle_exe.addModule("vulkan", gen.getModule());
 
-    const shaders = vkgen.ShaderCompileStep.create(
+    const shaders = ShaderCompileStep.create(
         b,
         &[_][]const u8{ "glslc", "--target-env=vulkan1.2" },
         "-o",
