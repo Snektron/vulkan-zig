@@ -1,6 +1,5 @@
 pub const generateVk = @import("vulkan/generator.zig").generate;
 pub const VkGenerateStep = @import("vulkan/build_integration.zig").GenerateStep;
-pub const ShaderStage = @import("build_integration.zig").ShaderStage;
 pub const ShaderCompileStep = @import("build_integration.zig").ShaderCompileStep;
 
 test "main" {
