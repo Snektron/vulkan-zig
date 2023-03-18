@@ -308,8 +308,6 @@ pub const ${name} align(@alignOf(u32)) = @embedFile("${path}").*;
 See [build.zig](build.zig) for a working example.
 
 ## Limitations
-* Currently, the self-hosted version of Zig's cache-hash API is not yet ready for usage, which means that the bindings are regenerated every time an executable is built.
-
 * vulkan-zig has as of yet no functionality for selecting feature levels and extensions when generating bindings. This is because when an extension is promoted to Vulkan core, its fields and commands are renamed to lose the extensions author tag (for example, VkSemaphoreWaitFlagsKHR was renamed to VkSemaphoreWaitFlags when it was promoted from an extension to Vulkan 1.2 core). This leads to inconsistencies when only items from up to a certain feature level is included, as these promoted items then need to re-gain a tag.
 
 ## Example

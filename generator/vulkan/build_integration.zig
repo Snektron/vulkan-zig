@@ -1,17 +1,14 @@
 const std = @import("std");
 const generator = @import("generator.zig");
-const path = std.fs.path;
 const Build = std.Build;
-const Step = Build.Step;
 
 /// build.zig integration for Vulkan binding generation. This step can be used to generate
 /// Vulkan bindings at compiletime from vk.xml, by providing the path to vk.xml and the output
 /// path relative to zig-cache. The final package can then be obtained by `package()`, the result
 /// of which can be added to the project using `std.Build.addModule`.
 pub const GenerateStep = struct {
-    step: Step,
-    builder: *Build,
-    generated_file: std.build.GeneratedFile,
+    step: Build.Step,
+    generated_file: Build.GeneratedFile,
     /// The path to vk.xml
     spec_path: []const u8,
     /// The API to generate for.
@@ -25,8 +22,12 @@ pub const GenerateStep = struct {
     pub fn create(builder: *Build, spec_path: []const u8) *GenerateStep {
         const self = builder.allocator.create(GenerateStep) catch unreachable;
         self.* = .{
-            .step = Step.init(.custom, "vulkan-generate", builder.allocator, make),
-            .builder = builder,
+            .step = Build.Step.init(.{
+                .id = .custom,
+                .name = "vulkan-generate",
+                .owner = builder,
+                .makeFn = make,
+            }),
             .generated_file = .{
                 .step = &self.step,
             },
@@ -54,14 +55,14 @@ pub const GenerateStep = struct {
     }
 
     /// Returns the module with the generated budings, with name `module_name`.
-    pub fn getModule(self: *GenerateStep) *std.build.Module {
-        return self.builder.createModule(.{
+    pub fn getModule(self: *GenerateStep) *Build.Module {
+        return self.step.owner.createModule(.{
             .source_file = self.getSource(),
         });
     }
 
     /// Returns the file source for the generated bindings.
-    pub fn getSource(self: *GenerateStep) std.build.FileSource {
+    pub fn getSource(self: *GenerateStep) Build.FileSource {
         return .{ .generated = &self.generated_file };
     }
 
@@ -69,34 +70,31 @@ pub const GenerateStep = struct {
     /// the final bindings. The resulting generated bindings are not formatted, which is why an ArrayList
     /// writer is passed instead of a file writer. This is then formatted into standard formatting
     /// by parsing it and rendering with `std.zig.parse` and `std.zig.render` respectively.
-    fn make(step: *Step) !void {
+    fn make(step: *Build.Step, progress: *std.Progress.Node) !void {
+        _ = progress;
+        const b = step.owner;
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
 
-        var man = self.builder.cache.obtain();
+        var man = b.cache.obtain();
         defer man.deinit();
 
-        const spec = try cwd.readFileAlloc(self.builder.allocator, self.spec_path, std.math.maxInt(usize));
+        const spec = try cwd.readFileAlloc(b.allocator, self.spec_path, std.math.maxInt(usize));
         // TODO: Look into whether this is the right way to be doing
         // this - maybe the file-level caching API has some benefits I
         // don't understand.
         man.hash.addBytes(spec);
 
-        const already_exists = man.hit() catch |err| @panic(switch (err) {
-            inline else => |e| "Cache error: " ++ @errorName(e),
-        });
+        const already_exists = try step.cacheHit(&man);
         const digest = man.final();
-        const output_file_path = try self.builder.cache_root.join(
-            self.builder.allocator,
-            &.{ "o", &digest, "vk.zig" },
-        );
+        const output_file_path = try b.cache_root.join(b.allocator, &.{ "o", &digest, "vk.zig" });
         if (already_exists) {
             self.generated_file.path = output_file_path;
             return;
         }
 
-        var out_buffer = std.ArrayList(u8).init(self.builder.allocator);
-        generator.generate(self.builder.allocator, self.api, spec, out_buffer.writer()) catch |err| switch (err) {
+        var out_buffer = std.ArrayList(u8).init(b.allocator);
+        generator.generate(b.allocator, self.api, spec, out_buffer.writer()) catch |err| switch (err) {
             error.InvalidXml => {
                 std.log.err("invalid vulkan registry - invalid xml", .{});
                 std.log.err("please check that the correct vk.xml file is passed", .{});
@@ -118,10 +116,10 @@ pub const GenerateStep = struct {
         try out_buffer.append(0);
 
         const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];
-        const tree = try std.zig.Ast.parse(self.builder.allocator, src, .zig);
+        const tree = try std.zig.Ast.parse(b.allocator, src, .zig);
         std.debug.assert(tree.errors.len == 0); // If this triggers, vulkan-zig produced invalid code.
 
-        const formatted = try tree.render(self.builder.allocator);
+        const formatted = try tree.render(b.allocator);
 
         const output_dir_path = std.fs.path.dirname(output_file_path).?;
         cwd.makePath(output_dir_path) catch |err| {
@@ -131,6 +129,6 @@ pub const GenerateStep = struct {
 
         try cwd.writeFile(output_file_path, formatted);
         self.generated_file.path = output_file_path;
-        try man.writeManifest();
+        try step.writeManifest(&man);
     }
 };

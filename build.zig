@@ -1,6 +1,5 @@
 const std = @import("std");
 const vkgen = @import("generator/index.zig");
-const Step = std.build.Step;
 
 pub const ShaderCompileStep = vkgen.ShaderCompileStep;
 pub const VkGenerateStep = vkgen.VkGenerateStep;
@@ -62,7 +61,6 @@ pub fn build(b: *std.Build) void {
 
     const triangle_run_cmd = b.addRunArtifact(triangle_exe);
     triangle_run_cmd.step.dependOn(b.getInstallStep());
-    triangle_run_cmd.condition = .always;
 
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
