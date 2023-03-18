@@ -1,6 +1,5 @@
 const std = @import("std");
 const vkgen = @import("generator/index.zig");
-const Step = std.build.Step;
 
 pub const ShaderCompileStep = vkgen.ShaderCompileStep;
 pub const VkGenerateStep = vkgen.VkGenerateStep;
