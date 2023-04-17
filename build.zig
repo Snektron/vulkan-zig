@@ -50,6 +50,9 @@ pub fn build(b: *std.Build) void {
     const gen = VkGenerateStep.create(b, example_registry);
     triangle_exe.addModule("vulkan", gen.getModule());
 
+    const vk_zig_install_step = b.addInstallFile(gen.getSource(), "src/vk.zig");
+    b.getInstallStep().dependOn(&vk_zig_install_step.step);
+
     const shaders = ShaderCompileStep.create(
         b,
         &[_][]const u8{ "glslc", "--target-env=vulkan1.2" },
