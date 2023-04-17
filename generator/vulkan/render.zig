@@ -1210,17 +1210,11 @@ fn Renderer(comptime WriterType: type) type {
                 if (classifyCommandDispatch(decl.name, command) != dispatch_type) {
                     continue;
                 }
-                switch (decl.decl_type) {
-                    .command => try self.renderWrapper(decl.name, decl.decl_type.command),
-                    .alias => |alias| {
-                        try self.writer.writeAll("pub const ");
-                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(decl.name));
-                        try self.writer.writeAll(" = ");
-                        try self.writeIdentifierWithCase(.camel, trimVkNamespace(alias.name));
-                        try self.writer.writeAll(";\n");
-                    },
-                    else => unreachable,
-                }
+                // Note: If this decl is an alias, generate a full wrapper instead of simply an
+                // alias like `const old = new;`. This ensures that Vulkan bindings generated
+                // for newer versions of vulkan can still invoke extension behavior on older
+                // implementations.
+                try self.renderWrapper(decl.name, command);
             }
 
             try self.writer.writeAll("};}\n");
