@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    generator_exe.install();
+    b.installArtifact(generator_exe);
 
     // or they can skip all that, and just make sure to pass `.registry = "path/to/vk.xml"` to `b.dependency`,
     // and then obtain the module directly via `.module("vulkan-zig")`.
@@ -42,7 +42,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    triangle_exe.install();
+    b.installArtifact(triangle_exe);
     triangle_exe.linkLibC();
     triangle_exe.linkSystemLibrary("glfw");
 
