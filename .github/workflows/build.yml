@@ -39,8 +39,8 @@ jobs:
       run: |
         zig build -Dexample-registry=./vk.xml
 
-    - name: Archive vk.xml
+    - name: Archive vk.zig
       uses: actions/upload-artifact@v2
       with:
         name: vk.zig
-        path: zig-cache/vk.zig
+        path: zig-out/src/vk.zig
