@@ -72,6 +72,7 @@ pub const GenerateStep = struct {
     /// by parsing it and rendering with `std.zig.parse` and `std.zig.render` respectively.
     fn make(step: *Build.Step, progress: *std.Progress.Node) !void {
         _ = progress;
+
         const b = step.owner;
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
