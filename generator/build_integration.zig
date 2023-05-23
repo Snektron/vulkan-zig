@@ -52,6 +52,9 @@ pub const ShaderCompileStep = struct {
         /// The path to the shader, relative to the current build root.
         source_path: []const u8,
 
+        /// The final hash of the shader
+        hash: [64]u8,
+
         /// Miscellaneous options to pass when compiling the shader.
         options: ShaderOptions,
     };
@@ -115,6 +118,7 @@ pub const ShaderCompileStep = struct {
         self.shaders.append(.{
             .name = name,
             .source_path = full_source_path,
+            .hash = undefined,
             .options = options,
         }) catch unreachable;
     }
@@ -180,17 +184,17 @@ pub const ShaderCompileStep = struct {
         );
         try cwd.makePath(shaders_dir);
 
-        for (self.shaders.items) |shader| {
-            const shader_basename = try self.hashShaderToFileName(shader);
+        for (self.shaders.items) |*shader| {
+            shader.hash = try self.hashShaderToFileName(shader.*);
             const shader_out_path = try std.fs.path.join(b.allocator, &.{
                 shaders_dir,
-                &shader_basename,
+                &shader.hash,
             });
 
             // This path must be relative to the shaders zig file - which is in the same directory
             try shaders_out.print("pub const {s} align(@alignOf(u32)) = @embedFile(\"{s}\").*;\n", .{
                 shader.name,
-                &shader_basename,
+                &shader.hash,
             });
 
             // If we have a cache hit, we can save some compile time by not invoking the compile command.
