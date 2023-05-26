@@ -1162,9 +1162,9 @@ fn Renderer(comptime WriterType: type) type {
                 \\            @setEvalBranchQuota(10_000);
                 \\            const Type = std.builtin.Type;
                 \\            const fields_len = fields_len: {{
-                \\                var fields_len = 0;
+                \\                var fields_len: u32 = 0;
                 \\                for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
-                \\                    fields_len += @boolToInt(@field(cmds, field.name));
+                \\                    fields_len += @intCast(u32, @boolToInt(@field(cmds, field.name)));
                 \\                }}
                 \\                break :fields_len fields_len;
                 \\            }};
