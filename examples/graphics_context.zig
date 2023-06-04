@@ -7,6 +7,7 @@ const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapch
 
 const BaseDispatch = vk.BaseWrapper(.{
     .createInstance = true,
+    .getInstanceProcAddr = true,
 });
 
 const InstanceDispatch = vk.InstanceWrapper(.{
@@ -114,7 +115,7 @@ pub const GraphicsContext = struct {
             .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, glfw_exts),
         }, null);
 
-        self.vki = try InstanceDispatch.load(self.instance, c.glfwGetInstanceProcAddress);
+        self.vki = try InstanceDispatch.load(self.instance, self.vkb.dispatch.vkGetInstanceProcAddr);
         errdefer self.vki.destroyInstance(self.instance, null);
 
         self.surface = try createSurface(self.instance, window);
