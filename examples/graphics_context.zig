@@ -143,8 +143,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn deviceName(self: *const GraphicsContext) []const u8 {
-        const len = std.mem.indexOfScalar(u8, &self.props.device_name, 0).?;
-        return self.props.device_name[0..len];
+        return std.mem.sliceTo(&self.props.device_name, 0);
     }
 
     pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
@@ -333,9 +332,7 @@ fn checkExtensionSupport(
 
     for (required_device_extensions) |ext| {
         for (propsv) |props| {
-            const len = std.mem.indexOfScalar(u8, &props.extension_name, 0).?;
-            const prop_ext_name = props.extension_name[0..len];
-            if (std.mem.eql(u8, std.mem.span(ext), prop_ext_name)) {
+            if (std.mem.eql(u8, std.mem.span(ext), std.mem.sliceTo(&props.extension_name, 0))) {
                 break;
             }
         } else {
