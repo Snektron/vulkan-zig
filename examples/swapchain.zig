@@ -37,7 +37,7 @@ pub const Swapchain = struct {
 
         var image_count = caps.min_image_count + 1;
         if (caps.max_image_count > 0) {
-            image_count = std.math.min(image_count, caps.max_image_count);
+            image_count = @min(image_count, caps.max_image_count);
         }
 
         const qfi = [_]u32{ gc.graphics_queue.family, gc.present_queue.family };
