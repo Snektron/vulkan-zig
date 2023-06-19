@@ -59,7 +59,7 @@ There is also support for adding this project as a dependency through zig packag
 And then in your build.zig file, you'll need to add a line like this to your build function:
 ```zig
 const vkzig_dep = b.dependency("vulkan_zig", .{
-    .registry = b.pathFromRoot("path/to/vk.xml"),
+    .registry = @as([]const u8, b.pathFromRoot("path/to/vk.xml")),
 });
 const vkzig_bindings = vkzig_dep.module("vulkan-zig");
 exe.addModule("vulkan-zig", vkzig_bindings);
