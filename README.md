@@ -312,10 +312,10 @@ See [build.zig](build.zig) for a working example.
 * vulkan-zig has as of yet no functionality for selecting feature levels and extensions when generating bindings. This is because when an extension is promoted to Vulkan core, its fields and commands are renamed to lose the extensions author tag (for example, VkSemaphoreWaitFlagsKHR was renamed to VkSemaphoreWaitFlags when it was promoted from an extension to Vulkan 1.2 core). This leads to inconsistencies when only items from up to a certain feature level is included, as these promoted items then need to re-gain a tag.
 
 ## Example
-A partial implementation of https://vulkan-tutorial.org is implemented in [examples/triangle.zig](examples/triangle.zig). This example can be ran by executing `zig build run-triangle` in vulkan-zig's root.
+A partial implementation of https://vulkan-tutorial.com is implemented in [examples/triangle.zig](examples/triangle.zig). This example can be ran by executing `zig build run-triangle` in vulkan-zig's root.
 
 ## See also
-* Implementation of https://vulkan-tutorial.org using `@cImport`'ed bindings: https://github.com/andrewrk/zig-vulkan-triangle.
+* Implementation of https://vulkan-tutorial.com using `@cImport`'ed bindings: https://github.com/andrewrk/zig-vulkan-triangle.
 * Alternative binding generator: https://github.com/SpexGuy/Zig-Vulkan-Headers
 * Zig bindings for GLFW: https://github.com/hexops/mach-glfw
   * With vulkan-zig integration example: https://github.com/hexops/mach-glfw-vulkan-example
