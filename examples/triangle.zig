@@ -243,8 +243,8 @@ fn createCommandBuffers(
     const viewport = vk.Viewport{
         .x = 0,
         .y = 0,
-        .width = @intToFloat(f32, extent.width),
-        .height = @intToFloat(f32, extent.height),
+        .width = @floatFromInt(f32, extent.width),
+        .height = @floatFromInt(f32, extent.height),
         .min_depth = 0,
         .max_depth = 1,
     };
