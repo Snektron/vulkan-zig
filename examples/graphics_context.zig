@@ -112,7 +112,7 @@ pub const GraphicsContext = struct {
         self.instance = try self.vkb.createInstance(&.{
             .p_application_info = &app_info,
             .enabled_extension_count = glfw_exts_count,
-            .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, glfw_exts),
+            .pp_enabled_extension_names = @as([*]const [*:0]const u8, @ptrCast(glfw_exts)),
         }, null);
 
         self.vki = try InstanceDispatch.load(self.instance, self.vkb.dispatch.vkGetInstanceProcAddr);
@@ -148,8 +148,8 @@ pub const GraphicsContext = struct {
 
     pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
         for (self.mem_props.memory_types[0..self.mem_props.memory_type_count], 0..) |mem_type, i| {
-            if (memory_type_bits & (@as(u32, 1) << @truncate(u5, i)) != 0 and mem_type.property_flags.contains(flags)) {
-                return @truncate(u32, i);
+            if (memory_type_bits & (@as(u32, 1) << @truncate(i)) != 0 and mem_type.property_flags.contains(flags)) {
+                return @truncate(i);
             }
         }
 
@@ -209,7 +209,7 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,
         .enabled_extension_count = required_device_extensions.len,
-        .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &required_device_extensions),
+        .pp_enabled_extension_names = @as([*]const [*:0]const u8, @ptrCast(&required_device_extensions)),
     }, null);
 }
 
@@ -286,7 +286,7 @@ fn allocateQueues(vki: InstanceDispatch, pdev: vk.PhysicalDevice, allocator: All
     var present_family: ?u32 = null;
 
     for (families, 0..) |properties, i| {
-        const family = @intCast(u32, i);
+        const family: u32 = @intCast(i);
 
         if (graphics_family == null and properties.queue_flags.graphics_bit) {
             graphics_family = family;
