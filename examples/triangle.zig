@@ -53,8 +53,8 @@ pub fn main() !void {
 
     c.glfwWindowHint(c.GLFW_CLIENT_API, c.GLFW_NO_API);
     const window = c.glfwCreateWindow(
-        @intCast(c_int, extent.width),
-        @intCast(c_int, extent.height),
+        @intCast(extent.width),
+        @intCast(extent.height),
         app_name,
         null,
         null,
@@ -133,9 +133,9 @@ pub fn main() !void {
         var h: c_int = undefined;
         c.glfwGetWindowSize(window, &w, &h);
 
-        if (state == .suboptimal or extent.width != @intCast(u32, w) or extent.height != @intCast(u32, h)) {
-            extent.width = @intCast(u32, w);
-            extent.height = @intCast(u32, h);
+        if (state == .suboptimal or extent.width != @as(u32, @intCast(w)) or extent.height != @as(u32, @intCast(h))) {
+            extent.width = @intCast(w);
+            extent.height = @intCast(h);
             try swapchain.recreate(extent);
 
             destroyFramebuffers(&gc, allocator, framebuffers);
@@ -176,7 +176,7 @@ fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.B
         const data = try gc.vkd.mapMemory(gc.dev, staging_memory, 0, vk.WHOLE_SIZE, .{});
         defer gc.vkd.unmapMemory(gc.dev, staging_memory);
 
-        const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
+        const gpu_vertices: [*]Vertex = @ptrCast(@alignCast(data));
         for (vertices, 0..) |vertex, i| {
             gpu_vertices[i] = vertex;
         }
@@ -191,8 +191,8 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
         .command_pool = pool,
         .level = .primary,
         .command_buffer_count = 1,
-    }, @ptrCast([*]vk.CommandBuffer, &cmdbuf));
-    defer gc.vkd.freeCommandBuffers(gc.dev, pool, 1, @ptrCast([*]const vk.CommandBuffer, &cmdbuf));
+    }, @ptrCast(&cmdbuf));
+    defer gc.vkd.freeCommandBuffers(gc.dev, pool, 1, @ptrCast(&cmdbuf));
 
     try gc.vkd.beginCommandBuffer(cmdbuf, &.{
         .flags = .{ .one_time_submit_bit = true },
@@ -203,16 +203,16 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
         .dst_offset = 0,
         .size = size,
     };
-    gc.vkd.cmdCopyBuffer(cmdbuf, src, dst, 1, @ptrCast([*]const vk.BufferCopy, &region));
+    gc.vkd.cmdCopyBuffer(cmdbuf, src, dst, 1, @ptrCast(&region));
 
     try gc.vkd.endCommandBuffer(cmdbuf);
 
     const si = vk.SubmitInfo{
         .command_buffer_count = 1,
-        .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
+        .p_command_buffers = @ptrCast(&cmdbuf),
         .p_wait_dst_stage_mask = undefined,
     };
-    try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &si), .null_handle);
+    try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast(&si), .null_handle);
     try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
 }
 
@@ -232,9 +232,9 @@ fn createCommandBuffers(
     try gc.vkd.allocateCommandBuffers(gc.dev, &.{
         .command_pool = pool,
         .level = .primary,
-        .command_buffer_count = @truncate(u32, cmdbufs.len),
+        .command_buffer_count = @as(u32, @truncate(cmdbufs.len)),
     }, cmdbufs.ptr);
-    errdefer gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, cmdbufs.len), cmdbufs.ptr);
+    errdefer gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(cmdbufs.len), cmdbufs.ptr);
 
     const clear = vk.ClearValue{
         .color = .{ .float_32 = .{ 0, 0, 0, 1 } },
@@ -243,8 +243,8 @@ fn createCommandBuffers(
     const viewport = vk.Viewport{
         .x = 0,
         .y = 0,
-        .width = @floatFromInt(f32, extent.width),
-        .height = @floatFromInt(f32, extent.height),
+        .width = @as(f32, @floatFromInt(extent.width)),
+        .height = @as(f32, @floatFromInt(extent.height)),
         .min_depth = 0,
         .max_depth = 1,
     };
@@ -257,8 +257,8 @@ fn createCommandBuffers(
     for (cmdbufs, framebuffers) |cmdbuf, framebuffer| {
         try gc.vkd.beginCommandBuffer(cmdbuf, &.{});
 
-        gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
-        gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &scissor));
+        gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast(&viewport));
+        gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast(&scissor));
 
         // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
         const render_area = vk.Rect2D{
@@ -271,12 +271,12 @@ fn createCommandBuffers(
             .framebuffer = framebuffer,
             .render_area = render_area,
             .clear_value_count = 1,
-            .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
+            .p_clear_values = @as([*]const vk.ClearValue, @ptrCast(&clear)),
         }, .@"inline");
 
         gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
         const offset = [_]vk.DeviceSize{0};
-        gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &buffer), &offset);
+        gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast(&buffer), &offset);
         gc.vkd.cmdDraw(cmdbuf, vertices.len, 1, 0, 0);
 
         gc.vkd.cmdEndRenderPass(cmdbuf);
@@ -287,7 +287,7 @@ fn createCommandBuffers(
 }
 
 fn destroyCommandBuffers(gc: *const GraphicsContext, pool: vk.CommandPool, allocator: Allocator, cmdbufs: []vk.CommandBuffer) void {
-    gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, cmdbufs.len), cmdbufs.ptr);
+    gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(cmdbufs.len), cmdbufs.ptr);
     allocator.free(cmdbufs);
 }
 
@@ -302,7 +302,7 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
         fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
             .render_pass = render_pass,
             .attachment_count = 1,
-            .p_attachments = @ptrCast([*]const vk.ImageView, &swapchain.swap_images[i].view),
+            .p_attachments = @as([*]const vk.ImageView, @ptrCast(&swapchain.swap_images[i].view)),
             .width = swapchain.extent.width,
             .height = swapchain.extent.height,
             .layers = 1,
@@ -338,14 +338,14 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     const subpass = vk.SubpassDescription{
         .pipeline_bind_point = .graphics,
         .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_ref),
+        .p_color_attachments = @ptrCast(&color_attachment_ref),
     };
 
     return try gc.vkd.createRenderPass(gc.dev, &.{
         .attachment_count = 1,
-        .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &color_attachment),
+        .p_attachments = @as([*]const vk.AttachmentDescription, @ptrCast(&color_attachment)),
         .subpass_count = 1,
-        .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
+        .p_subpasses = @as([*]const vk.SubpassDescription, @ptrCast(&subpass)),
     }, null);
 }
 
@@ -356,13 +356,13 @@ fn createPipeline(
 ) !vk.Pipeline {
     const vert = try gc.vkd.createShaderModule(gc.dev, &.{
         .code_size = shaders.triangle_vert.len,
-        .p_code = @ptrCast([*]const u32, &shaders.triangle_vert),
+        .p_code = @as([*]const u32, @ptrCast(&shaders.triangle_vert)),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
 
     const frag = try gc.vkd.createShaderModule(gc.dev, &.{
         .code_size = shaders.triangle_frag.len,
-        .p_code = @ptrCast([*]const u32, &shaders.triangle_frag),
+        .p_code = @as([*]const u32, @ptrCast(&shaders.triangle_frag)),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
@@ -381,7 +381,7 @@ fn createPipeline(
 
     const pvisci = vk.PipelineVertexInputStateCreateInfo{
         .vertex_binding_description_count = 1,
-        .p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &Vertex.binding_description),
+        .p_vertex_binding_descriptions = @ptrCast(&Vertex.binding_description),
         .vertex_attribute_description_count = Vertex.attribute_description.len,
         .p_vertex_attribute_descriptions = &Vertex.attribute_description,
     };
@@ -434,7 +434,7 @@ fn createPipeline(
         .logic_op_enable = vk.FALSE,
         .logic_op = .copy,
         .attachment_count = 1,
-        .p_attachments = @ptrCast([*]const vk.PipelineColorBlendAttachmentState, &pcbas),
+        .p_attachments = @ptrCast(&pcbas),
         .blend_constants = [_]f32{ 0, 0, 0, 0 },
     };
 
@@ -470,9 +470,9 @@ fn createPipeline(
         gc.dev,
         .null_handle,
         1,
-        @ptrCast([*]const vk.GraphicsPipelineCreateInfo, &gpci),
+        @ptrCast(&gpci),
         null,
-        @ptrCast([*]vk.Pipeline, &pipeline),
+        @ptrCast(&pipeline),
     );
     return pipeline;
 }
