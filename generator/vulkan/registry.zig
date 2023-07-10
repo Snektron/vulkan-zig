@@ -111,6 +111,7 @@ pub const Command = struct {
         name: []const u8,
         param_type: TypeInfo,
         is_buffer_len: bool,
+        is_optional: bool,
     };
 
     params: []Param,
