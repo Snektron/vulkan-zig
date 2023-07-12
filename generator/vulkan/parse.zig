@@ -278,7 +278,7 @@ fn lenToPointer(fields: Fields, len: []const u8) std.meta.Tuple(&.{ registry.Poi
             for (params) |*param| {
                 if (mem.eql(u8, param.name, len)) {
                     param.is_buffer_len = true;
-                    return .{ .{ .other_field = param.name }, false };
+                    return .{ .{ .other_field = param.name }, param.is_optional };
                 }
             }
         },
@@ -499,7 +499,18 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element, api: registry.Api) !re
             .name = decl.name,
             .param_type = decl.decl_type.typedef,
             .is_buffer_len = false,
+            .is_optional = false,
         };
+
+        if (param.getAttribute("optional")) |optionals| {
+            var optional_it = mem.split(u8, optionals, ",");
+            if (optional_it.next()) |first_optional| {
+                params[i].is_optional = mem.eql(u8, first_optional, "true");
+            } else {
+                // Optional is empty, probably incorrect.
+                return error.InvalidRegistry;
+            }
+        }
         i += 1;
     }
 

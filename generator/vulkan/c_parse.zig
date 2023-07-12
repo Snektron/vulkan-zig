@@ -449,6 +449,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
         .name = first_param.name.?,
         .param_type = first_param.decl_type,
         .is_buffer_len = false,
+        .is_optional = false,
     });
 
     while (true) {
@@ -463,6 +464,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
             .name = decl.name orelse return error.MissingTypeIdentifier,
             .param_type = decl.decl_type,
             .is_buffer_len = false,
+            .is_optional = false,
         });
     }
 
