@@ -300,6 +300,9 @@ fn lenToPointer(fields: Fields, len: []const u8) std.meta.Tuple(&.{ registry.Poi
 }
 
 fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.Element) !void {
+
+    var len_attribute_depth: usize = 0;
+
     if (elem.getAttribute("len")) |lens| {
         var it = mem.split(u8, lens, ",");
         var current_type_info = type_info;
@@ -311,7 +314,9 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
                 break :blk size_optional[0];
             } else .many;
             current_type_info.pointer.size = size;
+
             current_type_info = current_type_info.pointer.child;
+            len_attribute_depth += 1;
         }
 
         if (it.next()) |_| {
@@ -322,18 +327,30 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
         }
     }
 
+
+    var current_depth: usize = 0;
+
     if (elem.getAttribute("optional")) |optionals| {
         var it = mem.split(u8, optionals, ",");
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
-            if (it.next()) |current_optional| {
-                current_type_info.pointer.is_optional = mem.eql(u8, current_optional, "true");
+            if (it.next()) |optional_str| {
+
+                // The pointer may have already been marked as optional due to its `len` attribute.
+                var is_already_optional = false;
+                if (current_depth < len_attribute_depth)
+                    is_already_optional = current_type_info.pointer.is_optional;
+
+                current_type_info.pointer.is_optional =
+                     is_already_optional or mem.eql(u8, optional_str, "true");
+
             } else {
                 // There is no information for this pointer, probably incorrect.
                 return error.InvalidRegistry;
             }
 
             current_type_info = current_type_info.pointer.child;
+            current_depth += 1;
         }
     }
 }
