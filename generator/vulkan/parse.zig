@@ -334,7 +334,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
         var it = mem.split(u8, optionals, ",");
         var current_type_info = type_info;
         while (current_type_info.* == .pointer) {
-            if (it.next()) |current_optional| {
+            if (it.next()) |optional_str| {
 
                 // The pointer may have already been marked as optional due to its `len` attribute.
                 var is_already_optional = false;
@@ -342,7 +342,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
                     is_already_optional = current_type_info.pointer.is_optional;
 
                 current_type_info.pointer.is_optional =
-                     is_already_optional or mem.eql(u8, current_optional, "true");
+                     is_already_optional or mem.eql(u8, optional_str, "true");
 
             } else {
                 // There is no information for this pointer, probably incorrect.
