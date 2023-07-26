@@ -20,9 +20,16 @@ vulkan-zig aims to be always compatible with the ever-changing Zig master branch
 ### CLI-interface
 A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
 ```
-$ zig-out/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
+$ zig-out/bin/generator path/to/vk.xml output/path/to/vk.zig
 ```
 This reads the xml file, parses its contents, renders the Vulkan bindings, and formats file, before writing the result to the output path. While the intended usage of vulkan-zig is through direct generation from build.zig (see below), the CLI-interface can be used for one-off generation and vendoring the result.
+NOTE: you need to replace `path/to/vk.xml` with the spec path from whatever source you prefer, here are some examples orderered from the most recommended:
+- Vulkan SDK, you need the package installed on your system with environment path setup but its the most stable option:
+    /share/vulkan/registry/vk.xml
+- Vulkan-Headers repo, doesn't require the Vulkan SDK in the build environment:
+    https://github.com/KhronosGroup/Vulkan-Headers/blob/main/registry/vk.xml
+- local vk.xml inside examples:
+    vulkan-zig\examples\vk.xml
 
 ### Generation from build.zig
 Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step:
