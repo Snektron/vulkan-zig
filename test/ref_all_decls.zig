@@ -103,7 +103,7 @@ fn reallyRefAllDecls(comptime T: type) void {
 
 fn reallyRefAllContainerDecls(comptime T: type) void {
     inline for (comptime std.meta.declarations(T)) |decl| {
-        if (decl.is_pub and @TypeOf(@field(T, decl.name)) == type) {
+        if (@TypeOf(@field(T, decl.name)) == type) {
             reallyRefAllDecls(@field(T, decl.name));
         }
     }
