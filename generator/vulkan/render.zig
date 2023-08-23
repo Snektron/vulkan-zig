@@ -49,6 +49,33 @@ const preamble =
     \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) bool {
     \\            return toInt(intersect(lhs, rhs)) == toInt(rhs);
     \\        }
+    \\        pub usingnamespace FlagFormatMixin(FlagsType);
+    \\    };
+    \\}
+    \\fn FlagFormatMixin(comptime FlagsType: type) type {
+    \\    return struct {
+    \\        pub fn format(
+    \\            self: FlagsType,
+    \\            comptime _: []const u8,
+    \\            _: std.fmt.FormatOptions,
+    \\            writer: anytype,
+    \\        ) !void {
+    \\            try writer.writeAll(@typeName(FlagsType) ++ "{");
+    \\            var first = true;
+    \\            inline for (comptime std.meta.fieldNames(FlagsType)) |name| {
+    \\                if (name[0] == '_') continue;
+    \\                if (@field(self, name)) {
+    \\                    if (first) {
+    \\                        try writer.writeAll(" ." ++ name);
+    \\                        first = false;
+    \\                    } else {
+    \\                        try writer.writeAll(", ." ++ name);
+    \\                    }
+    \\                }
+    \\            }
+    \\            if (!first) try writer.writeAll(" ");
+    \\            try writer.writeAll("}");
+    \\        }
     \\    };
     \\}
     \\pub fn makeApiVersion(variant: u3, major: u7, minor: u10, patch: u12) u32 {
@@ -1060,6 +1087,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            }
                 \\            return true;
                 \\        }
+                \\        pub usingnamespace FlagFormatMixin(CommandFlags);
                 \\    };
                 \\}
                 \\
