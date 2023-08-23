@@ -66,10 +66,10 @@ const preamble =
     \\                if (name[0] == '_') continue;
     \\                if (@field(self, name)) {
     \\                    if (first) {
-    \\                        try writer.writeAll(" " ++ name);
+    \\                        try writer.writeAll(" ." ++ name);
     \\                        first = false;
     \\                    } else {
-    \\                        try writer.writeAll(", " ++ name);
+    \\                        try writer.writeAll(", ." ++ name);
     \\                    }
     \\                }
     \\            }
