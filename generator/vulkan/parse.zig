@@ -346,7 +346,11 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
 
             } else {
                 // There is no information for this pointer, probably incorrect.
-                return error.InvalidRegistry;
+                // Currently there is one definition where this is the case, VkCudaLaunchInfoNV.
+                // We work around these by assuming that they are optional, so that in the case
+                // that they are, we can assign null to them.
+                // See https://github.com/Snektron/vulkan-zig/issues/109
+                current_type_info.pointer.is_optional = true;
             }
 
             current_type_info = current_type_info.pointer.child;
