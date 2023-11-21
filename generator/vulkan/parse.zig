@@ -23,7 +23,7 @@ pub fn parseXml(backing_allocator: Allocator, root: *xml.Element, api: registry.
 
     const allocator = arena.allocator();
 
-    var reg = registry.Registry{
+    const reg = registry.Registry{
         .decls = try parseDeclarations(allocator, root, api),
         .api_constants = try parseApiConstants(allocator, root, api),
         .tags = try parseTags(allocator, root),
@@ -38,8 +38,8 @@ pub fn parseXml(backing_allocator: Allocator, root: *xml.Element, api: registry.
 }
 
 fn parseDeclarations(allocator: Allocator, root: *xml.Element, api: registry.Api) ![]registry.Declaration {
-    var types_elem = root.findChildByTag("types") orelse return error.InvalidRegistry;
-    var commands_elem = root.findChildByTag("commands") orelse return error.InvalidRegistry;
+    const types_elem = root.findChildByTag("types") orelse return error.InvalidRegistry;
+    const commands_elem = root.findChildByTag("commands") orelse return error.InvalidRegistry;
 
     const decl_upper_bound = types_elem.children.len + commands_elem.children.len;
     const decls = try allocator.alloc(registry.Declaration, decl_upper_bound);
