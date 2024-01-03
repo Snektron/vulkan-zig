@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
         generate_cmd.addArg(path);
 
         _ = b.addModule("vulkan-zig", .{
-            .source_file = generate_cmd.addOutputFileArg("vk.zig"),
+            .root_source_file = generate_cmd.addOutputFileArg("vk.zig"),
         });
     }
 
@@ -40,15 +40,15 @@ pub fn build(b: *std.Build) void {
         .name = "triangle",
         .root_source_file = .{ .path = "examples/triangle.zig" },
         .target = target,
+        .link_libc = true,
         .optimize = optimize,
     });
     b.installArtifact(triangle_exe);
-    triangle_exe.linkLibC();
     triangle_exe.linkSystemLibrary("glfw");
 
     const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry used for the examples") orelse "examples/vk.xml";
     const gen = VkGenerateStep.create(b, example_registry);
-    triangle_exe.addModule("vulkan", gen.getModule());
+    triangle_exe.root_module.addImport("vulkan", gen.getModule());
 
     const vk_zig_install_step = b.addInstallFile(gen.getSource(), "src/vk.zig");
     b.getInstallStep().dependOn(&vk_zig_install_step.step);
@@ -60,7 +60,7 @@ pub fn build(b: *std.Build) void {
     );
     shaders.add("triangle_vert", "examples/shaders/triangle.vert", .{});
     shaders.add("triangle_frag", "examples/shaders/triangle.frag", .{});
-    triangle_exe.addModule("shaders", shaders.getModule());
+    triangle_exe.root_module.addImport("shaders", shaders.getModule());
 
     const triangle_run_cmd = b.addRunArtifact(triangle_exe);
     triangle_run_cmd.step.dependOn(b.getInstallStep());
@@ -83,6 +83,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    ref_all_decls_test.addModule("vulkan", gen.getModule());
+    ref_all_decls_test.root_module.addImport("vulkan", gen.getModule());
     test_step.dependOn(&ref_all_decls_test.step);
 }
