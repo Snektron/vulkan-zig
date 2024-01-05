@@ -57,12 +57,12 @@ pub const GenerateStep = struct {
     /// Returns the module with the generated budings, with name `module_name`.
     pub fn getModule(self: *GenerateStep) *Build.Module {
         return self.step.owner.createModule(.{
-            .source_file = self.getSource(),
+            .root_source_file = self.getSource(),
         });
     }
 
     /// Returns the file source for the generated bindings.
-    pub fn getSource(self: *GenerateStep) Build.FileSource {
+    pub fn getSource(self: *GenerateStep) Build.LazyPath {
         return .{ .generated = &self.generated_file };
     }
 
@@ -124,21 +124,22 @@ pub const GenerateStep = struct {
             var end: usize = undefined;
             var index: usize = undefined;
             var repeat: usize = undefined;
-            var spaces: [] const u8 = undefined;
-            var carets: [] const u8 = undefined;
+            var spaces: []const u8 = undefined;
+            var carets: []const u8 = undefined;
             var current_token: std.zig.Token = undefined;
 
-            std.debug.print("{s}\n", .{ src, });
+            std.debug.print("{s}\n", .{
+                src,
+            });
 
-            var tokens = try std.ArrayList (std.zig.Ast.Error).initCapacity(b.allocator, tree.errors.len);
+            var tokens = try std.ArrayList(std.zig.Ast.Error).initCapacity(b.allocator, tree.errors.len);
             try tokens.appendSlice(tree.errors);
 
-            std.mem.sort(std.zig.Ast.Error, tokens.items, {},
-                         struct {
-                             pub fn desc(_: void, l_err: std.zig.Ast.Error, r_err: std.zig.Ast.Error) bool {
-                                 return l_err.token > r_err.token;
-                             }
-                         }.desc);
+            std.mem.sort(std.zig.Ast.Error, tokens.items, {}, struct {
+                pub fn desc(_: void, l_err: std.zig.Ast.Error, r_err: std.zig.Ast.Error) bool {
+                    return l_err.token > r_err.token;
+                }
+            }.desc);
 
             var iterator = std.zig.Tokenizer.init(src);
 
@@ -153,18 +154,28 @@ pub const GenerateStep = struct {
                     repeat = 1;
                     spaces = "";
                     while (repeat < current_token.loc.start - start) {
-                        spaces = try std.fmt.allocPrint(b.allocator, "{s} ", .{ spaces, });
+                        spaces = try std.fmt.allocPrint(b.allocator, "{s} ", .{
+                            spaces,
+                        });
                         repeat += 1;
                     }
 
                     repeat = 1;
                     carets = "";
                     while (repeat < current_token.loc.end + 1 - current_token.loc.start) {
-                        carets = try std.fmt.allocPrint(b.allocator, "{s}^", .{ carets, });
+                        carets = try std.fmt.allocPrint(b.allocator, "{s}^", .{
+                            carets,
+                        });
                         repeat += 1;
                     }
 
-                    std.debug.print("ERROR: {}\nTOKEN: {}\n\n{s}\n{s}{s}\n", .{ tokens.items[tokens.items.len - 1], current_token, if(src[start] == '\n') src[start + 1..end] else src[start..end], spaces, carets, });
+                    std.debug.print("ERROR: {}\nTOKEN: {}\n\n{s}\n{s}{s}\n", .{
+                        tokens.items[tokens.items.len - 1],
+                        current_token,
+                        if (src[start] == '\n') src[start + 1 .. end] else src[start..end],
+                        spaces,
+                        carets,
+                    });
 
                     _ = tokens.pop();
                 }

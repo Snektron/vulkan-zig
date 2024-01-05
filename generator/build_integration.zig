@@ -99,12 +99,12 @@ pub const ShaderCompileStep = struct {
     /// Returns the shaders module with name.
     pub fn getModule(self: *ShaderCompileStep) *Build.Module {
         return self.step.owner.createModule(.{
-            .source_file = self.getSource(),
+            .root_source_file = self.getSource(),
         });
     }
 
     /// Returns the file source for the generated shader resource code.
-    pub fn getSource(self: *ShaderCompileStep) Build.FileSource {
+    pub fn getSource(self: *ShaderCompileStep) Build.LazyPath {
         return .{ .generated = &self.generated_file };
     }
 
