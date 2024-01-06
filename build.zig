@@ -2,7 +2,6 @@ const std = @import("std");
 const vkgen = @import("generator/index.zig");
 
 pub const ShaderCompileStep = vkgen.ShaderCompileStep;
-pub const VkGenerateStep = vkgen.VkGenerateStep;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -74,12 +73,13 @@ pub fn build(b: *std.Build) void {
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
 
-    var test_target = b.addTest(.{
+    const test_step = b.step("test", "Run all the tests");
+
+    const tests = b.addTest(.{
         .root_source_file = .{ .path = "generator/index.zig" },
     });
-
-    var test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&test_target.step);
+    const run_tests = b.addRunArtifact(tests);
+    test_step.dependOn(&run_tests.step);
 
     // This test needs to be an object so that vulkan-zig can import types from the root.
     // It does not need to run anyway.
@@ -89,7 +89,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     ref_all_decls_test.root_module.addImport("vulkan", example_vk);
     test_step.dependOn(&ref_all_decls_test.step);
 }
