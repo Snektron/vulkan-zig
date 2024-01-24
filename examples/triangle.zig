@@ -68,7 +68,7 @@ pub fn main() !void {
     const gc = try GraphicsContext.init(allocator, app_name, window);
     defer gc.deinit();
 
-    std.debug.print("Using device: {s}\n", .{gc.deviceName()});
+    std.log.debug("Using device: {s}", .{gc.deviceName()});
 
     var swapchain = try Swapchain.init(&gc, allocator, extent);
     defer swapchain.deinit();
@@ -122,16 +122,22 @@ pub fn main() !void {
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
+        var w: c_int = undefined;
+        var h: c_int = undefined;
+        c.glfwGetFramebufferSize(window, &w, &h);
+
+        // Don't present or resize swapchain while the window is minimized
+        if (w == 0 or h == 0) {
+            c.glfwPollEvents();
+            continue;
+        }
+
         const cmdbuf = cmdbufs[swapchain.image_index];
 
         const state = swapchain.present(cmdbuf) catch |err| switch (err) {
             error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
             else => |narrow| return narrow,
         };
-
-        var w: c_int = undefined;
-        var h: c_int = undefined;
-        c.glfwGetWindowSize(window, &w, &h);
 
         if (state == .suboptimal or extent.width != @as(u32, @intCast(w)) or extent.height != @as(u32, @intCast(h))) {
             extent.width = @intCast(w);
@@ -158,6 +164,7 @@ pub fn main() !void {
     }
 
     try swapchain.waitForAllFences();
+    try gc.vkd.deviceWaitIdle(gc.dev);
 }
 
 fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer) !void {
@@ -177,9 +184,7 @@ fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.B
         defer gc.vkd.unmapMemory(gc.dev, staging_memory);
 
         const gpu_vertices: [*]Vertex = @ptrCast(@alignCast(data));
-        for (vertices, 0..) |vertex, i| {
-            gpu_vertices[i] = vertex;
-        }
+        @memcpy(gpu_vertices, vertices[0..]);
     }
 
     try copyBuffer(gc, pool, buffer, staging_buffer, @sizeOf(@TypeOf(vertices)));
