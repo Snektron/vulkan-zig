@@ -77,7 +77,7 @@ pub const GenerateStep = struct {
         const self = @fieldParentPtr(GenerateStep, "step", step);
         const cwd = std.fs.cwd();
 
-        var man = b.cache.obtain();
+        var man = b.graph.cache.obtain();
         defer man.deinit();
 
         const spec = try cwd.readFileAlloc(b.allocator, self.spec_path, std.math.maxInt(usize));
