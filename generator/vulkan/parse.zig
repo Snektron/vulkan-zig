@@ -300,7 +300,6 @@ fn lenToPointer(fields: Fields, len: []const u8) std.meta.Tuple(&.{ registry.Poi
 }
 
 fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.Element) !void {
-
     var len_attribute_depth: usize = 0;
 
     if (elem.getAttribute("len")) |lens| {
@@ -327,7 +326,6 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
         }
     }
 
-
     var current_depth: usize = 0;
 
     if (elem.getAttribute("optional")) |optionals| {
@@ -342,8 +340,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
                     is_already_optional = current_type_info.pointer.is_optional;
 
                 current_type_info.pointer.is_optional =
-                     is_already_optional or mem.eql(u8, optional_str, "true");
-
+                    is_already_optional or mem.eql(u8, optional_str, "true");
             } else {
                 // There is no information for this pointer, probably incorrect.
                 // Currently there is one definition where this is the case, VkCudaLaunchInfoNV.
