@@ -123,8 +123,10 @@ pub const Command = struct {
 pub const Pointer = struct {
     pub const PointerSize = union(enum) {
         one,
-        many, // The length is given by some complex expression, possibly involving another field
-        other_field: []const u8, // The length is given by some other field or parameter
+        /// The length is given by some complex expression, possibly involving another field
+        many,
+        /// The length is given by some other field or parameter
+        other_field: []const u8,
         zero_terminated,
     };
 
@@ -140,7 +142,26 @@ pub const Array = struct {
         alias: []const u8, // Field size is given by an api constant
     };
 
+    pub const ArrayValidSize = union(enum) {
+        /// All elements are valid.
+        all,
+        /// The length is given by some complex expression, possibly involving another field
+        many,
+        /// The length is given by some complex expression, possibly involving another field
+        other_field: []const u8,
+        /// The valid elements are terminated by a 0, or by the bounds of the array.
+        zero_terminated,
+    };
+
+    /// This is the total size of the array
     size: ArraySize,
+    /// The number of items that are actually filled with valid values
+    valid_size: ArrayValidSize,
+    /// Some members may indicate than an array is optional. This happens with
+    /// VkPhysicalDeviceHostImageCopyPropertiesEXT::optimalTilingLayoutUUID for example.
+    /// The spec is not entirely clear about what this means, but presumably it should
+    /// be filled with all zeroes.
+    is_optional: bool,
     child: *TypeInfo,
 };
 

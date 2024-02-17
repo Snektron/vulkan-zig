@@ -386,6 +386,8 @@ fn parseDeclaration(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: 
         inner_type.* = .{
             .array = .{
                 .size = array_size,
+                .valid_size = .all, // Refined later
+                .is_optional = true,
                 .child = child,
             },
         };

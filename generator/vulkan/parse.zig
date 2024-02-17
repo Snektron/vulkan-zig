@@ -305,18 +305,36 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
     if (elem.getAttribute("len")) |lens| {
         var it = mem.split(u8, lens, ",");
         var current_type_info = type_info;
-        while (current_type_info.* == .pointer) {
-            // TODO: Check altlen
-            const size = if (it.next()) |len_str| blk: {
-                const size_optional = lenToPointer(fields, len_str);
-                current_type_info.pointer.is_optional = size_optional[1];
-                break :blk size_optional[0];
-            } else .many;
-            current_type_info.pointer.size = size;
 
-            current_type_info = current_type_info.pointer.child;
-            len_attribute_depth += 1;
-        }
+        while (true) switch (current_type_info.*) {
+            .pointer => |*ptr| {
+                if (it.next()) |len_str| {
+                    ptr.size, ptr.is_optional = lenToPointer(fields, len_str);
+                } else {
+                    ptr.size = .many;
+                }
+
+                current_type_info = ptr.child;
+                len_attribute_depth += 1;
+            },
+            .array => |*arr| {
+                if (it.next()) |len_str| {
+                    const size, _ = lenToPointer(fields, len_str);
+                    arr.valid_size = switch (size) {
+                        .one => .all,
+                        .many => .many,
+                        .other_field => |field| .{ .other_field = field },
+                        .zero_terminated => .zero_terminated,
+                    };
+                } else {
+                    arr.valid_size = .all;
+                }
+
+                current_type_info = arr.child;
+                len_attribute_depth += 1;
+            },
+            else => break,
+        };
 
         if (it.next()) |_| {
             // There are more elements in the `len` attribute than there are pointers
@@ -331,28 +349,28 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
     if (elem.getAttribute("optional")) |optionals| {
         var it = mem.split(u8, optionals, ",");
         var current_type_info = type_info;
-        while (current_type_info.* == .pointer) {
-            if (it.next()) |optional_str| {
+        while (true) switch (current_type_info.*) {
+            inline .pointer, .array => |*info| {
+                if (it.next()) |optional_str| {
 
-                // The pointer may have already been marked as optional due to its `len` attribute.
-                var is_already_optional = false;
-                if (current_depth < len_attribute_depth)
-                    is_already_optional = current_type_info.pointer.is_optional;
+                    // The pointer may have already been marked as optional due to its `len` attribute.
+                    const is_already_optional = current_depth < len_attribute_depth and info.is_optional;
+                    info.is_optional = is_already_optional or mem.eql(u8, optional_str, "true");
+                } else {
+                    // There is no information for this pointer, probably incorrect.
+                    // Currently there is one definition where this is the case, VkCudaLaunchInfoNV.
 
-                current_type_info.pointer.is_optional =
-                    is_already_optional or mem.eql(u8, optional_str, "true");
-            } else {
-                // There is no information for this pointer, probably incorrect.
-                // Currently there is one definition where this is the case, VkCudaLaunchInfoNV.
-                // We work around these by assuming that they are optional, so that in the case
-                // that they are, we can assign null to them.
-                // See https://github.com/Snektron/vulkan-zig/issues/109
-                current_type_info.pointer.is_optional = true;
-            }
+                    // We work around these by assuming that they are optional, so that in the case
+                    // that they are, we can assign null to them.
+                    // See https://github.com/Snektron/vulkan-zig/issues/109
+                    info.is_optional = true;
+                }
 
-            current_type_info = current_type_info.pointer.child;
-            current_depth += 1;
-        }
+                current_type_info = info.child;
+                current_depth += 1;
+            },
+            else => break,
+        };
     }
 }
 
