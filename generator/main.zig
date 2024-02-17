@@ -12,7 +12,10 @@ pub fn main() void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var args = try std.process.argsWithAllocator(allocator);
+    var args = std.process.argsWithAllocator(allocator) catch |err| switch (err) {
+        error.OutOfMemory => @panic("OOM"),
+        error.InvalidCmdLine => @panic("Invalid command line"),
+    };
     const prog_name = args.next() orelse "vulkan-zig-generator";
 
     var maybe_xml_path: ?[]const u8 = null;
