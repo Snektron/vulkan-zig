@@ -14,7 +14,6 @@ pub fn main() void {
 
     var args = std.process.argsWithAllocator(allocator) catch |err| switch (err) {
         error.OutOfMemory => @panic("OOM"),
-        error.InvalidCmdLine => @panic("Invalid command line"),
     };
     const prog_name = args.next() orelse "vulkan-zig-generator";
 
