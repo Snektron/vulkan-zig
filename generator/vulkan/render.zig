@@ -1214,7 +1214,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            }}
                 \\            break :blk @Type(.{{
                 \\                .Struct = .{{
-                \\                    .layout = .Auto,
+                \\                    .layout = .auto,
                 \\                    .fields = &fields,
                 \\                    .decls = &[_]std.builtin.Type.Declaration{{}},
                 \\                    .is_tuple = false,
