@@ -168,7 +168,7 @@ pub const ShaderCompileStep = struct {
     fn make(step: *Build.Step, progress: *std.Progress.Node) !void {
         _ = progress;
         const b = step.owner;
-        const self = @fieldParentPtr(ShaderCompileStep, "step", step);
+        const self: *ShaderCompileStep = @fieldParentPtr("step", step);
         const cwd = std.fs.cwd();
 
         var cmd = std.ArrayList([]const u8).init(b.allocator);
