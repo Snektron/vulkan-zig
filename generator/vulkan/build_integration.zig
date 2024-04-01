@@ -74,7 +74,7 @@ pub const GenerateStep = struct {
         _ = progress;
 
         const b = step.owner;
-        const self = @fieldParentPtr(GenerateStep, "step", step);
+        const self: *GenerateStep = @fieldParentPtr("step", step);
         const cwd = std.fs.cwd();
 
         var man = b.graph.cache.obtain();
