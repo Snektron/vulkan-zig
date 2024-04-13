@@ -68,12 +68,14 @@ pub fn build(b: *std.Build) void {
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
 
-    var test_target = b.addTest(.{
+    const test_target = b.addTest(.{
         .root_source_file = .{ .path = "generator/index.zig" },
     });
 
-    var test_step = b.step("test", "Run all the tests");
-    test_step.dependOn(&test_target.step);
+    const run_test = b.addRunArtifact(test_target);
+
+    const test_step = b.step("test", "Run all the tests");
+    test_step.dependOn(&run_test.step);
 
     // This test needs to be an object so that vulkan-zig can import types from the root.
     // It does not need to run anyway.
