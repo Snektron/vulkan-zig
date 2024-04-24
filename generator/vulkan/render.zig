@@ -96,7 +96,7 @@ const preamble =
     \\
 ;
 
-const builtin_types = std.ComptimeStringMap([]const u8, .{
+const builtin_types = std.StaticStringMap([]const u8).initComptime(.{
     .{ "void", @typeName(void) },
     .{ "char", @typeName(u8) },
     .{ "float", @typeName(f32) },
@@ -113,7 +113,7 @@ const builtin_types = std.ComptimeStringMap([]const u8, .{
     .{ "int", @typeName(c_int) },
 });
 
-const foreign_types = std.ComptimeStringMap([]const u8, .{
+const foreign_types = std.StaticStringMap([]const u8).initComptime(.{
     .{ "Display", "opaque {}" },
     .{ "VisualID", @typeName(c_uint) },
     .{ "Window", @typeName(c_ulong) },
@@ -425,13 +425,13 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn classifyCommandDispatch(name: []const u8, command: reg.Command) CommandDispatchType {
-            const device_handles = std.ComptimeStringMap(void, .{
+            const device_handles = std.StaticStringMap(void).initComptime(.{
                 .{ "VkDevice", {} },
                 .{ "VkCommandBuffer", {} },
                 .{ "VkQueue", {} },
             });
 
-            const override_functions = std.ComptimeStringMap(CommandDispatchType, .{
+            const override_functions = std.StaticStringMap(CommandDispatchType).initComptime(.{
                 .{ "vkGetInstanceProcAddr", .base },
                 .{ "vkCreateInstance", .base },
                 .{ "vkEnumerateInstanceLayerProperties", .base },
