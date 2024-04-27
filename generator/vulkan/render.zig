@@ -1050,8 +1050,8 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll("= Info {\n");
                 try self.writer.print(".name = \"{s}\", .version = {},", .{ ext.name, ext.version });
                 // collect extension functions
-                for(ext.requires) |require| {
-                    for(require.commands) |command_name| {
+                for (ext.requires) |require| {
+                    for (require.commands) |command_name| {
                         const decl = self.resolveDeclaration(command_name) orelse continue;
                         // If the target type does not exist, it was likely an empty enum -
                         // assume spec is correct and that this was not a function alias.
@@ -1063,36 +1063,19 @@ fn Renderer(comptime WriterType: type) type {
                         const class = classifyCommandDispatch(command_name, command);
                         switch (class) {
                             // Vulkan extensions cannot add base functions.
-                            .base => continue,
-                            // TODO: some extensions have multiple separate requirements.
-                            // For example, "VK_KHR_push_descriptor" depends on either "VK_VERSION_1_1" or "VK_KHR_descriptor_update_template",
-                            // which causes the same function to be mentioned twice; once for each requirement.
-                            // For now, duplicate functions are just removed,
-                            // However in the future it might be worth exposing these separate requirements somehow.
+                            .base => return error.InvalidRegistry,
                             .instance => {
-                                var duplicate = false;
-                                for(instance_commands.items) |cmd| {
-                                    if(std.mem.eql(u8, cmd, command_name)) {
-                                        duplicate = true;
-                                    }
-                                }
-                                if(!duplicate) try instance_commands.append(command_name);
+                                try instance_commands.append(command_name);
                             },
                             .device => {
-                                var duplicate = false;
-                                for(device_commands.items) |cmd| {
-                                    if(std.mem.eql(u8, cmd, command_name)) {
-                                        duplicate = true;
-                                    }
-                                }
-                                if(!duplicate) try device_commands.append(command_name);
+                                try device_commands.append(command_name);
                             },
                         }
                     }
                 }
                 // and write them out
                 try self.writer.writeAll(".instance_functions = .{\n");
-                for(instance_commands.items) |command_name| {
+                for (instance_commands.items) |command_name| {
                     try self.writer.writeAll(".");
                     try self.writeIdentifierWithCase(.camel, trimVkNamespace(command_name));
                     try self.writer.writeAll(" = true, \n");
@@ -1101,7 +1084,7 @@ fn Renderer(comptime WriterType: type) type {
                 instance_commands.clearRetainingCapacity();
 
                 try self.writer.writeAll(".device_functions = .{\n");
-                for(device_commands.items) |command_name| {
+                for (device_commands.items) |command_name| {
                     try self.writer.writeAll(".");
                     try self.writeIdentifierWithCase(.camel, trimVkNamespace(command_name));
                     try self.writer.writeAll(" = true, \n");
