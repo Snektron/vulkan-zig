@@ -62,6 +62,7 @@ const preamble =
     \\        ) !void {
     \\            try writer.writeAll(@typeName(FlagsType) ++ "{");
     \\            var first = true;
+    \\            @setEvalBranchQuota(10_000);
     \\            inline for (comptime std.meta.fieldNames(FlagsType)) |name| {
     \\                if (name[0] == '_') continue;
     \\                if (@field(self, name)) {
@@ -1170,6 +1171,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\    return struct {
                 \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
                 \\            }
@@ -1177,6 +1179,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\        }
                 \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
                 \\            }
@@ -1184,6 +1187,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\        }
                 \\        pub fn complement(self: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = !@field(self, field.name);
                 \\            }
@@ -1191,12 +1195,14 @@ fn Renderer(comptime WriterType: type) type {
                 \\        }
                 \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
                 \\            }
                 \\            return result;
                 \\        }
                 \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
                 \\                    return false;
