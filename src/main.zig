@@ -1,6 +1,10 @@
 const std = @import("std");
 const generator = @import("vulkan/generator.zig");
 
+pub const generateVk = generator.generate;
+pub const VkGenerateStep = @import("vulkan/build_integration.zig").GenerateStep;
+pub const ShaderCompileStep = @import("build_integration.zig").ShaderCompileStep;
+
 fn invalidUsage(prog_name: []const u8, comptime fmt: []const u8, args: anytype) noreturn {
     std.log.err(fmt, args);
     std.log.err("see {s} --help for usage", .{prog_name});
@@ -126,4 +130,9 @@ pub fn main() void {
         std.log.err("failed to write to output file '{s}' ({s})", .{ out_path, @errorName(err) });
         std.process.exit(1);
     };
+}
+
+test "main" {
+    _ = @import("xml.zig");
+    _ = @import("vulkan/c_parse.zig");
 }

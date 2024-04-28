@@ -10,6 +10,10 @@ vulkan-zig attempts to provide a better experience to programming Vulkan applica
 
 vulkan-zig is automatically tested daily against the latest vk.xml and zig, and supports vk.xml from version 1.x.163.
 
+## Example
+
+A partial implementation of https://vulkan-tutorial.com is implemented in [examples/triangle.zig](examples/triangle.zig). This example can be ran by executing `zig build --build-file $(pwd)/examples/build.zig run-triangle` in vulkan-zig's root. See in particular the [build file](examples/build.zig), which contains a concrete example of how to use vulkan-zig as a dependency.
+
 ### Zig versions
 
 vulkan-zig aims to be always compatible with the ever-changing Zig master branch (however, development may lag a few days behind). Sometimes, the Zig master branch breaks a bunch of functionality however, which may make the latest version vulkan-zig incompatible with older releases of Zig. This repository aims to have a version compatible for both the latest Zig master, and the latest Zig release. The `master` branch is compatible with the `master` branch of Zig, and versions for older versions of Zig are maintained in the `zig-<version>-compat` branch.
@@ -18,38 +22,19 @@ vulkan-zig aims to be always compatible with the ever-changing Zig master branch
 
 ## Features
 ### CLI-interface
+
 A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
 ```
-$ zig-out/bin/generator path/to/vk.xml output/path/to/vk.zig
+$ zig-out/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
 ```
 This reads the xml file, parses its contents, renders the Vulkan bindings, and formats file, before writing the result to the output path. While the intended usage of vulkan-zig is through direct generation from build.zig (see below), the CLI-interface can be used for one-off generation and vendoring the result.
-NOTE: you need to replace `path/to/vk.xml` with the spec path from whatever source you prefer, here are some examples orderered from the most recommended:
-- Vulkan SDK, you need the package installed on your system with environment path setup but its the most stable option:
-    /share/vulkan/registry/vk.xml
-- Vulkan-Headers repo, doesn't require the Vulkan SDK in the build environment:
-    https://github.com/KhronosGroup/Vulkan-Headers/blob/main/registry/vk.xml
-- local vk.xml inside examples:
-    vulkan-zig\examples\vk.xml
 
-### Generation from build.zig
-Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step:
-```zig
-const vkgen = @import("vulkan-zig/generator/index.zig");
-
-pub fn build(b: *Builder) void {
-    ...
-    const exe = b.addExecutable("my-executable", "src/main.zig");
-
-    // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
-    const gen = vkgen.VkGenerateStep.create(b, "path/to/vk.xml");
-
-    // Add the generated file as package to the final executable
-    exe.addModule("vulkan", gen.getModule());
-}
-```
-This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addModule`, after which the bindings will be made available to the executable under the name passed to `getModule`.
+`path/to/vk.xml` can be obtained from several sources:
+- From the LunarG Vulkan SDK. This can either be obtained from [LunarG](https://www.lunarg.com/vulkan-sdk) or usually using the package manager. The registry can then be found at `$VULKAN_SDK/share/vulkan/registry/vk.xml`.
+- Directly from the [Vulkan-Headers GitHub repository](https://github.com/KhronosGroup/Vulkan-Headers/blob/main/registry/vk.xml).
 
 ### Generation with the package manager from build.zig
+
 There is also support for adding this project as a dependency through zig package manager in its current form. In order to do this, add this repo as a dependency in your build.zig.zon:
 ```zig
 .{
@@ -69,26 +54,69 @@ const vkzig_dep = b.dependency("vulkan_zig", .{
     .registry = @as([]const u8, b.pathFromRoot("path/to/vk.xml")),
 });
 const vkzig_bindings = vkzig_dep.module("vulkan-zig");
-exe.addModule("vulkan-zig", vkzig_bindings);
+exe.addModule("vulkan", vkzig_bindings);
 ```
-That will allow you to `@import("vulkan-zig")` in your executable's source.
+That will allow you to `@import("vulkan")` in your executable's source.
 
 ### Manual generation with the package manager from build.zig
-In the event you have a specific need for it, the generator executable is made available through the dependency, allowing you to run the executable as a build step in your own build.zig file.
-Doing so should look a bit like this:
+
+Bindings can also be generated by invoking the generator directly. This may be useful is some special cases, for example, it integrates particularly well with fetching the registry via the package manager. This can be done by adding the Vulkan-Headers repository to your dependencies, and then passing the `vk.xml` inside it to vulkan-zig-generator:
 ```zig
-const vk_gen = b.dependency("vulkan_zig", .{}).artifact("generator"); // get generator executable reference
+.{
+    // -- snip --
+    .depdendencies = .{
+        // -- snip --
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/<commit SHA>.tar.gz",
+            .hash = "<dependency hash>",
+        },
+    },
+}
 
-const generate_cmd = b.addRunArtifact(vk_gen);
-generate_cmd.addArg(b.pathFromRoot("vk.xml")); // path to xml file to use when generating the bindings
-
+```
+And then pass `vk.xml` to vulkan-zig-generator as follows:
+```zig
+// Get the (lazy) path to vk.xml:
+const registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
+// Get generator executable reference
+const vk_gen = b.dependency("vulkan_zig", .{}).artifact("vulkan-zig-generator");
+// Set up a run step to generate the bindings
+const vk_generate_cmd = b.addRunArtifact(vk_gen);
+// Pass the registry to the generator
+generate_cmd.addArg(registry);
+// Create a module from the generator's output...
 const vulkan_zig = b.addModule("vulkan-zig", .{
-    .source_file = generate_cmd.addOutputFileArg("vk.zig"), // this is the FileSource representing the generated bindings
+    .root_source_file = vk_generate_cmd.addOutputFileArg("vk.zig"),
 });
-exe.addModule("vulkan-zig", vulkan_zig);
+// ... and pass it as a module to your executable's build command
+exe.root_module.addImport("vulkan", vulkan_zig);
 ```
 
+See [examples/build.zig](examples/build.zig) and [examples/build.zig.zon](examples/build.zig.zon) for a concrete example.
+
+### (Deprecated) Generation from build.zig
+
+Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step. This requires adding vulkan-zig to your dependencies as shown above. After than, vulkan-zig can be imported at build time as follows:
+```zig
+const vkgen = @import("vulkan_zig");
+
+pub fn build(b: *Builder) void {
+    ...
+    const exe = b.addExecutable("my-executable", "src/main.zig");
+
+    // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
+    const gen = vkgen.VkGenerateStep.create(b, "path/to/vk.xml");
+
+    // Add the generated file as package to the final executable
+    exe.addModule("vulkan", gen.getModule());
+}
+```
+This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addModule`, after which the bindings will be made available to the executable under the name passed to `getModule`.
+
+This feature is only provided for legacy reasons. If you are still using this, please migrate to one of the methods that involve the package manager, as this method will be removed in the near future.
+
 ### Function & field renaming
+
 Functions and fields are renamed to be more or less in line with [Zig's standard library style](https://ziglang.org/documentation/master/#Style-Guide):
 * The vk prefix is removed everywhere
   * Structs like `VkInstanceCreateInfo` are renamed to `InstanceCreateInfo`.
@@ -100,6 +128,7 @@ Functions and fields are renamed to be more or less in line with [Zig's standard
 * Any name which is either an illegal Zig name or a reserved identifier is rendered using `@"name"` syntax. For example, `VK_IMAGE_TYPE_2D` is translated to `@"2d"`.
 
 ### Function pointers & Wrappers
+
 vulkan-zig provides no integration for statically linking libvulkan, and these symbols are not generated at all. Instead, vulkan functions are to be loaded dynamically. For each Vulkan function, a function pointer type is generated using the exact parameters and return types as defined by the Vulkan specification:
 ```zig
 pub const PfnCreateInstance = fn (
@@ -204,6 +233,7 @@ By default, wrapper `load` functions return `error.CommandLoadFailure` if a call
 One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
 
 ### Bitflags
+
 Packed structs of bools are used for bit flags in vulkan-zig, instead of both a `FlagBits` and `Flags` variant. Places where either of these variants are used are both replaced by this packed struct instead. This means that even in places where just one flag would normally be accepted, the packed struct is accepted. The programmer is responsible for only enabling a single bit.
 
 Each bit is defaulted to `false`, and the first `bool` is aligned to guarantee the overal alignment
@@ -252,6 +282,7 @@ pub fn FlagsMixin(comptime FlagsType: type) type {
 ```
 
 ### Handles
+
 Handles are generated to a non-exhaustive enum, backed by a `u64` for non-dispatchable handles and `usize` for dispatchable ones:
 ```zig
 const Instance = extern enum(usize) { null_handle = 0, _ };
@@ -259,6 +290,7 @@ const Instance = extern enum(usize) { null_handle = 0, _ };
 This means that handles are type-safe even when compiling for a 32-bit target.
 
 ### Struct defaults
+
 Defaults are generated for certain fields of structs:
 * sType is defaulted to the appropriate value.
 * pNext is defaulted to `null`.
@@ -273,6 +305,7 @@ pub const InstanceCreateInfo = extern struct {
 ```
 
 ### Pointer types
+
 Pointer types in both commands (wrapped and function pointers) and struct fields are augmented with the following information, where available in the registry:
 * Pointer optional-ness.
 * Pointer const-ness.
@@ -281,6 +314,7 @@ Pointer types in both commands (wrapped and function pointers) and struct fields
 Note that this information is not everywhere as useful in the registry, leading to places where optional-ness is not correct. Most notably, CreateInfo type structures which take a slice often have the item count marked as optional, but the pointer itself not. As of yet, this is not fixed in vulkan-zig. If drivers properly follow the Vulkan specification, these can be initialized to `undefined`, however, [that is not always the case](https://zeux.io/2019/07/17/serializing-pipeline-cache/).
 
 ### Platform types
+
 Defaults with the same ABI layout are generated for most platform-defined types. These can either by bitcasted to, or overridden by defining them in the project root:
 ```zig
 pub const xcb_connection_t = if (@hasDecl(root, "xcb_connection_t")) root.xcb_connection_t else @Type(.Opaque);
@@ -316,12 +350,11 @@ pub const ${name} align(@alignOf(u32)) = @embedFile("${path}").*;
 See [build.zig](build.zig) for a working example.
 
 ## Limitations
+
 * vulkan-zig has as of yet no functionality for selecting feature levels and extensions when generating bindings. This is because when an extension is promoted to Vulkan core, its fields and commands are renamed to lose the extensions author tag (for example, VkSemaphoreWaitFlagsKHR was renamed to VkSemaphoreWaitFlags when it was promoted from an extension to Vulkan 1.2 core). This leads to inconsistencies when only items from up to a certain feature level is included, as these promoted items then need to re-gain a tag.
 
-## Example
-A partial implementation of https://vulkan-tutorial.com is implemented in [examples/triangle.zig](examples/triangle.zig). This example can be ran by executing `zig build run-triangle` in vulkan-zig's root.
-
 ## See also
+
 * Implementation of https://vulkan-tutorial.com using `@cImport`'ed bindings: https://github.com/andrewrk/zig-vulkan-triangle.
 * Alternative binding generator: https://github.com/SpexGuy/Zig-Vulkan-Headers
 * Zig bindings for GLFW: https://github.com/hexops/mach-glfw

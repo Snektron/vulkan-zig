@@ -1,0 +1,14 @@
+.{
+    .name = "vulkan-zig-examples",
+    .version = "0.1.0",
+    .dependencies = .{
+        .vulkan_zig = .{
+            .path = "..",
+        },
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/v1.3.283.tar.gz",
+            .hash = "1220a7e73d72a0d56bc2a65f9d8999a7c019e42260a0744c408d1cded111bc205e10",
+        },
+    },
+    .paths = .{""},
+}
