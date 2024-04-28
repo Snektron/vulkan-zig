@@ -34,7 +34,7 @@ NOTE: you need to replace `path/to/vk.xml` with the spec path from whatever sour
 ### Generation from build.zig
 Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step:
 ```zig
-const vkgen = @import("vulkan-zig/generator/index.zig");
+const vkgen = @import("vulkan-zig/src/index.zig");
 
 pub fn build(b: *Builder) void {
     ...

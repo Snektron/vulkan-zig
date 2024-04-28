@@ -1,5 +1,5 @@
 const std = @import("std");
-const vkgen = @import("generator/index.zig");
+const vkgen = @import("src/index.zig");
 
 pub const ShaderCompileStep = vkgen.ShaderCompileStep;
 pub const VkGenerateStep = vkgen.VkGenerateStep;
@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     // a file source to the generated code with `.addOutputArg("vk.zig")`
     const generator_exe = b.addExecutable(.{
         .name = "generator",
-        .root_source_file = .{ .path = "generator/main.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
@@ -69,7 +69,7 @@ pub fn build(b: *std.Build) void {
     triangle_run_step.dependOn(&triangle_run_cmd.step);
 
     const test_target = b.addTest(.{
-        .root_source_file = .{ .path = "generator/index.zig" },
+        .root_source_file = .{ .path = "src/index.zig" },
     });
 
     const run_test = b.addRunArtifact(test_target);
