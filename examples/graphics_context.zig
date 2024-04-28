@@ -5,36 +5,30 @@ const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
-const BaseDispatch = vk.BaseWrapper(
-    blk: {
-        var commands = vk.feature_info.version_1_0.base_functions;
-        commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_1.base_functions);
-        commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_2.base_functions);
-        break :blk commands;
-    }
-);
+const BaseDispatch = vk.BaseWrapper(blk: {
+    var commands = vk.feature_info.version_1_0.base_functions;
+    commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_1.base_functions);
+    commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_2.base_functions);
+    break :blk commands;
+});
 
-const InstanceDispatch = vk.InstanceWrapper(
-    blk: {
-        var commands = vk.feature_info.version_1_0.instance_functions;
-        commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_1.instance_functions);
-        commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_2.instance_functions);
-        commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_surface.instance_functions);
-        commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.instance_functions);
-        break :blk commands;
-    }
-);
+const InstanceDispatch = vk.InstanceWrapper(blk: {
+    var commands = vk.feature_info.version_1_0.instance_functions;
+    commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_1.instance_functions);
+    commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_2.instance_functions);
+    commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_surface.instance_functions);
+    commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.instance_functions);
+    break :blk commands;
+});
 
-const DeviceDispatch = vk.DeviceWrapper(
-    blk: {
-        var commands = vk.feature_info.version_1_0.device_functions;
-        commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_1.device_functions);
-        commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_2.device_functions);
-        commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_surface.device_functions);
-        commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.device_functions);
-        break :blk commands;
-    }
-);
+const DeviceDispatch = vk.DeviceWrapper(blk: {
+    var commands = vk.feature_info.version_1_0.device_functions;
+    commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_1.device_functions);
+    commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_2.device_functions);
+    commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_surface.device_functions);
+    commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.device_functions);
+    break :blk commands;
+});
 
 pub const GraphicsContext = struct {
     vkb: BaseDispatch,
