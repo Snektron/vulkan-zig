@@ -10,11 +10,11 @@ pub fn build(b: *std.Build) void {
     const vk_xml_path: ?[]const u8 = b.option([]const u8, "registry", "Override the path to the Vulkan registry");
 
     // using the package manager, this artifact can be obtained by the user
-    // through `b.dependency(<name in build.zig.zon>, .{}).artifact("generator")`.
+    // through `b.dependency(<name in build.zig.zon>, .{}).artifact("vulkan-zig-generator")`.
     // with that, the user need only `.addArg("path/to/vk.xml")`, and then obtain
     // a file source to the generated code with `.addOutputArg("vk.zig")`
     const generator_exe = b.addExecutable(.{
-        .name = "generator",
+        .name = "vulkan-zig-generator",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,

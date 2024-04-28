@@ -20,7 +20,7 @@ vulkan-zig aims to be always compatible with the ever-changing Zig master branch
 ### CLI-interface
 A CLI-interface is provided to generate vk.zig from the [Vulkan XML registry](https://github.com/KhronosGroup/Vulkan-Docs/blob/main/xml), which is built by default when invoking `zig build` in the project root. To generate vk.zig, simply invoke the program as follows:
 ```
-$ zig-out/bin/generator path/to/vk.xml output/path/to/vk.zig
+$ zig-out/bin/vulkan-zig-generator path/to/vk.xml output/path/to/vk.zig
 ```
 This reads the xml file, parses its contents, renders the Vulkan bindings, and formats file, before writing the result to the output path. While the intended usage of vulkan-zig is through direct generation from build.zig (see below), the CLI-interface can be used for one-off generation and vendoring the result.
 NOTE: you need to replace `path/to/vk.xml` with the spec path from whatever source you prefer, here are some examples orderered from the most recommended:
@@ -77,7 +77,7 @@ That will allow you to `@import("vulkan-zig")` in your executable's source.
 In the event you have a specific need for it, the generator executable is made available through the dependency, allowing you to run the executable as a build step in your own build.zig file.
 Doing so should look a bit like this:
 ```zig
-const vk_gen = b.dependency("vulkan_zig", .{}).artifact("generator"); // get generator executable reference
+const vk_gen = b.dependency("vulkan_zig", .{}).artifact("vulkan-zig-generator"); // get generator executable reference
 
 const generate_cmd = b.addRunArtifact(vk_gen);
 generate_cmd.addArg(b.pathFromRoot("vk.xml")); // path to xml file to use when generating the bindings
