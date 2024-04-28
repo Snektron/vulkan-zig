@@ -62,6 +62,7 @@ const preamble =
     \\        ) !void {
     \\            try writer.writeAll(@typeName(FlagsType) ++ "{");
     \\            var first = true;
+    \\            @setEvalBranchQuota(10_000);
     \\            inline for (comptime std.meta.fieldNames(FlagsType)) |name| {
     \\                if (name[0] == '_') continue;
     \\                if (@field(self, name)) {
@@ -469,6 +470,7 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.renderCommandPtrs();
             try self.renderExtensionInfo();
+            try self.renderFeatureInfo();
             try self.renderWrappers();
         }
 
@@ -1035,16 +1037,132 @@ fn Renderer(comptime WriterType: type) type {
                 \\    const Info = struct {
                 \\        name: [:0]const u8,
                 \\        version: u32,
+                \\        instance_functions: InstanceCommandFlags,
+                \\        device_functions: DeviceCommandFlags,
                 \\    };
             );
+            // The commands in an extension are not pre-sorted based on if they are instance or device functions.
+            var instance_commands = std.BufSet.init(self.allocator);
+            defer instance_commands.deinit();
+            var device_commands = std.BufSet.init(self.allocator);
+            defer device_commands.deinit();
             for (self.registry.extensions) |ext| {
                 try self.writer.writeAll("pub const ");
                 try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
                 try self.writer.writeAll("= Info {\n");
                 try self.writer.print(".name = \"{s}\", .version = {},", .{ ext.name, ext.version });
+                // collect extension functions
+                for (ext.requires) |require| {
+                    for (require.commands) |command_name| {
+                        const decl = self.resolveDeclaration(command_name) orelse continue;
+                        // If the target type does not exist, it was likely an empty enum -
+                        // assume spec is correct and that this was not a function alias.
+                        const decl_type = self.resolveAlias(decl) catch continue;
+                        const command = switch (decl_type) {
+                            .command => |cmd| cmd,
+                            else => continue,
+                        };
+                        const class = classifyCommandDispatch(command_name, command);
+                        switch (class) {
+                            // Vulkan extensions cannot add base functions.
+                            .base => return error.InvalidRegistry,
+                            .instance => {
+                                try instance_commands.insert(command_name);
+                            },
+                            .device => {
+                                try device_commands.insert(command_name);
+                            },
+                        }
+                    }
+                }
+                // and write them out
+                try self.writer.writeAll(".instance_functions = ");
+                try self.renderCommandFlags(&instance_commands);
+                instance_commands.hash_map.clearRetainingCapacity();
+
+                try self.writer.writeAll(".device_functions = ");
+                try self.renderCommandFlags(&device_commands);
+                device_commands.hash_map.clearRetainingCapacity();
+
                 try self.writer.writeAll("};\n");
             }
             try self.writer.writeAll("};\n");
+        }
+
+        fn renderFeatureInfo(self: *Self) !void {
+            try self.writer.writeAll(
+                \\pub const feature_info = struct {
+                \\    const Info = struct {
+                \\        base_functions: BaseCommandFlags,
+                \\        instance_functions: InstanceCommandFlags,
+                \\        device_functions: DeviceCommandFlags,
+                \\    };
+            );
+            // The commands in a feature level are not pre-sorted based on if they are instance or device functions.
+            var base_commands = std.BufSet.init(self.allocator);
+            defer base_commands.deinit();
+            var instance_commands = std.BufSet.init(self.allocator);
+            defer instance_commands.deinit();
+            var device_commands = std.BufSet.init(self.allocator);
+            defer device_commands.deinit();
+            for (self.registry.features) |feature| {
+                try self.writer.writeAll("pub const ");
+                try self.writeIdentifierWithCase(.snake, trimVkNamespace(feature.name));
+                try self.writer.writeAll("= Info {\n");
+                // collect feature information
+                for (feature.requires) |require| {
+                    for (require.commands) |command_name| {
+                        const decl = self.resolveDeclaration(command_name) orelse continue;
+                        // If the target type does not exist, it was likely an empty enum -
+                        // assume spec is correct and that this was not a function alias.
+                        const decl_type = self.resolveAlias(decl) catch continue;
+                        const command = switch (decl_type) {
+                            .command => |cmd| cmd,
+                            else => continue,
+                        };
+                        const class = classifyCommandDispatch(command_name, command);
+                        switch (class) {
+                            .base => {
+                                try base_commands.insert(command_name);
+                            },
+                            .instance => {
+                                try instance_commands.insert(command_name);
+                            },
+                            .device => {
+                                try device_commands.insert(command_name);
+                            },
+                        }
+                    }
+                }
+                // and write them out
+                // clear command lists for next iteration
+                try self.writer.writeAll(".base_functions = ");
+                try self.renderCommandFlags(&base_commands);
+                base_commands.hash_map.clearRetainingCapacity();
+
+                try self.writer.writeAll(".instance_functions = ");
+                try self.renderCommandFlags(&instance_commands);
+                instance_commands.hash_map.clearRetainingCapacity();
+
+                try self.writer.writeAll(".device_functions = ");
+                try self.renderCommandFlags(&device_commands);
+                device_commands.hash_map.clearRetainingCapacity();
+
+                try self.writer.writeAll("};\n");
+            }
+
+            try self.writer.writeAll("};\n");
+        }
+
+        fn renderCommandFlags(self: *Self, commands: *const std.BufSet) !void {
+            try self.writer.writeAll(".{\n");
+            var iterator = commands.iterator();
+            while (iterator.next()) |command_name| {
+                try self.writer.writeAll(".");
+                try self.writeIdentifierWithCase(.camel, trimVkNamespace(command_name.*));
+                try self.writer.writeAll(" = true, \n");
+            }
+            try self.writer.writeAll("},\n");
         }
 
         fn renderWrappers(self: *Self) !void {
@@ -1053,6 +1171,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\    return struct {
                 \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
                 \\            }
@@ -1060,6 +1179,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\        }
                 \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
                 \\            }
@@ -1067,6 +1187,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\        }
                 \\        pub fn complement(self: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = !@field(self, field.name);
                 \\            }
@@ -1074,12 +1195,14 @@ fn Renderer(comptime WriterType: type) type {
                 \\        }
                 \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
                 \\            var result: CommandFlags = .{};
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
                 \\            }
                 \\            return result;
                 \\        }
                 \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
+                \\            @setEvalBranchQuota(10_000);
                 \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
                 \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
                 \\                    return false;

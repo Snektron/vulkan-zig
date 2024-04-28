@@ -5,78 +5,29 @@ const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
 
-const BaseDispatch = vk.BaseWrapper(.{
-    .createInstance = true,
-    .getInstanceProcAddr = true,
+const BaseDispatch = vk.BaseWrapper(blk: {
+    var commands = vk.feature_info.version_1_0.base_functions;
+    commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_1.base_functions);
+    commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_2.base_functions);
+    break :blk commands;
 });
 
-const InstanceDispatch = vk.InstanceWrapper(.{
-    .destroyInstance = true,
-    .createDevice = true,
-    .destroySurfaceKHR = true,
-    .enumeratePhysicalDevices = true,
-    .getPhysicalDeviceProperties = true,
-    .enumerateDeviceExtensionProperties = true,
-    .getPhysicalDeviceSurfaceFormatsKHR = true,
-    .getPhysicalDeviceSurfacePresentModesKHR = true,
-    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-    .getPhysicalDeviceSurfaceSupportKHR = true,
-    .getPhysicalDeviceMemoryProperties = true,
-    .getDeviceProcAddr = true,
+const InstanceDispatch = vk.InstanceWrapper(blk: {
+    var commands = vk.feature_info.version_1_0.instance_functions;
+    commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_1.instance_functions);
+    commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_2.instance_functions);
+    commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_surface.instance_functions);
+    commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.instance_functions);
+    break :blk commands;
 });
 
-const DeviceDispatch = vk.DeviceWrapper(.{
-    .destroyDevice = true,
-    .getDeviceQueue = true,
-    .createSemaphore = true,
-    .createFence = true,
-    .createImageView = true,
-    .destroyImageView = true,
-    .destroySemaphore = true,
-    .destroyFence = true,
-    .getSwapchainImagesKHR = true,
-    .createSwapchainKHR = true,
-    .destroySwapchainKHR = true,
-    .acquireNextImageKHR = true,
-    .deviceWaitIdle = true,
-    .waitForFences = true,
-    .resetFences = true,
-    .queueSubmit = true,
-    .queuePresentKHR = true,
-    .createCommandPool = true,
-    .destroyCommandPool = true,
-    .allocateCommandBuffers = true,
-    .freeCommandBuffers = true,
-    .queueWaitIdle = true,
-    .createShaderModule = true,
-    .destroyShaderModule = true,
-    .createPipelineLayout = true,
-    .destroyPipelineLayout = true,
-    .createRenderPass = true,
-    .destroyRenderPass = true,
-    .createGraphicsPipelines = true,
-    .destroyPipeline = true,
-    .createFramebuffer = true,
-    .destroyFramebuffer = true,
-    .beginCommandBuffer = true,
-    .endCommandBuffer = true,
-    .allocateMemory = true,
-    .freeMemory = true,
-    .createBuffer = true,
-    .destroyBuffer = true,
-    .getBufferMemoryRequirements = true,
-    .mapMemory = true,
-    .unmapMemory = true,
-    .bindBufferMemory = true,
-    .cmdBeginRenderPass = true,
-    .cmdEndRenderPass = true,
-    .cmdBindPipeline = true,
-    .cmdDraw = true,
-    .cmdSetViewport = true,
-    .cmdSetScissor = true,
-    .cmdBindVertexBuffers = true,
-    .cmdCopyBuffer = true,
+const DeviceDispatch = vk.DeviceWrapper(blk: {
+    var commands = vk.feature_info.version_1_0.device_functions;
+    commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_1.device_functions);
+    commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_2.device_functions);
+    commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_surface.device_functions);
+    commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.device_functions);
+    break :blk commands;
 });
 
 pub const GraphicsContext = struct {
