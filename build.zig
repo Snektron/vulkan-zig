@@ -2,14 +2,13 @@ const std = @import("std");
 const vkgen = @import("src/index.zig");
 
 pub const ShaderCompileStep = vkgen.ShaderCompileStep;
-pub const VkGenerateStep = vkgen.VkGenerateStep;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const vk_xml_path: ?[]const u8 = b.option([]const u8, "registry", "Override the path to the Vulkan registry");
 
-    // using the package manager, this artifact can be obtained by the user
+    // Using the package manager, this artifact can be obtained by the user
     // through `b.dependency(<name in build.zig.zon>, .{}).artifact("vulkan-zig-generator")`.
     // with that, the user need only `.addArg("path/to/vk.xml")`, and then obtain
     // a file source to the generated code with `.addOutputArg("vk.zig")`
@@ -21,7 +20,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(generator_exe);
 
-    // or they can skip all that, and just make sure to pass `.registry = "path/to/vk.xml"` to `b.dependency`,
+    // Or they can skip all that, and just make sure to pass `.registry = "path/to/vk.xml"` to `b.dependency`,
     // and then obtain the module directly via `.module("vulkan-zig")`.
     if (vk_xml_path) |path| {
         const generate_cmd = b.addRunArtifact(generator_exe);
@@ -34,8 +33,26 @@ pub fn build(b: *std.Build) void {
         });
     }
 
-    // remainder of the script is for local testing
+    // This section shows a crude example of how to build a program using vulkan-zig by
+    // calling the generator executable directly.
 
+    // First, obtain the path to vk.xml. In this example, we will just get it from the command line.
+    const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry used for the examples") orelse "examples/vk.xml";
+
+    // Obtain a reference to the generator. In a downstream build.zig, you would use
+    // `const generator_exe = b.dependency(<name in build.zig.zon>).artifact("vulkan-zig-generator");`.
+    // Here we are just going to use our own `generator_exe`.
+
+    // Now create a run artifact, and pass the registry to the generator. The generator is normally
+    // invoked as `vulkan-zig-generator <input vk.xml> <output vk.zig>`
+    const example_registry_generator_cmd = b.addRunArtifact(generator_exe);
+    example_registry_generator_cmd.addArg(example_registry);
+    // Obtain a reference to the generated file.
+    const example_vk_zig = example_registry_generator_cmd.addOutputFileArg("vk.zig");
+    // And turn it into a module.
+    const example_vk_zig_module = b.addModule("example-vulkan-zig", .{ .root_source_file = example_vk_zig });
+
+    // Now build a Vulkan program. This is just a simple triangle from the vulkan tutorial.
     const triangle_exe = b.addExecutable(.{
         .name = "triangle",
         .root_source_file = .{ .path = "examples/triangle.zig" },
@@ -46,12 +63,8 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(triangle_exe);
     triangle_exe.linkSystemLibrary("glfw");
 
-    const example_registry = b.option([]const u8, "example-registry", "Override the path to the Vulkan registry used for the examples") orelse "examples/vk.xml";
-    const gen = VkGenerateStep.create(b, example_registry);
-    triangle_exe.root_module.addImport("vulkan", gen.getModule());
-
-    const vk_zig_install_step = b.addInstallFile(gen.getSource(), "src/vk.zig");
-    b.getInstallStep().dependOn(&vk_zig_install_step.step);
+    // Add our module to the list of imports to make vulkan-zig available.
+    triangle_exe.root_module.addImport("vulkan", example_vk_zig_module);
 
     const shaders = ShaderCompileStep.create(
         b,
@@ -67,6 +80,11 @@ pub fn build(b: *std.Build) void {
 
     const triangle_run_step = b.step("run-triangle", "Run the triangle example");
     triangle_run_step.dependOn(&triangle_run_cmd.step);
+
+    // Remainder is for local testing.
+
+    const example_vk_zig_install_step = b.addInstallFile(example_vk_zig, "src/vk.zig");
+    b.getInstallStep().dependOn(&example_vk_zig_install_step.step);
 
     const test_target = b.addTest(.{
         .root_source_file = .{ .path = "src/index.zig" },
@@ -85,6 +103,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    ref_all_decls_test.root_module.addImport("vulkan", gen.getModule());
+    ref_all_decls_test.root_module.addImport("vulkan", example_vk_zig_module);
     test_step.dependOn(&ref_all_decls_test.step);
 }
