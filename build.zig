@@ -27,10 +27,6 @@ pub fn build(b: *std.Build) void {
     if (maybe_registry) |registry| {
         const vk_generate_cmd = b.addRunArtifact(generator_exe);
 
-        if (!std.fs.path.isAbsolute(registry)) {
-            @panic("Make sure to assign an absolute path to the `registry` option (see: std.Build.pathFromRoot).\n");
-        }
-
         vk_generate_cmd.addArg(registry);
 
         const vk_zig = vk_generate_cmd.addOutputFileArg("vk.zig");

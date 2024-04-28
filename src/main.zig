@@ -136,4 +136,3 @@ test "main" {
     _ = @import("xml.zig");
     _ = @import("vulkan/c_parse.zig");
 }
-

@@ -23,9 +23,6 @@ jobs:
     - name: Check formatting
       run: zig fmt --check .
 
-    - name: Test
-      run: zig build test
-
     - name: Fetch latest Vulkan SDK
       run: |
         wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
@@ -36,8 +33,14 @@ jobs:
     - name: Fetch latest vk.xml
       run: wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
 
-    - name: Build with latest zig & vk.xml
-      run: zig build -Dexample-registry=./vk.xml
+    - name: Test and install with latest zig & latest vk.xml
+      run: zig build test install -Dregistry=./vk.xml
+
+    - name: Build example with latest zig & vk.xml from dependency
+      run: zig build --build-file $(pwd)/examples/build.zig
+
+    - name: Build example with latest zig & latest vk.xml
+      run: zig build --build-file $(pwd)/examples/build.zig -Doverride-registry=./vk.xml
 
     - name: Archive vk.zig
       uses: actions/upload-artifact@v4
