@@ -94,7 +94,13 @@ const preamble =
     \\pub fn apiVersionPatch(version: u32) u12 {
     \\    return @truncate(version);
     \\}
-    \\
+    \\pub const ApiInfo = struct {
+    \\    name: [:0]const u8 = "custom",
+    \\    version: u32 = makeApiVersion(0, 0, 0, 0),
+    \\    base_commands: BaseCommandFlags = .{},
+    \\    instance_commands: InstanceCommandFlags = .{},
+    \\    device_commands: DeviceCommandFlags = .{},
+    \\};
 ;
 
 const builtin_types = std.StaticStringMap([]const u8).initComptime(.{
@@ -469,8 +475,8 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.renderCommandPtrs();
-            try self.renderExtensionInfo();
             try self.renderFeatureInfo();
+            try self.renderExtensionInfo();
             try self.renderWrappers();
         }
 
@@ -1031,72 +1037,10 @@ fn Renderer(comptime WriterType: type) type {
             }
         }
 
-        fn renderExtensionInfo(self: *Self) !void {
-            try self.writer.writeAll(
-                \\pub const extension_info = struct {
-                \\    const Info = struct {
-                \\        name: [:0]const u8,
-                \\        version: u32,
-                \\        instance_functions: InstanceCommandFlags,
-                \\        device_functions: DeviceCommandFlags,
-                \\    };
-            );
-            // The commands in an extension are not pre-sorted based on if they are instance or device functions.
-            var instance_commands = std.BufSet.init(self.allocator);
-            defer instance_commands.deinit();
-            var device_commands = std.BufSet.init(self.allocator);
-            defer device_commands.deinit();
-            for (self.registry.extensions) |ext| {
-                try self.writer.writeAll("pub const ");
-                try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
-                try self.writer.writeAll("= Info {\n");
-                try self.writer.print(".name = \"{s}\", .version = {},", .{ ext.name, ext.version });
-                // collect extension functions
-                for (ext.requires) |require| {
-                    for (require.commands) |command_name| {
-                        const decl = self.resolveDeclaration(command_name) orelse continue;
-                        // If the target type does not exist, it was likely an empty enum -
-                        // assume spec is correct and that this was not a function alias.
-                        const decl_type = self.resolveAlias(decl) catch continue;
-                        const command = switch (decl_type) {
-                            .command => |cmd| cmd,
-                            else => continue,
-                        };
-                        const class = classifyCommandDispatch(command_name, command);
-                        switch (class) {
-                            // Vulkan extensions cannot add base functions.
-                            .base => return error.InvalidRegistry,
-                            .instance => {
-                                try instance_commands.insert(command_name);
-                            },
-                            .device => {
-                                try device_commands.insert(command_name);
-                            },
-                        }
-                    }
-                }
-                // and write them out
-                try self.writer.writeAll(".instance_functions = ");
-                try self.renderCommandFlags(&instance_commands);
-                instance_commands.hash_map.clearRetainingCapacity();
-
-                try self.writer.writeAll(".device_functions = ");
-                try self.renderCommandFlags(&device_commands);
-                device_commands.hash_map.clearRetainingCapacity();
-
-                try self.writer.writeAll("};\n");
-            }
-            try self.writer.writeAll("};\n");
-        }
-
         fn renderFeatureInfo(self: *Self) !void {
             try self.writer.writeAll(
-                \\pub const feature_info = struct {
-                \\    const Info = struct {
-                \\        base_functions: BaseCommandFlags,
-                \\        instance_functions: InstanceCommandFlags,
-                \\        device_functions: DeviceCommandFlags,
-                \\    };
+                \\pub const features = struct {
+                \\
             );
             // The commands in a feature level are not pre-sorted based on if they are instance or device functions.
             var base_commands = std.BufSet.init(self.allocator);
@@ -1108,7 +1052,12 @@ fn Renderer(comptime WriterType: type) type {
             for (self.registry.features) |feature| {
                 try self.writer.writeAll("pub const ");
                 try self.writeIdentifierWithCase(.snake, trimVkNamespace(feature.name));
-                try self.writer.writeAll("= Info {\n");
+                try self.writer.writeAll("= ApiInfo {\n");
+                try self.writer.print(".name = \"{s}\", .version = makeApiVersion(0, {}, {}, 0),", .{
+                    trimVkNamespace(feature.name),
+                    feature.level.major,
+                    feature.level.minor,
+                });
                 // collect feature information
                 for (feature.requires) |require| {
                     for (require.commands) |command_name| {
@@ -1136,21 +1085,74 @@ fn Renderer(comptime WriterType: type) type {
                 }
                 // and write them out
                 // clear command lists for next iteration
-                try self.writer.writeAll(".base_functions = ");
+                try self.writer.writeAll(".base_commands = ");
                 try self.renderCommandFlags(&base_commands);
                 base_commands.hash_map.clearRetainingCapacity();
 
-                try self.writer.writeAll(".instance_functions = ");
+                try self.writer.writeAll(".instance_commands = ");
                 try self.renderCommandFlags(&instance_commands);
                 instance_commands.hash_map.clearRetainingCapacity();
 
-                try self.writer.writeAll(".device_functions = ");
+                try self.writer.writeAll(".device_commands = ");
                 try self.renderCommandFlags(&device_commands);
                 device_commands.hash_map.clearRetainingCapacity();
 
                 try self.writer.writeAll("};\n");
             }
 
+            try self.writer.writeAll("};\n");
+        }
+
+        fn renderExtensionInfo(self: *Self) !void {
+            try self.writer.writeAll(
+                \\pub const extensions = struct {
+                \\
+            );
+            // The commands in an extension are not pre-sorted based on if they are instance or device functions.
+            var instance_commands = std.BufSet.init(self.allocator);
+            defer instance_commands.deinit();
+            var device_commands = std.BufSet.init(self.allocator);
+            defer device_commands.deinit();
+            for (self.registry.extensions) |ext| {
+                try self.writer.writeAll("pub const ");
+                try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
+                try self.writer.writeAll("= ApiInfo {\n");
+                try self.writer.print(".name = \"{s}\", .version = {},", .{ ext.name, ext.version });
+                // collect extension functions
+                for (ext.requires) |require| {
+                    for (require.commands) |command_name| {
+                        const decl = self.resolveDeclaration(command_name) orelse continue;
+                        // If the target type does not exist, it was likely an empty enum -
+                        // assume spec is correct and that this was not a function alias.
+                        const decl_type = self.resolveAlias(decl) catch continue;
+                        const command = switch (decl_type) {
+                            .command => |cmd| cmd,
+                            else => continue,
+                        };
+                        const class = classifyCommandDispatch(command_name, command);
+                        switch (class) {
+                            // Vulkan extensions cannot add base functions.
+                            .base => return error.InvalidRegistry,
+                            .instance => {
+                                try instance_commands.insert(command_name);
+                            },
+                            .device => {
+                                try device_commands.insert(command_name);
+                            },
+                        }
+                    }
+                }
+                // and write them out
+                try self.writer.writeAll(".instance_commands = ");
+                try self.renderCommandFlags(&instance_commands);
+                instance_commands.hash_map.clearRetainingCapacity();
+
+                try self.writer.writeAll(".device_commands = ");
+                try self.renderCommandFlags(&device_commands);
+                device_commands.hash_map.clearRetainingCapacity();
+
+                try self.writer.writeAll("};\n");
+            }
             try self.writer.writeAll("};\n");
         }
 
@@ -1221,10 +1223,10 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrappersOfDispatchType(self: *Self, dispatch_type: CommandDispatchType) !void {
-            const name = switch (dispatch_type) {
-                .base => "Base",
-                .instance => "Instance",
-                .device => "Device",
+            const name, const name_lower = switch (dispatch_type) {
+                .base => .{ "Base", "base" },
+                .instance => .{ "Instance", "instance" },
+                .device => .{ "Device", "device" },
             };
 
             try self.writer.print(
@@ -1303,26 +1305,32 @@ fn Renderer(comptime WriterType: type) type {
             , .{name});
 
             try self.writer.print(
-                \\pub fn {0s}Wrapper(comptime cmds: {0s}CommandFlags) type {{
+                \\pub fn {0s}Wrapper(comptime apis: []const ApiInfo) type {{
                 \\    return struct {{
                 \\        dispatch: Dispatch,
                 \\
                 \\        const Self = @This();
-                \\        pub const commands = cmds;
+                \\        pub const commands = blk: {{
+                \\            var cmds: {0s}CommandFlags = .{{}};
+                \\            for (apis) |api| {{
+                \\                cmds = cmds.merge(api.{1s}_commands);
+                \\            }}
+                \\            break :blk cmds;
+                \\        }};
                 \\        pub const Dispatch = blk: {{
                 \\            @setEvalBranchQuota(10_000);
                 \\            const Type = std.builtin.Type;
                 \\            const fields_len = fields_len: {{
                 \\                var fields_len: u32 = 0;
                 \\                for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
-                \\                    fields_len += @intCast(@intFromBool(@field(cmds, field.name)));
+                \\                    fields_len += @intCast(@intFromBool(@field(commands, field.name)));
                 \\                }}
                 \\                break :fields_len fields_len;
                 \\            }};
                 \\            var fields: [fields_len]Type.StructField = undefined;
                 \\            var i: usize = 0;
                 \\            for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
-                \\                if (@field(cmds, field.name)) {{
+                \\                if (@field(commands, field.name)) {{
                 \\                    const field_tag = std.enums.nameCast(std.meta.FieldEnum({0s}CommandFlags), field.name);
                 \\                    const PfnType = {0s}CommandFlags.CmdType(field_tag);
                 \\                    fields[i] = .{{
@@ -1345,7 +1353,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            }});
                 \\        }};
                 \\
-            , .{name});
+            , .{ name, name_lower });
 
             try self.renderWrapperLoader(dispatch_type);
 
@@ -1450,7 +1458,13 @@ fn Renderer(comptime WriterType: type) type {
             }
         }
 
-        fn renderWrapperCall(self: *Self, name: []const u8, command: reg.Command, returns: []const ReturnValue) !void {
+        fn renderWrapperCall(
+            self: *Self,
+            name: []const u8,
+            command: reg.Command,
+            returns: []const ReturnValue,
+            return_var_name: ?[]const u8,
+        ) !void {
             try self.writer.writeAll("self.dispatch.");
             try self.writeIdentifier(name);
             try self.writer.writeAll("(");
@@ -1459,10 +1473,11 @@ fn Renderer(comptime WriterType: type) type {
                 switch (try self.classifyParam(param)) {
                     .out_pointer => {
                         try self.writer.writeByte('&');
+                        try self.writeIdentifierWithCase(.snake, return_var_name.?);
                         if (returns.len > 1) {
-                            try self.writer.writeAll("return_values.");
+                            try self.writer.writeByte('.');
+                            try self.writeIdentifierWithCase(.snake, derefName(param.name));
                         }
-                        try self.writeIdentifierWithCase(.snake, derefName(param.name));
                     },
                     .bitflags, .in_pointer, .in_out_pointer, .buffer_len, .mut_buffer_len, .other => {
                         try self.writeIdentifierWithCase(.snake, param.name);
@@ -1562,14 +1577,14 @@ fn Renderer(comptime WriterType: type) type {
 
                 if (returns_vk_result) {
                     try self.writer.writeAll("const result = ");
-                    try self.renderWrapperCall(name, command, returns);
+                    try self.renderWrapperCall(name, command, returns, null);
                     try self.writer.writeAll(";\n");
 
                     try self.renderErrorSwitch("result", command);
                     try self.writer.writeAll("return result;\n");
                 } else {
                     try self.writer.writeAll("return ");
-                    try self.renderWrapperCall(name, command, returns);
+                    try self.renderWrapperCall(name, command, returns, null);
                     try self.writer.writeAll(";\n");
                 }
 
@@ -1577,10 +1592,15 @@ fn Renderer(comptime WriterType: type) type {
                 return;
             }
 
+            const return_var_name = if (returns.len == 1)
+                try std.fmt.allocPrint(self.allocator, "out_{s}", .{returns[0].name})
+            else
+                "return_values";
+
             try self.writer.writeAll("{\n");
             if (returns.len == 1) {
                 try self.writer.writeAll("var ");
-                try self.writeIdentifierWithCase(.snake, returns[0].name);
+                try self.writeIdentifierWithCase(.snake, return_var_name);
                 try self.writer.writeAll(": ");
                 try self.renderTypeInfo(returns[0].return_value_type);
                 try self.writer.writeAll(" = undefined;\n");
@@ -1592,7 +1612,7 @@ fn Renderer(comptime WriterType: type) type {
 
             if (returns_vk_result) {
                 try self.writer.writeAll("const result = ");
-                try self.renderWrapperCall(name, command, returns);
+                try self.renderWrapperCall(name, command, returns, return_var_name);
                 try self.writer.writeAll(";\n");
 
                 try self.renderErrorSwitch("result", command);
@@ -1603,16 +1623,14 @@ fn Renderer(comptime WriterType: type) type {
                 if (!returns_void) {
                     try self.writer.writeAll("return_values.return_value = ");
                 }
-                try self.renderWrapperCall(name, command, returns);
+                try self.renderWrapperCall(name, command, returns, return_var_name);
                 try self.writer.writeAll(";\n");
             }
 
-            if (returns.len == 1) {
+            if (returns.len >= 1) {
                 try self.writer.writeAll("return ");
-                try self.writeIdentifierWithCase(.snake, returns[0].name);
+                try self.writeIdentifierWithCase(.snake, return_var_name);
                 try self.writer.writeAll(";\n");
-            } else if (returns.len > 1) {
-                try self.writer.writeAll("return return_values;\n");
             }
 
             try self.writer.writeAll("}\n");

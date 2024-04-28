@@ -3,32 +3,29 @@ const vk = @import("vulkan");
 const c = @import("c.zig");
 const Allocator = std.mem.Allocator;
 
-const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
+const required_device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
-const BaseDispatch = vk.BaseWrapper(blk: {
-    var commands = vk.feature_info.version_1_0.base_functions;
-    commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_1.base_functions);
-    commands = vk.BaseCommandFlags.merge(commands, vk.feature_info.version_1_2.base_functions);
-    break :blk commands;
-});
+/// To construct base, instance and device wrappers for vulkan-zig, you need to pass a list of 'apis' to it.
+const apis: []const vk.ApiInfo = &.{
+    // You can either add invidiual functions by manually creating an 'api'
+    .{
+        .base_commands = .{
+            .createInstance = true,
+        },
+        .instance_commands = .{
+            .createDevice = true,
+        },
+    },
+    // Or you can add entire feature sets or extensions
+    vk.features.version_1_0,
+    vk.extensions.khr_surface,
+    vk.extensions.khr_swapchain,
+};
 
-const InstanceDispatch = vk.InstanceWrapper(blk: {
-    var commands = vk.feature_info.version_1_0.instance_functions;
-    commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_1.instance_functions);
-    commands = vk.InstanceCommandFlags.merge(commands, vk.feature_info.version_1_2.instance_functions);
-    commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_surface.instance_functions);
-    commands = vk.InstanceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.instance_functions);
-    break :blk commands;
-});
-
-const DeviceDispatch = vk.DeviceWrapper(blk: {
-    var commands = vk.feature_info.version_1_0.device_functions;
-    commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_1.device_functions);
-    commands = vk.DeviceCommandFlags.merge(commands, vk.feature_info.version_1_2.device_functions);
-    commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_surface.device_functions);
-    commands = vk.DeviceCommandFlags.merge(commands, vk.extension_info.khr_swapchain.device_functions);
-    break :blk commands;
-});
+/// Next, pass the `apis` to the wrappers to create dispatch tables.
+const BaseDispatch = vk.BaseWrapper(apis);
+const InstanceDispatch = vk.InstanceWrapper(apis);
+const DeviceDispatch = vk.DeviceWrapper(apis);
 
 pub const GraphicsContext = struct {
     vkb: BaseDispatch,
