@@ -13,16 +13,18 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
 
     - name: Setup Zig
-      uses: goto-bus-stop/setup-zig@v2.0.1
+      uses: goto-bus-stop/setup-zig@v2
       with:
         version: master
 
+    - name: Check formatting
+      run: zig fmt --check .
+
     - name: Test
-      run: |
-        zig build test
+      run: zig build test
 
     - name: Fetch latest Vulkan SDK
       run: |
@@ -32,15 +34,14 @@ jobs:
         sudo apt install shaderc libglfw3 libglfw3-dev
 
     - name: Fetch latest vk.xml
-      run: |
-        wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
+      run: wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
 
     - name: Build with latest zig & vk.xml
-      run: |
-        zig build -Dexample-registry=./vk.xml
+      run: zig build -Dexample-registry=./vk.xml
 
     - name: Archive vk.zig
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: vk.zig
         path: zig-out/src/vk.zig
+        if-no-files-found: error
