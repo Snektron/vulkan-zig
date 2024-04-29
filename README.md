@@ -143,12 +143,27 @@ For each function, a wrapper is generated into one of three structs:
 * InstanceWrapper. This contains wrappers for functions which are otherwise loaded by `vkGetInstanceProcAddr`.
 * DeviceWrapper. This contains wrappers for functions which are loaded by `vkGetDeviceProcAddr`.
 
-Each wrapper struct can be called with an array of the appropriate enums:
+To create a wrapper type, an "api specification" should be passed to it. This is a list of `ApiInfo` structs, which allows one to specify the functions that should be made available. An `ApiInfo` structure is initialized 3 optional fields, `base_commands`, `instance_commands`, and `device_commands`. Each of these takes a set of the vulkan functions that should be made available for that category, for example, setting `.createInstance = true` in `base_commands` makes the `createInstance` function available (loaded from `vkCreateInstance`). An entire feature level or extension can be pulled in at once too, for example, `vk.features.version_1_0` contains all functions for Vulkan 1.0. `vk.extensions.khr_surface` contains all functions for the `VK_KHR_surface` extension.
+
 ```zig
 const vk = @import("vulkan");
-const BaseDispatch = vk.BaseWrapper(.{
-    .createInstance = true,
-});
+/// To construct base, instance and device wrappers for vulkan-zig, you need to pass a list of 'apis' to it.
+const apis: []const vk.ApiInfo = &.{
+    // You can either add invidiual functions by manually creating an 'api'
+    .{
+        .base_commands = .{
+            .createInstance = true,
+        },
+        .instance_commands = .{
+            .createDevice = true,
+        },
+    },
+    // Or you can add entire feature sets or extensions
+    vk.features.version_1_0,
+    vk.extensions.khr_surface,
+    vk.extensions.khr_swapchain,
+};
+const BaseDispatch = vk.BaseWrapper(apis);
 ```
 The wrapper struct then provides wrapper functions for each function pointer in the dispatch struct:
 ```zig
@@ -231,6 +246,23 @@ const vkb = try BaseDispatch.load(customGetInstanceProcAddress);
 By default, wrapper `load` functions return `error.CommandLoadFailure` if a call to the loader resulted in `null`. If this behaviour is not desired, one can use `loadNoFail`. This function accepts the same parameters as `load`, but does not return an error any function pointer fails to load and sets its value to `undefined` instead. It is at the programmer's discretion not to invoke invalid functions, which can be tested for by checking whether the required core and extension versions the function requires are supported.
 
 One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
+
+#### Proxying Wrappers
+
+Proxying wrappers wrap a wrapper and a pointer to the associated handle in a single struct, and automatically passes this handle to commands as appropriate. Besides the proxying wrappers for instances and devices, there are also proxying wrappers for queues and command buffers. Proxying wrapper type are constructed in the same way as a regular wrapper, by passing an api specification to them. To initialize a proxying wrapper, it must be passed a handle and a pointer to an appropriate wrapper. For queue and command buffer proxying wrappers, a pointer to a device wrapper must be passed.
+
+```zig
+// Create the dispatch tables
+const InstanceDispatch = vk.InstanceWrapper(apis);
+const Instance = vk.InstanceProxy(apis);
+
+const instance_handle = try vkb.createInstance(...);
+const vki = try InstanceDispatch.load(instance_handle, vkb.vkGetInstanceProcAddr);
+const instance = Instance.load(instance_handle, &vki);
+defer instance.destroyInstance(null);
+```
+
+For queue and command buffer proxying wrappers, the `queue` and `cmd` prefix is removed for functions where appropriate. Note that the device proxying wrappers also have the queue and command buffer functions made available for convenience, but there the prefix is not stripped.
 
 ### Bitflags
 

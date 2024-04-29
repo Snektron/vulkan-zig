@@ -11,6 +11,21 @@ fn invalidUsage(prog_name: []const u8, comptime fmt: []const u8, args: anytype) 
     std.process.exit(1);
 }
 
+fn reportParseErrors(tree: std.zig.Ast) !void {
+    const stderr = std.io.getStdErr().writer();
+
+    for (tree.errors) |err| {
+        const loc = tree.tokenLocation(0, err.token);
+        try stderr.print("(vulkan-zig error):{}:{}: error: ", .{ loc.line + 1, loc.column + 1 });
+        try tree.renderError(err, stderr);
+        try stderr.print("\n{s}\n", .{tree.source[loc.line_start..loc.line_end]});
+        for (0..loc.column) |_| {
+            try stderr.writeAll(" ");
+        }
+        try stderr.writeAll("^\n");
+    }
+}
+
 pub fn main() void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -23,6 +38,7 @@ pub fn main() void {
 
     var maybe_xml_path: ?[]const u8 = null;
     var maybe_out_path: ?[]const u8 = null;
+    var debug: bool = false;
     var api = generator.Api.vulkan;
 
     while (args.next()) |arg| {
@@ -40,6 +56,7 @@ pub fn main() void {
                 \\Options:
                 \\-h --help        show this message and exit.
                 \\-a --api <api>   Generate API for 'vulkan' or 'vulkansc'. Defaults to 'vulkan'.
+                \\--debug Write out unformatted source if does not parse correctly.
                 \\
             ,
                 .{prog_name},
@@ -59,6 +76,8 @@ pub fn main() void {
             maybe_xml_path = arg;
         } else if (maybe_out_path == null) {
             maybe_out_path = arg;
+        } else if (std.mem.eql(u8, arg, "--debug")) {
+            debug = true;
         } else {
             invalidUsage(prog_name, "superficial argument '{s}'", .{arg});
         }
@@ -106,18 +125,24 @@ pub fn main() void {
         error.OutOfMemory => @panic("oom"),
     };
 
-    if (tree.errors.len > 0) {
+    const formatted = if (tree.errors.len > 0) blk: {
         std.log.err("generated invalid zig code", .{});
         std.log.err("this is a bug in vulkan-zig", .{});
         std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
+        std.log.err("or run with --debug to write out unformatted source", .{});
 
+        reportParseErrors(tree) catch |err| {
+            std.log.err("failed to dump ast errors: {s}", .{@errorName(err)});
+            std.process.exit(1);
+        };
+
+        if (debug) {
+            break :blk src;
+        }
         std.process.exit(1);
-    }
-
-    const formatted = tree.render(allocator) catch |err| switch (err) {
+    } else tree.render(allocator) catch |err| switch (err) {
         error.OutOfMemory => @panic("oom"),
     };
-    defer allocator.free(formatted);
 
     if (std.fs.path.dirname(out_path)) |dir| {
         cwd.makePath(dir) catch |err| {
