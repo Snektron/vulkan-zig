@@ -173,9 +173,22 @@ const dispatchable_handles = std.StaticStringMap(CommandDispatchType).initCompti
     .{ "VkInstance", .instance },
 });
 
+const additional_namespaces = std.StaticStringMap([]const u8).initComptime(.{
+    // vkCmdBegin...
+    .{ "VkCommandBuffer", "Cmd" },
+    // vkQueueSubmit...
+    .{ "VkQueue", "Queue" },
+});
+
 const dispatch_override_functions = std.StaticStringMap(CommandDispatchType).initComptime(.{
+    // See https://registry.khronos.org/vulkan/specs/1.3-extensions/html/vkspec.html#initialization-functionpointers
     .{ "vkGetInstanceProcAddr", .base },
     .{ "vkGetDeviceProcAddr", .instance },
+
+    .{ "vkEnumerateInstanceVersion", .base },
+    .{ "vkEnumerateInstanceExtensionProperties", .base },
+    .{ "vkEnumerateInstanceLayerProperties", .base },
+    .{ "vkCreateInstance", .base },
 });
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
@@ -478,7 +491,7 @@ fn Renderer(comptime WriterType: type) type {
                 else => {},
             }
 
-            return .base;
+            return .instance;
         }
 
         fn render(self: *Self) !void {
@@ -1440,17 +1453,17 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderProxies(self: *Self) !void {
-            try self.renderProxy(.instance, "VkInstance", null);
-            try self.renderProxy(.device, "VkDevice", null);
-            try self.renderProxy(.device, "VkCommandBuffer", "VkDevice");
-            try self.renderProxy(.device, "VkQueue", "VkDevice");
+            try self.renderProxy(.instance, "VkInstance", true);
+            try self.renderProxy(.device, "VkDevice", true);
+            try self.renderProxy(.device, "VkCommandBuffer", false);
+            try self.renderProxy(.device, "VkQueue", false);
         }
 
         fn renderProxy(
             self: *Self,
             dispatch_type: CommandDispatchType,
             dispatch_handle: []const u8,
-            maybe_parent_dispatch_handle: ?[]const u8,
+            also_add_other_commands: bool,
         ) !void {
             const loader_name = dispatch_type.name();
 
@@ -1463,7 +1476,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\        handle: {0s},
                 \\        wrapper: *const Wrapper,
                 \\
-                \\        pub fn init(handle: {0s}, wrapper: *const Wrapper) error{{CommandLoadFailure}}!Self {{
+                \\        pub fn init(handle: {0s}, wrapper: *const Wrapper) Self {{
                 \\            return .{{
                 \\                .handle = handle,
                 \\                .wrapper = wrapper,
@@ -1484,21 +1497,20 @@ fn Renderer(comptime WriterType: type) type {
 
                 switch (command.params[0].param_type) {
                     .name => |name| {
-                        if (!mem.eql(u8, name, dispatch_handle)) {
-                            // Also render queue/cmdBuf functions in the proxy of the device, for conveniece
-                            if (maybe_parent_dispatch_handle) |parent_dispatch_handle| {
-                                if (!mem.eql(u8, name, parent_dispatch_handle)) {
-                                    continue;
-                                }
-                            } else {
-                                continue;
+                        const skip = blk: {
+                            if (mem.eql(u8, name, dispatch_handle)) {
+                                break :blk false;
                             }
-                        }
+
+                            break :blk !also_add_other_commands;
+                        };
+
+                        if (skip) continue;
                     },
                     else => continue, // Not a dispatchable handle
                 }
 
-                try self.renderProxyCommand(decl.name, command);
+                try self.renderProxyCommand(decl.name, command, dispatch_handle);
             }
 
             try self.writer.writeAll(
@@ -1507,7 +1519,7 @@ fn Renderer(comptime WriterType: type) type {
             );
         }
 
-        fn renderProxyCommand(self: *Self, name: []const u8, command: reg.Command) !void {
+        fn renderProxyCommand(self: *Self, name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
             const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
             const returns = try self.extractReturns(command);
 
@@ -1527,7 +1539,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(";\n");
             }
 
-            try self.renderWrapperPrototype(name, command, returns, .proxy);
+            try self.renderWrapperPrototype(name, command, returns, dispatch_handle, .proxy);
 
             try self.writer.writeAll(
                 \\{
@@ -1540,7 +1552,11 @@ fn Renderer(comptime WriterType: type) type {
                 switch (try self.classifyParam(param)) {
                     .out_pointer => continue,
                     .dispatch_handle => {
-                        try self.writer.writeAll("self.handle");
+                        if (mem.eql(u8, param.param_type.name, dispatch_handle)) {
+                            try self.writer.writeAll("self.handle");
+                        } else {
+                            try self.writeIdentifierWithCase(.snake, param.name);
+                        }
                     },
                     else => {
                         try self.writeIdentifierWithCase(.snake, param.name);
@@ -1574,16 +1590,31 @@ fn Renderer(comptime WriterType: type) type {
             name: []const u8,
             command: reg.Command,
             returns: []const ReturnValue,
+            dispatch_handle: []const u8,
             kind: WrapperKind,
         ) !void {
             try self.writer.writeAll("pub fn ");
-            try self.writeIdentifierWithCase(.camel, trimVkNamespace(name));
+            const trimmed_name = switch (kind) {
+                .wrapper => trimVkNamespace(name),
+                .proxy => blk: {
+                    // Strip additional namespaces: queue for VkQueue and cmd for VkCommandBuffer
+                    const no_vk = trimVkNamespace(name);
+                    const additional_namespace = additional_namespaces.get(dispatch_handle) orelse break :blk no_vk;
+                    if (std.mem.startsWith(u8, no_vk, additional_namespace)) {
+                        break :blk no_vk[additional_namespace.len..];
+                    }
+
+                    break :blk no_vk;
+                },
+            };
+            try self.writeIdentifierWithCase(.camel, trimmed_name);
+
             try self.writer.writeAll("(self: Self, ");
 
             for (command.params) |param| {
                 const class = try self.classifyParam(param);
                 // Skip the dispatch type for proxying wrappers
-                if (kind == .proxy and class == .dispatch_handle) {
+                if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name, dispatch_handle)) {
                     continue;
                 }
 
@@ -1727,7 +1758,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(";\n");
             }
 
-            try self.renderWrapperPrototype(name, command, returns, .wrapper);
+            try self.renderWrapperPrototype(name, command, returns, "", .wrapper);
 
             if (returns.len == 1 and returns[0].origin == .inner_return_value) {
                 try self.writer.writeAll("{\n\n");
