@@ -226,7 +226,10 @@ pub const ShaderCompileStep = struct {
             &.{ shaders_dir, &digest(&hasher) },
         );
 
-        try cwd.writeFile(shaders_path, shaders_file_contents.items);
+        try cwd.writeFile(.{
+            .sub_path = shaders_path,
+            .data = shaders_file_contents.items,
+        });
         self.generated_file.path = shaders_path;
     }
 };

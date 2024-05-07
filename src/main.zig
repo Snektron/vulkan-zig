@@ -151,7 +151,10 @@ pub fn main() void {
         };
     }
 
-    cwd.writeFile(out_path, formatted) catch |err| {
+    cwd.writeFile(.{
+        .sub_path = out_path,
+        .data = formatted,
+    }) catch |err| {
         std.log.err("failed to write to output file '{s}' ({s})", .{ out_path, @errorName(err) });
         std.process.exit(1);
     };
