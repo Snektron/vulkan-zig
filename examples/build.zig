@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
     const vk_generate_cmd = b.addRunArtifact(vk_gen);
 
     if (maybe_override_registry) |override_registry| {
-        vk_generate_cmd.addFileArg(b.path(override_registry));
+        vk_generate_cmd.addFileArg(.{ .cwd_relative = override_registry });
     } else {
         vk_generate_cmd.addFileArg(registry);
     }
