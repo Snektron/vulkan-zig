@@ -105,7 +105,7 @@ pub const ShaderCompileStep = struct {
 
     /// Returns the file source for the generated shader resource code.
     pub fn getSource(self: *ShaderCompileStep) Build.LazyPath {
-        return .{ .generated = &self.generated_file };
+        return .{ .generated = .{ .file = &self.generated_file } };
     }
 
     /// Add a shader to be compiled. `src` is shader source path, relative to the project root.

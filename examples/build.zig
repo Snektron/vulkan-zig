@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
 
     const triangle_exe = b.addExecutable(.{
         .name = "triangle",
-        .root_source_file = .{ .path = "triangle.zig" },
+        .root_source_file = b.path("triangle.zig"),
         .target = target,
         .link_libc = true,
         .optimize = optimize,
@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
     const vk_generate_cmd = b.addRunArtifact(vk_gen);
 
     if (maybe_override_registry) |override_registry| {
-        vk_generate_cmd.addFileArg(.{ .path = override_registry });
+        vk_generate_cmd.addFileArg(b.path(override_registry));
     } else {
         vk_generate_cmd.addFileArg(registry);
     }

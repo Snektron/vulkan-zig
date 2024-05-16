@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     // a file source to the generated code with `.addOutputArg("vk.zig")`
     const generator_exe = b.addExecutable(.{
         .name = "vulkan-zig-generator",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -45,7 +45,7 @@ pub fn build(b: *std.Build) void {
         // It does not need to run anyway.
         const ref_all_decls_test = b.addObject(.{
             .name = "ref-all-decls-test",
-            .root_source_file = .{ .path = "test/ref_all_decls.zig" },
+            .root_source_file = b.path("test/ref_all_decls.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -54,7 +54,7 @@ pub fn build(b: *std.Build) void {
     }
 
     const test_target = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
     });
     test_step.dependOn(&b.addRunArtifact(test_target).step);
 }
