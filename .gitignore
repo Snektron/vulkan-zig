@@ -1,3 +1,5 @@
 zig-cache/
 zig-out/
-.vscode/
+.vscode/.zig-cache/
+.zig-cache/
+examples/.zig-cache

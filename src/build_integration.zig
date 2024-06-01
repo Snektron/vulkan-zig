@@ -165,7 +165,7 @@ pub const ShaderCompileStep = struct {
     }
 
     /// Internal build function.
-    fn make(step: *Build.Step, progress: *std.Progress.Node) !void {
+    fn make(step: *Build.Step, progress: std.Progress.Node) !void {
         _ = progress;
         const b = step.owner;
         const self: *ShaderCompileStep = @fieldParentPtr("step", step);
