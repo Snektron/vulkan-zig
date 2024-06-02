@@ -1031,7 +1031,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll(default);
                 try self.writer.writeAll(";\n");
             } else {
-                try self.writer.print("@compileError(\"Missing type definition of '{s}'\");\n", .{name});
+                try self.writer.print("opaque {{}};\n", .{});
             }
         }
 

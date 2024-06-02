@@ -349,9 +349,9 @@ Note that this information is not everywhere as useful in the registry, leading 
 
 Defaults with the same ABI layout are generated for most platform-defined types. These can either by bitcasted to, or overridden by defining them in the project root:
 ```zig
-pub const xcb_connection_t = if (@hasDecl(root, "xcb_connection_t")) root.xcb_connection_t else @Type(.Opaque);
+pub const xcb_connection_t = if (@hasDecl(root, "xcb_connection_t")) root.xcb_connection_t else opaque{};
 ```
-For some times (such as those from Google Games Platform) no default is known. Usage of these without providing a concrete type in the project root generates a compile error.
+For some times (such as those from Google Games Platform) no default is known, but an `opaque{}` will be used by default. Usage of these without providing a concrete type in the project root is likely an error.
 
 ### Shader compilation
 
