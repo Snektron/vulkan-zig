@@ -63,14 +63,14 @@ pub const GenerateStep = struct {
 
     /// Returns the file source for the generated bindings.
     pub fn getSource(self: *GenerateStep) Build.LazyPath {
-        return .{ .generated = &self.generated_file };
+        return .{ .generated = .{ .file = &self.generated_file } };
     }
 
     /// Internal build function. This reads `vk.xml`, and passes it to `generate`, which then generates
     /// the final bindings. The resulting generated bindings are not formatted, which is why an ArrayList
     /// writer is passed instead of a file writer. This is then formatted into standard formatting
     /// by parsing it and rendering with `std.zig.parse` and `std.zig.render` respectively.
-    fn make(step: *Build.Step, progress: *std.Progress.Node) !void {
+    fn make(step: *Build.Step, progress: std.Progress.Node) !void {
         _ = progress;
 
         const b = step.owner;
@@ -195,7 +195,7 @@ pub const GenerateStep = struct {
             return err;
         };
 
-        try cwd.writeFile(output_file_path, formatted);
+        try cwd.writeFile(.{ .sub_path = output_file_path, .data = formatted });
         self.generated_file.path = output_file_path;
         try step.writeManifest(&man);
     }
