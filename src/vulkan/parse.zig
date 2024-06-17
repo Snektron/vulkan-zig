@@ -206,7 +206,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool, api: r
         }
 
         if (member.getAttribute("optional")) |optionals| {
-            var optional_it = mem.split(u8, optionals, ",");
+            var optional_it = mem.splitScalar(u8, optionals, ',');
             if (optional_it.next()) |first_optional| {
                 members[i].is_optional = mem.eql(u8, first_optional, "true");
             } else {
@@ -223,7 +223,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool, api: r
     if (ty.getAttribute("structextends")) |extends| {
         const n_structs = std.mem.count(u8, extends, ",") + 1;
         maybe_extends = try allocator.alloc([]const u8, n_structs);
-        var struct_extends = std.mem.split(u8, extends, ",");
+        var struct_extends = std.mem.splitScalar(u8, extends, ',');
         var j: usize = 0;
         while (struct_extends.next()) |struct_extend| {
             maybe_extends.?[j] = struct_extend;
@@ -303,7 +303,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
     var len_attribute_depth: usize = 0;
 
     if (elem.getAttribute("len")) |lens| {
-        var it = mem.split(u8, lens, ",");
+        var it = mem.splitScalar(u8, lens, ',');
         var current_type_info = type_info;
 
         while (true) switch (current_type_info.*) {
@@ -347,7 +347,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
     var current_depth: usize = 0;
 
     if (elem.getAttribute("optional")) |optionals| {
-        var it = mem.split(u8, optionals, ",");
+        var it = mem.splitScalar(u8, optionals, ',');
         var current_type_info = type_info;
         while (true) switch (current_type_info.*) {
             inline .pointer, .array => |*info| {
@@ -498,7 +498,7 @@ fn splitCommaAlloc(allocator: Allocator, text: []const u8) ![][]const u8 {
     }
 
     const codes = try allocator.alloc([]const u8, n_codes);
-    var it = mem.split(u8, text, ",");
+    var it = mem.splitScalar(u8, text, ',');
     for (codes) |*code| {
         code.* = it.next().?;
     }
@@ -539,7 +539,7 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element, api: registry.Api) !re
         };
 
         if (param.getAttribute("optional")) |optionals| {
-            var optional_it = mem.split(u8, optionals, ",");
+            var optional_it = mem.splitScalar(u8, optionals, ',');
             if (optional_it.next()) |first_optional| {
                 params[i].is_optional = mem.eql(u8, first_optional, "true");
             } else {
@@ -951,7 +951,7 @@ fn parseExtension(allocator: Allocator, extension: *xml.Element, api: registry.A
 }
 
 fn splitFeatureLevel(ver: []const u8, split: []const u8) !registry.FeatureLevel {
-    var it = mem.split(u8, ver, split);
+    var it = mem.splitSequence(u8, ver, split);
 
     const major = it.next() orelse return error.InvalidFeatureLevel;
     const minor = it.next() orelse return error.InvalidFeatureLevel;
@@ -968,7 +968,7 @@ fn splitFeatureLevel(ver: []const u8, split: []const u8) !registry.FeatureLevel 
 fn requiredByApi(elem: *xml.Element, api: registry.Api) bool {
     const apis = elem.getAttribute("api") orelse return true; // If the 'api' element is not present, assume required.
 
-    var it = mem.split(u8, apis, ",");
+    var it = mem.splitScalar(u8, apis, ',');
     while (it.next()) |required_by_api| {
         if (std.mem.eql(u8, @tagName(api), required_by_api)) return true;
     }
