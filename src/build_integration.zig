@@ -211,7 +211,7 @@ pub const ShaderCompileStep = struct {
 
             try cmd.appendSlice(shader.options.args);
             try cmd.appendSlice(&.{ shader.source_path, self.output_flag, shader_out_path });
-            try step.evalChildProcess(cmd.items);
+            _ = try step.evalChildProcess(cmd.items);
         }
 
         // Generate a file name for the shaders zig source based on the contents of shaders_file_contents.
