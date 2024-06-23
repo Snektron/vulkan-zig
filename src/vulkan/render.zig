@@ -1585,15 +1585,12 @@ fn Renderer(comptime WriterType: type) type {
             proxy,
         };
 
-        fn renderWrapperPrototype(
+        fn renderWrapperName(
             self: *Self,
             name: []const u8,
-            command: reg.Command,
-            returns: []const ReturnValue,
             dispatch_handle: []const u8,
             kind: WrapperKind,
         ) !void {
-            try self.writer.writeAll("pub fn ");
             const trimmed_name = switch (kind) {
                 .wrapper => trimVkNamespace(name),
                 .proxy => blk: {
@@ -1608,7 +1605,25 @@ fn Renderer(comptime WriterType: type) type {
                 },
             };
             try self.writeIdentifierWithCase(.camel, trimmed_name);
+        }
 
+        fn renderWrapperParam(self: *Self, param: reg.Command.Param) !void {
+            try self.writeIdentifierWithCase(.snake, param.name);
+            try self.writer.writeAll(": ");
+            try self.renderTypeInfo(param.param_type);
+            try self.writer.writeAll(", ");
+        }
+
+        fn renderWrapperPrototype(
+            self: *Self,
+            name: []const u8,
+            command: reg.Command,
+            returns: []const ReturnValue,
+            dispatch_handle: []const u8,
+            kind: WrapperKind,
+        ) !void {
+            try self.writer.writeAll("pub fn ");
+            try self.renderWrapperName(name, dispatch_handle, kind);
             try self.writer.writeAll("(self: Self, ");
 
             for (command.params) |param| {
@@ -1623,10 +1638,7 @@ fn Renderer(comptime WriterType: type) type {
                     continue;
                 }
 
-                try self.writeIdentifierWithCase(.snake, param.name);
-                try self.writer.writeAll(": ");
-                try self.renderTypeInfo(param.param_type);
-                try self.writer.writeAll(", ");
+                try self.renderWrapperParam(param);
             }
 
             try self.writer.writeAll(") ");
