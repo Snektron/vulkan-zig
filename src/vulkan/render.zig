@@ -1435,8 +1435,12 @@ fn Renderer(comptime WriterType: type) type {
                 \\    var self: Self = undefined;
                 \\    inline for (std.meta.fields(Dispatch)) |field| {{
                 \\        const name: [*:0]const u8 = @ptrCast(field.name ++ "\x00");
-                \\        const cmd_ptr = loader({[first_arg]s}, name) orelse return error.CommandLoadFailure;
-                \\        @field(self.dispatch, field.name) = @ptrCast(cmd_ptr);
+                \\        if (loader({[first_arg]s}, name)) |cmd_ptr| {{
+                \\             @field(self.dispatch, field.name) = @ptrCast(cmd_ptr);
+                \\        }} else {{
+                \\             std.log.err("Command loading failed for \"{{s}}\".", .{{field.name}});
+                \\             return error.CommandLoadFailure;
+                \\        }}
                 \\    }}
                 \\    return self;
                 \\}}
