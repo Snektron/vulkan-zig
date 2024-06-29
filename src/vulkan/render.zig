@@ -199,6 +199,23 @@ const enumerate_functions = std.StaticStringMap(void).initComptime(.{
     .{"vkGetPhysicalDeviceQueueFamilyProperties"},
 });
 
+// Given one of the above commands, returns the type of the array elements
+// (and performs some basic verification that the command has the expected signature).
+fn getEnumerateFunctionDataType(command: reg.Command) !reg.TypeInfo {
+    if (command.params.len < 2) {
+        return error.InvalidRegistry;
+    }
+    const count_param = command.params[command.params.len - 2];
+    if (!count_param.is_buffer_len) {
+        return error.InvalidRegistry;
+    }
+    const data_param = command.params[command.params.len - 1];
+    return switch (data_param.param_type) {
+        .pointer => |pointer| pointer.child.*,
+        else => error.InvalidRegistry,
+    };
+}
+
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
     if (lhs.len != rhs.len) {
         return false;
@@ -1522,6 +1539,9 @@ fn Renderer(comptime WriterType: type) type {
                 }
 
                 try self.renderProxyCommand(decl.name, command, dispatch_handle);
+                if (enumerate_functions.has(decl.name)) {
+                    try self.renderProxyCommandAlloc(decl.name, command, dispatch_handle);
+                }
             }
 
             try self.writer.writeAll(
@@ -1578,6 +1598,56 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll(
                 \\);
+                \\}
+                \\
+            );
+        }
+
+        fn renderProxyCommandAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
+            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+
+            const name = try std.mem.concat(self.allocator, u8, &.{ wrapped_name, "Alloc" });
+            defer self.allocator.free(name);
+
+            if (command.params.len < 2) {
+                return error.InvalidRegistry;
+            }
+            const params = command.params[0 .. command.params.len - 2];
+            const data_type = try getEnumerateFunctionDataType(command);
+
+            try self.writer.writeAll("pub const ");
+            try self.renderErrorSetName(name);
+            try self.writer.writeAll(" = Wrapper.");
+            try self.renderErrorSetName(name);
+            try self.writer.writeAll(";\n");
+
+            try self.renderAllocWrapperPrototype(name, params, returns_vk_result, data_type, dispatch_handle, .proxy);
+            try self.writer.writeAll(
+                \\{
+                \\return self.wrapper.
+            );
+            try self.writeIdentifierWithCase(.camel, trimVkNamespace(name));
+            try self.writer.writeByte('(');
+
+            for (params) |param| {
+                switch (try self.classifyParam(param)) {
+                    .out_pointer => return error.InvalidRegistry,
+                    .dispatch_handle => {
+                        if (mem.eql(u8, param.param_type.name, dispatch_handle)) {
+                            try self.writer.writeAll("self.handle");
+                        } else {
+                            try self.writeIdentifierWithCase(.snake, param.name);
+                        }
+                    },
+                    else => {
+                        try self.writeIdentifierWithCase(.snake, param.name);
+                    },
+                }
+                try self.writer.writeAll(", ");
+            }
+
+            try self.writer.writeAll(
+                \\allocator,);
                 \\}
                 \\
             );
@@ -1847,40 +1917,24 @@ fn Renderer(comptime WriterType: type) type {
             try self.writer.writeAll("}\n");
         }
 
-        fn renderWrapperAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command) !void {
-            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
-
-            const name = try std.mem.concat(self.allocator, u8, &.{ wrapped_name, "Alloc" });
-            defer self.allocator.free(name);
-
-            if (command.params.len < 2) {
-                return error.InvalidRegistry;
-            }
-            const params = command.params[0 .. command.params.len - 2];
-
-            const count_param = command.params[command.params.len - 2];
-            if (!count_param.is_buffer_len) {
-                return error.InvalidRegistry;
-            }
-
-            const data_param = command.params[command.params.len - 1];
-            const data_type = switch (data_param.param_type) {
-                .pointer => |pointer| pointer.child.*,
-                else => return error.InvalidRegistry,
-            };
-
-            if (returns_vk_result) {
-                try self.writer.writeAll("pub const ");
-                try self.renderErrorSetName(name);
-                try self.writer.writeAll(" =\n    ");
-                try self.renderErrorSetName(wrapped_name);
-                try self.writer.writeAll(" || Allocator.Error;\n");
-            }
-
+        fn renderAllocWrapperPrototype(
+            self: *Self,
+            name: []const u8,
+            params: []const reg.Command.Param,
+            returns_vk_result: bool,
+            data_type: reg.TypeInfo,
+            dispatch_handle: []const u8,
+            kind: WrapperKind,
+        ) !void {
             try self.writer.writeAll("pub fn ");
             try self.renderWrapperName(name, "", .wrapper);
             try self.writer.writeAll("(self: Self, ");
             for (params) |param| {
+                const class = try self.classifyParam(param);
+                // Skip the dispatch type for proxying wrappers
+                if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name, dispatch_handle)) {
+                    continue;
+                }
                 try self.renderWrapperParam(param);
             }
             try self.writer.writeAll("allocator: Allocator,) ");
@@ -1893,6 +1947,29 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.writeAll("![]");
             try self.renderTypeInfo(data_type);
+        }
+
+        fn renderWrapperAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command) !void {
+            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+
+            const name = try std.mem.concat(self.allocator, u8, &.{ wrapped_name, "Alloc" });
+            defer self.allocator.free(name);
+
+            if (command.params.len < 2) {
+                return error.InvalidRegistry;
+            }
+            const params = command.params[0 .. command.params.len - 2];
+            const data_type = try getEnumerateFunctionDataType(command);
+
+            if (returns_vk_result) {
+                try self.writer.writeAll("pub const ");
+                try self.renderErrorSetName(name);
+                try self.writer.writeAll(" =\n    ");
+                try self.renderErrorSetName(wrapped_name);
+                try self.writer.writeAll(" || Allocator.Error;\n");
+            }
+
+            try self.renderAllocWrapperPrototype(name, params, returns_vk_result, data_type, "", .wrapper);
             try self.writer.writeAll(
                 \\{
                 \\    var count: u32 = undefined;
