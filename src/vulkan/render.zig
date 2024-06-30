@@ -197,6 +197,10 @@ const enumerate_functions = std.StaticStringMap(void).initComptime(.{
     .{"vkEnumerateInstanceExtensionProperties"},
     .{"vkEnumeratePhysicalDevices"},
     .{"vkGetPhysicalDeviceQueueFamilyProperties"},
+    .{"vkGetPhysicalDeviceSurfaceFormatsKHR"},
+    .{"vkGetPhysicalDeviceSurfacePresentModesKHR"},
+    .{"vkEnumerateDeviceExtensionProperties"},
+    .{"vkGetSwapchainImagesKHR"},
 });
 
 // Given one of the above commands, returns the type of the array elements
