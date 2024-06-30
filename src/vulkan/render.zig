@@ -194,13 +194,30 @@ const dispatch_override_functions = std.StaticStringMap(CommandDispatchType).ini
 
 // Functions that return an array of objects via a count and data pointer.
 const enumerate_functions = std.StaticStringMap(void).initComptime(.{
-    .{"vkEnumerateInstanceExtensionProperties"},
     .{"vkEnumeratePhysicalDevices"},
+    .{"vkEnumeratePhysicalDeviceGroups"},
     .{"vkGetPhysicalDeviceQueueFamilyProperties"},
-    .{"vkGetPhysicalDeviceSurfaceFormatsKHR"},
-    .{"vkGetPhysicalDeviceSurfacePresentModesKHR"},
+    .{"vkGetPhysicalDeviceQueueFamilyProperties2"},
+    .{"vkEnumerateInstanceLayerProperties"},
+    .{"vkEnumerateInstanceExtensionProperties"},
+    .{"vkEnumerateDeviceLayerProperties"},
     .{"vkEnumerateDeviceExtensionProperties"},
+    .{"vkGetImageSparseMemoryRequirements"},
+    .{"vkGetImageSparseMemoryRequirements2"},
+    .{"vkGetDeviceImageSparseMemoryRequirements"},
+    .{"vkGetPhysicalDeviceSparseImageFormatProperties"},
+    .{"vkGetPhysicalDeviceSparseImageFormatProperties2"},
+    .{"vkGetPhysicalDeviceToolProperties"},
+    .{"vkGetPipelineCacheData"},
+
+    .{"vkGetPhysicalDeviceSurfaceFormatsKHR"},
+    .{"vkGetPhysicalDeviceSurfaceFormats2KHR"},
+    .{"vkGetPhysicalDeviceSurfacePresentModesKHR"},
+
     .{"vkGetSwapchainImagesKHR"},
+    .{"vkGetPhysicalDevicePresentRectanglesKHR"},
+
+    .{"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"},
 });
 
 // Given one of the above commands, returns the type of the array elements
