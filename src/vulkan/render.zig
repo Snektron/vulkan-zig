@@ -1624,10 +1624,17 @@ fn Renderer(comptime WriterType: type) type {
             );
         }
 
+        // vkFooKHR => vkFooAllocKHR
+        fn makeAllocWrapperName(self: *Self, wrapped_name: []const u8) ![]const u8 {
+            const tag = self.id_renderer.getAuthorTag(wrapped_name) orelse "";
+            const base_len = wrapped_name.len - tag.len;
+            return std.mem.concat(self.allocator, u8, &.{ wrapped_name[0..base_len], "Alloc", tag });
+        }
+
         fn renderProxyCommandAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
             const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
 
-            const name = try std.mem.concat(self.allocator, u8, &.{ wrapped_name, "Alloc" });
+            const name = try self.makeAllocWrapperName(wrapped_name);
             defer self.allocator.free(name);
 
             if (command.params.len < 2) {
@@ -1973,7 +1980,7 @@ fn Renderer(comptime WriterType: type) type {
         fn renderWrapperAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command) !void {
             const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
 
-            const name = try std.mem.concat(self.allocator, u8, &.{ wrapped_name, "Alloc" });
+            const name = try self.makeAllocWrapperName(wrapped_name);
             defer self.allocator.free(name);
 
             if (command.params.len < 2) {

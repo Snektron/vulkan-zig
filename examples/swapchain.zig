@@ -247,7 +247,7 @@ const SwapImage = struct {
 };
 
 fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, format: vk.Format, allocator: Allocator) ![]SwapImage {
-    const images = try gc.dev.getSwapchainImagesKhrAlloc(swapchain, allocator);
+    const images = try gc.dev.getSwapchainImagesAllocKHR(swapchain, allocator);
     defer allocator.free(images);
 
     const swap_images = try allocator.alloc(SwapImage, images.len);
@@ -270,7 +270,7 @@ fn findSurfaceFormat(gc: *const GraphicsContext, allocator: Allocator) !vk.Surfa
         .color_space = .srgb_nonlinear_khr,
     };
 
-    const surface_formats = try gc.instance.getPhysicalDeviceSurfaceFormatsKhrAlloc(gc.pdev, gc.surface, allocator);
+    const surface_formats = try gc.instance.getPhysicalDeviceSurfaceFormatsAllocKHR(gc.pdev, gc.surface, allocator);
     defer allocator.free(surface_formats);
 
     for (surface_formats) |sfmt| {
@@ -283,7 +283,7 @@ fn findSurfaceFormat(gc: *const GraphicsContext, allocator: Allocator) !vk.Surfa
 }
 
 fn findPresentMode(gc: *const GraphicsContext, allocator: Allocator) !vk.PresentModeKHR {
-    const present_modes = try gc.instance.getPhysicalDeviceSurfacePresentModesKhrAlloc(gc.pdev, gc.surface, allocator);
+    const present_modes = try gc.instance.getPhysicalDeviceSurfacePresentModesAllocKHR(gc.pdev, gc.surface, allocator);
     defer allocator.free(present_modes);
 
     const preferred = [_]vk.PresentModeKHR{
