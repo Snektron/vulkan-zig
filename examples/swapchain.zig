@@ -247,13 +247,10 @@ const SwapImage = struct {
 };
 
 fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, format: vk.Format, allocator: Allocator) ![]SwapImage {
-    var count: u32 = undefined;
-    _ = try gc.dev.getSwapchainImagesKHR(swapchain, &count, null);
-    const images = try allocator.alloc(vk.Image, count);
+    const images = try gc.dev.getSwapchainImagesAllocKHR(swapchain, allocator);
     defer allocator.free(images);
-    _ = try gc.dev.getSwapchainImagesKHR(swapchain, &count, images.ptr);
 
-    const swap_images = try allocator.alloc(SwapImage, count);
+    const swap_images = try allocator.alloc(SwapImage, images.len);
     errdefer allocator.free(swap_images);
 
     var i: usize = 0;
@@ -273,11 +270,8 @@ fn findSurfaceFormat(gc: *const GraphicsContext, allocator: Allocator) !vk.Surfa
         .color_space = .srgb_nonlinear_khr,
     };
 
-    var count: u32 = undefined;
-    _ = try gc.instance.getPhysicalDeviceSurfaceFormatsKHR(gc.pdev, gc.surface, &count, null);
-    const surface_formats = try allocator.alloc(vk.SurfaceFormatKHR, count);
+    const surface_formats = try gc.instance.getPhysicalDeviceSurfaceFormatsAllocKHR(gc.pdev, gc.surface, allocator);
     defer allocator.free(surface_formats);
-    _ = try gc.instance.getPhysicalDeviceSurfaceFormatsKHR(gc.pdev, gc.surface, &count, surface_formats.ptr);
 
     for (surface_formats) |sfmt| {
         if (std.meta.eql(sfmt, preferred)) {
@@ -289,11 +283,8 @@ fn findSurfaceFormat(gc: *const GraphicsContext, allocator: Allocator) !vk.Surfa
 }
 
 fn findPresentMode(gc: *const GraphicsContext, allocator: Allocator) !vk.PresentModeKHR {
-    var count: u32 = undefined;
-    _ = try gc.instance.getPhysicalDeviceSurfacePresentModesKHR(gc.pdev, gc.surface, &count, null);
-    const present_modes = try allocator.alloc(vk.PresentModeKHR, count);
+    const present_modes = try gc.instance.getPhysicalDeviceSurfacePresentModesAllocKHR(gc.pdev, gc.surface, allocator);
     defer allocator.free(present_modes);
-    _ = try gc.instance.getPhysicalDeviceSurfacePresentModesKHR(gc.pdev, gc.surface, &count, present_modes.ptr);
 
     const preferred = [_]vk.PresentModeKHR{
         .mailbox_khr,

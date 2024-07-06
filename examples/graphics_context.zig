@@ -196,13 +196,8 @@ fn pickPhysicalDevice(
     allocator: Allocator,
     surface: vk.SurfaceKHR,
 ) !DeviceCandidate {
-    var device_count: u32 = undefined;
-    _ = try instance.enumeratePhysicalDevices(&device_count, null);
-
-    const pdevs = try allocator.alloc(vk.PhysicalDevice, device_count);
+    const pdevs = try instance.enumeratePhysicalDevicesAlloc(allocator);
     defer allocator.free(pdevs);
-
-    _ = try instance.enumeratePhysicalDevices(&device_count, pdevs.ptr);
 
     for (pdevs) |pdev| {
         if (try checkSuitable(instance, pdev, allocator, surface)) |candidate| {
@@ -240,12 +235,8 @@ fn checkSuitable(
 }
 
 fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Allocator, surface: vk.SurfaceKHR) !?QueueAllocation {
-    var family_count: u32 = undefined;
-    instance.getPhysicalDeviceQueueFamilyProperties(pdev, &family_count, null);
-
-    const families = try allocator.alloc(vk.QueueFamilyProperties, family_count);
+    const families = try instance.getPhysicalDeviceQueueFamilyPropertiesAlloc(pdev, allocator);
     defer allocator.free(families);
-    instance.getPhysicalDeviceQueueFamilyProperties(pdev, &family_count, families.ptr);
 
     var graphics_family: ?u32 = null;
     var present_family: ?u32 = null;
@@ -287,13 +278,8 @@ fn checkExtensionSupport(
     pdev: vk.PhysicalDevice,
     allocator: Allocator,
 ) !bool {
-    var count: u32 = undefined;
-    _ = try instance.enumerateDeviceExtensionProperties(pdev, null, &count, null);
-
-    const propsv = try allocator.alloc(vk.ExtensionProperties, count);
+    const propsv = try instance.enumerateDeviceExtensionPropertiesAlloc(pdev, null, allocator);
     defer allocator.free(propsv);
-
-    _ = try instance.enumerateDeviceExtensionProperties(pdev, null, &count, propsv.ptr);
 
     for (required_device_extensions) |ext| {
         for (propsv) |props| {

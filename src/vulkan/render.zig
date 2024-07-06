@@ -14,6 +14,7 @@ const preamble =
     \\const builtin = @import("builtin");
     \\const root = @import("root");
     \\const vk = @This();
+    \\const Allocator = std.mem.Allocator;
     \\
     \\pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .x86)
     \\        .Stdcall
@@ -190,6 +191,51 @@ const dispatch_override_functions = std.StaticStringMap(CommandDispatchType).ini
     .{ "vkEnumerateInstanceLayerProperties", .base },
     .{ "vkCreateInstance", .base },
 });
+
+// Functions that return an array of objects via a count and data pointer.
+const enumerate_functions = std.StaticStringMap(void).initComptime(.{
+    .{"vkEnumeratePhysicalDevices"},
+    .{"vkEnumeratePhysicalDeviceGroups"},
+    .{"vkGetPhysicalDeviceQueueFamilyProperties"},
+    .{"vkGetPhysicalDeviceQueueFamilyProperties2"},
+    .{"vkEnumerateInstanceLayerProperties"},
+    .{"vkEnumerateInstanceExtensionProperties"},
+    .{"vkEnumerateDeviceLayerProperties"},
+    .{"vkEnumerateDeviceExtensionProperties"},
+    .{"vkGetImageSparseMemoryRequirements"},
+    .{"vkGetImageSparseMemoryRequirements2"},
+    .{"vkGetDeviceImageSparseMemoryRequirements"},
+    .{"vkGetPhysicalDeviceSparseImageFormatProperties"},
+    .{"vkGetPhysicalDeviceSparseImageFormatProperties2"},
+    .{"vkGetPhysicalDeviceToolProperties"},
+    .{"vkGetPipelineCacheData"},
+
+    .{"vkGetPhysicalDeviceSurfaceFormatsKHR"},
+    .{"vkGetPhysicalDeviceSurfaceFormats2KHR"},
+    .{"vkGetPhysicalDeviceSurfacePresentModesKHR"},
+
+    .{"vkGetSwapchainImagesKHR"},
+    .{"vkGetPhysicalDevicePresentRectanglesKHR"},
+
+    .{"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"},
+});
+
+// Given one of the above commands, returns the type of the array elements
+// (and performs some basic verification that the command has the expected signature).
+fn getEnumerateFunctionDataType(command: reg.Command) !reg.TypeInfo {
+    if (command.params.len < 2) {
+        return error.InvalidRegistry;
+    }
+    const count_param = command.params[command.params.len - 2];
+    if (!count_param.is_buffer_len) {
+        return error.InvalidRegistry;
+    }
+    const data_param = command.params[command.params.len - 1];
+    return switch (data_param.param_type) {
+        .pointer => |pointer| pointer.child.*,
+        else => error.InvalidRegistry,
+    };
+}
 
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
     if (lhs.len != rhs.len) {
@@ -1410,6 +1456,9 @@ fn Renderer(comptime WriterType: type) type {
                 // for newer versions of vulkan can still invoke extension behavior on older
                 // implementations.
                 try self.renderWrapper(decl.name, command);
+                if (enumerate_functions.has(decl.name)) {
+                    try self.renderWrapperAlloc(decl.name, command);
+                }
             }
 
             try self.writer.writeAll("};}\n");
@@ -1515,6 +1564,9 @@ fn Renderer(comptime WriterType: type) type {
                 }
 
                 try self.renderProxyCommand(decl.name, command, dispatch_handle);
+                if (enumerate_functions.has(decl.name)) {
+                    try self.renderProxyCommandAlloc(decl.name, command, dispatch_handle);
+                }
             }
 
             try self.writer.writeAll(
@@ -1576,6 +1628,63 @@ fn Renderer(comptime WriterType: type) type {
             );
         }
 
+        // vkFooKHR => vkFooAllocKHR
+        fn makeAllocWrapperName(self: *Self, wrapped_name: []const u8) ![]const u8 {
+            const tag = self.id_renderer.getAuthorTag(wrapped_name) orelse "";
+            const base_len = wrapped_name.len - tag.len;
+            return std.mem.concat(self.allocator, u8, &.{ wrapped_name[0..base_len], "Alloc", tag });
+        }
+
+        fn renderProxyCommandAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
+            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+
+            const name = try self.makeAllocWrapperName(wrapped_name);
+            defer self.allocator.free(name);
+
+            if (command.params.len < 2) {
+                return error.InvalidRegistry;
+            }
+            const params = command.params[0 .. command.params.len - 2];
+            const data_type = try getEnumerateFunctionDataType(command);
+
+            try self.writer.writeAll("pub const ");
+            try self.renderErrorSetName(name);
+            try self.writer.writeAll(" = Wrapper.");
+            try self.renderErrorSetName(name);
+            try self.writer.writeAll(";\n");
+
+            try self.renderAllocWrapperPrototype(name, params, returns_vk_result, data_type, dispatch_handle, .proxy);
+            try self.writer.writeAll(
+                \\{
+                \\return self.wrapper.
+            );
+            try self.writeIdentifierWithCase(.camel, trimVkNamespace(name));
+            try self.writer.writeByte('(');
+
+            for (params) |param| {
+                switch (try self.classifyParam(param)) {
+                    .out_pointer => return error.InvalidRegistry,
+                    .dispatch_handle => {
+                        if (mem.eql(u8, param.param_type.name, dispatch_handle)) {
+                            try self.writer.writeAll("self.handle");
+                        } else {
+                            try self.writeIdentifierWithCase(.snake, param.name);
+                        }
+                    },
+                    else => {
+                        try self.writeIdentifierWithCase(.snake, param.name);
+                    },
+                }
+                try self.writer.writeAll(", ");
+            }
+
+            try self.writer.writeAll(
+                \\allocator,);
+                \\}
+                \\
+            );
+        }
+
         fn derefName(name: []const u8) []const u8 {
             var it = id_render.SegmentIterator.init(name);
             return if (mem.eql(u8, it.next().?, "p"))
@@ -1589,15 +1698,12 @@ fn Renderer(comptime WriterType: type) type {
             proxy,
         };
 
-        fn renderWrapperPrototype(
+        fn renderWrapperName(
             self: *Self,
             name: []const u8,
-            command: reg.Command,
-            returns: []const ReturnValue,
             dispatch_handle: []const u8,
             kind: WrapperKind,
         ) !void {
-            try self.writer.writeAll("pub fn ");
             const trimmed_name = switch (kind) {
                 .wrapper => trimVkNamespace(name),
                 .proxy => blk: {
@@ -1612,7 +1718,25 @@ fn Renderer(comptime WriterType: type) type {
                 },
             };
             try self.writeIdentifierWithCase(.camel, trimmed_name);
+        }
 
+        fn renderWrapperParam(self: *Self, param: reg.Command.Param) !void {
+            try self.writeIdentifierWithCase(.snake, param.name);
+            try self.writer.writeAll(": ");
+            try self.renderTypeInfo(param.param_type);
+            try self.writer.writeAll(", ");
+        }
+
+        fn renderWrapperPrototype(
+            self: *Self,
+            name: []const u8,
+            command: reg.Command,
+            returns: []const ReturnValue,
+            dispatch_handle: []const u8,
+            kind: WrapperKind,
+        ) !void {
+            try self.writer.writeAll("pub fn ");
+            try self.renderWrapperName(name, dispatch_handle, kind);
             try self.writer.writeAll("(self: Self, ");
 
             for (command.params) |param| {
@@ -1627,10 +1751,7 @@ fn Renderer(comptime WriterType: type) type {
                     continue;
                 }
 
-                try self.writeIdentifierWithCase(.snake, param.name);
-                try self.writer.writeAll(": ");
-                try self.renderTypeInfo(param.param_type);
-                try self.writer.writeAll(", ");
+                try self.renderWrapperParam(param);
             }
 
             try self.writer.writeAll(") ");
@@ -1826,6 +1947,118 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll("}\n");
+        }
+
+        fn renderAllocWrapperPrototype(
+            self: *Self,
+            name: []const u8,
+            params: []const reg.Command.Param,
+            returns_vk_result: bool,
+            data_type: reg.TypeInfo,
+            dispatch_handle: []const u8,
+            kind: WrapperKind,
+        ) !void {
+            try self.writer.writeAll("pub fn ");
+            try self.renderWrapperName(name, "", .wrapper);
+            try self.writer.writeAll("(self: Self, ");
+            for (params) |param| {
+                const class = try self.classifyParam(param);
+                // Skip the dispatch type for proxying wrappers
+                if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name, dispatch_handle)) {
+                    continue;
+                }
+                try self.renderWrapperParam(param);
+            }
+            try self.writer.writeAll("allocator: Allocator,) ");
+
+            if (returns_vk_result) {
+                try self.renderErrorSetName(name);
+            } else {
+                try self.writer.writeAll("Allocator.Error");
+            }
+
+            try self.writer.writeAll("![]");
+            try self.renderTypeInfo(data_type);
+        }
+
+        fn renderWrapperAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command) !void {
+            const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+
+            const name = try self.makeAllocWrapperName(wrapped_name);
+            defer self.allocator.free(name);
+
+            if (command.params.len < 2) {
+                return error.InvalidRegistry;
+            }
+            const params = command.params[0 .. command.params.len - 2];
+            const data_type = try getEnumerateFunctionDataType(command);
+
+            if (returns_vk_result) {
+                try self.writer.writeAll("pub const ");
+                try self.renderErrorSetName(name);
+                try self.writer.writeAll(" =\n    ");
+                try self.renderErrorSetName(wrapped_name);
+                try self.writer.writeAll(" || Allocator.Error;\n");
+            }
+
+            try self.renderAllocWrapperPrototype(name, params, returns_vk_result, data_type, "", .wrapper);
+            try self.writer.writeAll(
+                \\{
+                \\    var count: u32 = undefined;
+            );
+
+            if (returns_vk_result) {
+                try self.writer.writeAll("var data: []");
+                try self.renderTypeInfo(data_type);
+                try self.writer.writeAll(
+                    \\ = &.{};
+                    \\errdefer allocator.free(data);
+                    \\var result = Result.incomplete;
+                    \\while (result == .incomplete) {
+                    \\    _ = try
+                );
+            }
+
+            try self.writer.writeAll(" self.");
+            try self.renderWrapperName(wrapped_name, "", .wrapper);
+            try self.writer.writeAll("(\n");
+            for (params) |param| {
+                try self.writeIdentifierWithCase(.snake, param.name);
+                try self.writer.writeAll(", ");
+            }
+            try self.writer.writeAll("&count, null);\n");
+
+            if (returns_vk_result) {
+                try self.writer.writeAll(
+                    \\data = try allocator.realloc(data, count);
+                    \\result = try 
+                );
+            } else {
+                try self.writer.writeAll("const data = try allocator.alloc(");
+                try self.renderTypeInfo(data_type);
+                try self.writer.writeAll(
+                    \\, count);
+                    \\errdefer allocator.free(data);
+                );
+            }
+
+            try self.writer.writeAll(" self.");
+            try self.renderWrapperName(wrapped_name, "", .wrapper);
+            try self.writer.writeAll("(\n");
+            for (params) |param| {
+                try self.writeIdentifierWithCase(.snake, param.name);
+                try self.writer.writeAll(", ");
+            }
+            try self.writer.writeAll("&count, data.ptr);\n");
+
+            if (returns_vk_result) {
+                try self.writer.writeAll("}\n");
+            }
+
+            try self.writer.writeAll(
+                \\    return if (count == data.len) data else allocator.realloc(data, count);
+                \\}
+            );
         }
 
         fn renderErrorSwitch(self: *Self, result_var: []const u8, command: reg.Command) !void {
