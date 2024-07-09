@@ -59,10 +59,23 @@ pub const ShaderCompileStep = struct {
         options: ShaderOptions,
     };
 
+    const CompileCommand = union(enum) {
+        real_path: []const u8,
+        lazy_path: Build.LazyPath,
+
+        pub fn getPath(self: CompileCommand, b: *Build) []const u8 {
+            return switch (self) {
+                .real_path => |path| path,
+                .lazy_path => |lazy_path| lazy_path.getPath(b),
+            };
+        }
+    };
+
     step: Build.Step,
 
-    /// The command and optional arguments used to invoke the shader compiler.
-    compile_command: []const []const u8,
+    /// The command and args to invoke the shader compiler.
+    compile_command: CompileCommand,
+    compile_command_args: []const []const u8,
 
     /// The compiler flag used to specify the output path, `-o` most of the time
     output_flag: []u8,
@@ -78,7 +91,12 @@ pub const ShaderCompileStep = struct {
     /// system, `<compile_command...> <shader_source> <output_flag> <path>` is invoked for each shader.
     /// For example, if one calls this with `create(b, "glslc", "-o")` and then
     /// `c.addShader("vertex", "vertex.glsl", .{})`, the command will be `glslc vertex.glsl -o <path>`
-    pub fn create(builder: *Build, compile_command: []const []const u8, output_flag: []const u8) *ShaderCompileStep {
+    pub fn create(
+        builder: *Build,
+        compile_command: CompileCommand,
+        compile_command_args: []const []const u8,
+        output_flag: []const u8,
+    ) *ShaderCompileStep {
         const self = builder.allocator.create(ShaderCompileStep) catch unreachable;
         self.* = .{
             .step = Build.Step.init(.{
@@ -87,7 +105,8 @@ pub const ShaderCompileStep = struct {
                 .owner = builder,
                 .makeFn = make,
             }),
-            .compile_command = builder.dupeStrings(compile_command),
+            .compile_command = compile_command,
+            .compile_command_args = builder.dupeStrings(compile_command_args),
             .output_flag = builder.dupe(output_flag),
             .shaders = std.ArrayList(Shader).init(builder.allocator),
             .generated_file = undefined,
@@ -148,7 +167,8 @@ pub const ShaderCompileStep = struct {
         // the compilation options must be the same as well!
         try shader.options.hash(b, &hasher);
         // And the compile command, too.
-        for (self.compile_command) |cmd| {
+        hasher.update(self.compile_command.getPath(b));
+        for (self.compile_command_args) |cmd| {
             hasher.update(cmd);
         }
 
@@ -172,7 +192,8 @@ pub const ShaderCompileStep = struct {
         const cwd = std.fs.cwd();
 
         var cmd = std.ArrayList([]const u8).init(b.allocator);
-        try cmd.appendSlice(self.compile_command);
+        try cmd.append(self.compile_command.getPath(b));
+        try cmd.appendSlice(self.compile_command_args);
         const base_cmd_len = cmd.items.len;
 
         var shaders_file_contents = std.ArrayList(u8).init(b.allocator);
