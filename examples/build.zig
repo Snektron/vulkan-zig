@@ -35,7 +35,8 @@ pub fn build(b: *std.Build) void {
 
     const shaders = ShaderCompileStep.create(
         b,
-        &[_][]const u8{ "glslc", "--target-env=vulkan1.2" },
+        .{ .real_path = "glslc" },
+        &[_][]const u8{"--target-env=vulkan1.2"},
         "-o",
     );
     shaders.add("triangle_vert", "shaders/triangle.vert", .{});
