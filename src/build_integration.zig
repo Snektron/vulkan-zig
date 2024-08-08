@@ -165,8 +165,8 @@ pub const ShaderCompileStep = struct {
     }
 
     /// Internal build function.
-    fn make(step: *Build.Step, options: Build.Step.MakeOptions) !void {
-        _ = options;
+    fn make(step: *Build.Step, prog_node: std.Progress.Node) !void {
+        _ = prog_node;
         const b = step.owner;
         const self: *ShaderCompileStep = @fieldParentPtr("step", step);
         const cwd = std.fs.cwd();
