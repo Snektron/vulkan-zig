@@ -54,7 +54,7 @@ const vkzig_dep = b.dependency("vulkan_zig", .{
     .registry = @as([]const u8, b.pathFromRoot("path/to/vk.xml")),
 });
 const vkzig_bindings = vkzig_dep.module("vulkan-zig");
-exe.addModule("vulkan", vkzig_bindings);
+exe.root_module.addImport("vulkan", vkzig_bindings);
 ```
 That will allow you to `@import("vulkan")` in your executable's source.
 
