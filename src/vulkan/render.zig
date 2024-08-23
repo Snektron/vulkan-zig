@@ -63,7 +63,7 @@ const preamble =
     \\        ) !void {
     \\            try writer.writeAll(@typeName(FlagsType) ++ "{");
     \\            var first = true;
-    \\            @setEvalBranchQuota(10_000);
+    \\            @setEvalBranchQuota(100_000);
     \\            inline for (comptime std.meta.fieldNames(FlagsType)) |name| {
     \\                if (name[0] == '_') continue;
     \\                if (@field(self, name)) {
@@ -1400,7 +1400,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            break :blk cmds;
                 \\        }};
                 \\        pub const Dispatch = blk: {{
-                \\            @setEvalBranchQuota(10_000);
+                \\            @setEvalBranchQuota(100_000);
                 \\            const Type = std.builtin.Type;
                 \\            const fields_len = fields_len: {{
                 \\                var fields_len: u32 = 0;
@@ -1522,6 +1522,7 @@ fn Renderer(comptime WriterType: type) type {
 
             try self.writer.print(
                 \\pub fn {0s}Proxy(comptime apis: []const ApiInfo) type {{
+                \\    @setEvalBranchQuota(100_000);
                 \\    return struct {{
                 \\        const Self = @This();
                 \\        pub const Wrapper = {1s}Wrapper(apis);
@@ -2031,7 +2032,7 @@ fn Renderer(comptime WriterType: type) type {
             if (returns_vk_result) {
                 try self.writer.writeAll(
                     \\data = try allocator.realloc(data, count);
-                    \\result = try 
+                    \\result = try
                 );
             } else {
                 try self.writer.writeAll("const data = try allocator.alloc(");
