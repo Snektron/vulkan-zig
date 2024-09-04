@@ -1,10 +1,12 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const c = @import("c.zig");
-const shaders = @import("shaders");
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Swapchain = @import("swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
+
+const vert_spv align(@alignOf(u32)) = @embedFile("vertex_shader").*;
+const frag_spv align(@alignOf(u32)) = @embedFile("fragment_shader").*;
 
 const app_name = "vulkan-zig triangle example";
 
@@ -362,14 +364,14 @@ fn createPipeline(
     render_pass: vk.RenderPass,
 ) !vk.Pipeline {
     const vert = try gc.dev.createShaderModule(&.{
-        .code_size = shaders.triangle_vert.len,
-        .p_code = @ptrCast(&shaders.triangle_vert),
+        .code_size = vert_spv.len,
+        .p_code = @ptrCast(&vert_spv),
     }, null);
     defer gc.dev.destroyShaderModule(vert, null);
 
     const frag = try gc.dev.createShaderModule(&.{
-        .code_size = shaders.triangle_frag.len,
-        .p_code = @ptrCast(&shaders.triangle_frag),
+        .code_size = frag_spv.len,
+        .p_code = @ptrCast(&frag_spv),
     }, null);
     defer gc.dev.destroyShaderModule(frag, null);
 
