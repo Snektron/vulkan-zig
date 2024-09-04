@@ -355,31 +355,30 @@ For some times (such as those from Google Games Platform) no default is known, b
 
 ### Shader compilation
 
-vulkan-zig provides functionality to help compile shaders to SPIR-V using glslc. It can be used from build.zig as follows:
-
+Shaders should be compiled by invoking a shader compiler via the build system. For example:
 ```zig
-const vkgen = @import("vulkan_zig");
-
 pub fn build(b: *Builder) void {
     ...
-    const shader_comp = vkgen.ShaderCompileStep.create(
-        builder,
-        &[_][]const u8{"glslc", "--target-env=vulkan1.2"},
-        "-o",
-    );
-    shader_comp.add("shader_frag", "path/to/shader.frag", .{});
-    shader_comp.add("shader_vert", "path/to/shader.vert", .{});
-    exe.addModule("shaders", shader_comp.getModule());
+    const vert_cmd = b.addSystemCommand(&.{
+        "glslc",
+        "--target-env=vulkan1.2",
+        "-o"
+    });
+    const vert_spv = vert_cmd.addOutputFileArg("vert.spv");
+    vert_cmd.addFileArg(b.path("shaders/triangle.vert"));
+    exe.root_module.addAnonymousImport("vertex_shader", .{
+        .root_source_file = vert_spv
+    });
+    ...
 }
 ```
 
-Upon compilation, glslc is invoked to compile each shader, and the result is placed within `zig-cache`. All shaders which are compiled using a particular `ShaderCompileStep` are imported in a single Zig file using `@embedFile`, and this file can be added to an executable as a module using `addModule`. To slightly improve compile times, shader compilation is cached; as long as a shader's source and its compile commands stay the same, the shader is not recompiled. The SPIR-V code for any particular shader is aligned to that of a 32-bit integer as follows, as required by vkCreateShaderModule:
-
+Note that SPIR-V must be 32-bit aligned when fed to Vulkan. The easiest way to do this is to dereference the shader's bytecode and manually align it as follows:
 ```zig
-pub const ${name} align(@alignOf(u32)) = @embedFile("${path}").*;
+const vert_spv align(@alignOf(u32)) = @embedFile("vertex_shader").*;
 ```
 
-See [build.zig](build.zig) for a working example.
+See [examples/build.zig](examples/build.zig) for a working example.
 
 ## Limitations
 
