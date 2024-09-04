@@ -359,6 +359,8 @@ const vert_spv align(@alignOf(u32)) = @embedFile("vertex_shader").*;
 
 See [examples/build.zig](examples/build.zig) for a working example.
 
+For more advanced shader compiler usage, one may consider a library such as [shader_compiler](https://github.com/Games-by-Mason/shader_compiler).
+
 ## Limitations
 
 * vulkan-zig has as of yet no functionality for selecting feature levels and extensions when generating bindings. This is because when an extension is promoted to Vulkan core, its fields and commands are renamed to lose the extensions author tag (for example, VkSemaphoreWaitFlagsKHR was renamed to VkSemaphoreWaitFlags when it was promoted from an extension to Vulkan 1.2 core). This leads to inconsistencies when only items from up to a certain feature level is included, as these promoted items then need to re-gain a tag.
@@ -369,3 +371,4 @@ See [examples/build.zig](examples/build.zig) for a working example.
 * Alternative binding generator: https://github.com/SpexGuy/Zig-Vulkan-Headers
 * Zig bindings for GLFW: https://github.com/hexops/mach-glfw
   * With vulkan-zig integration example: https://github.com/hexops/mach-glfw-vulkan-example
+* Advanced shader compilation: https://github.com/Games-by-Mason/shader_compiler
