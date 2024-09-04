@@ -94,27 +94,6 @@ exe.root_module.addImport("vulkan", vulkan_zig);
 
 See [examples/build.zig](examples/build.zig) and [examples/build.zig.zon](examples/build.zig.zon) for a concrete example.
 
-### (Deprecated) Generation from build.zig
-
-Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step. This requires adding vulkan-zig to your dependencies as shown above. After than, vulkan-zig can be imported at build time as follows:
-```zig
-const vkgen = @import("vulkan_zig");
-
-pub fn build(b: *Builder) void {
-    ...
-    const exe = b.addExecutable("my-executable", "src/main.zig");
-
-    // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
-    const gen = vkgen.VkGenerateStep.create(b, "path/to/vk.xml");
-
-    // Add the generated file as package to the final executable
-    exe.addModule("vulkan", gen.getModule());
-}
-```
-This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addModule`, after which the bindings will be made available to the executable under the name passed to `getModule`.
-
-This feature is only provided for legacy reasons. If you are still using this, please migrate to one of the methods that involve the package manager, as this method will be removed in the near future.
-
 ### Function & field renaming
 
 Functions and fields are renamed to be more or less in line with [Zig's standard library style](https://ziglang.org/documentation/master/#Style-Guide):
