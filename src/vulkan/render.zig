@@ -1400,7 +1400,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\            break :blk cmds;
                 \\        }};
                 \\        pub const Dispatch = blk: {{
-                \\            @setEvalBranchQuota(100_000);
+                \\            @setEvalBranchQuota(1_000_000);
                 \\            const Type = std.builtin.Type;
                 \\            const fields_len = fields_len: {{
                 \\                var fields_len: u32 = 0;
