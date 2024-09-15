@@ -192,48 +192,29 @@ const dispatch_override_functions = std.StaticStringMap(CommandDispatchType).ini
     .{ "vkCreateInstance", .base },
 });
 
-// Functions that return an array of objects via a count and data pointer.
-const enumerate_functions = std.StaticStringMap(void).initComptime(.{
-    .{"vkEnumeratePhysicalDevices"},
-    .{"vkEnumeratePhysicalDeviceGroups"},
-    .{"vkGetPhysicalDeviceQueueFamilyProperties"},
-    .{"vkGetPhysicalDeviceQueueFamilyProperties2"},
-    .{"vkEnumerateInstanceLayerProperties"},
-    .{"vkEnumerateInstanceExtensionProperties"},
-    .{"vkEnumerateDeviceLayerProperties"},
-    .{"vkEnumerateDeviceExtensionProperties"},
-    .{"vkGetImageSparseMemoryRequirements"},
-    .{"vkGetImageSparseMemoryRequirements2"},
-    .{"vkGetDeviceImageSparseMemoryRequirements"},
-    .{"vkGetPhysicalDeviceSparseImageFormatProperties"},
-    .{"vkGetPhysicalDeviceSparseImageFormatProperties2"},
-    .{"vkGetPhysicalDeviceToolProperties"},
-    .{"vkGetPipelineCacheData"},
-
-    .{"vkGetPhysicalDeviceSurfaceFormatsKHR"},
-    .{"vkGetPhysicalDeviceSurfaceFormats2KHR"},
-    .{"vkGetPhysicalDeviceSurfacePresentModesKHR"},
-
-    .{"vkGetSwapchainImagesKHR"},
-    .{"vkGetPhysicalDevicePresentRectanglesKHR"},
-
-    .{"vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"},
-});
-
-// Given one of the above commands, returns the type of the array elements
-// (and performs some basic verification that the command has the expected signature).
-fn getEnumerateFunctionDataType(command: reg.Command) !reg.TypeInfo {
+// If the given function returns an array (e.g. `vkEnumeratePhysicalDevices()`),
+// returns the type of the array elements.
+fn getEnumerateFunctionDataType(name: []const u8, command: reg.Command) ?reg.TypeInfo {
     if (command.params.len < 2) {
-        return error.InvalidRegistry;
+        return null;
     }
     const count_param = command.params[command.params.len - 2];
-    if (!count_param.is_buffer_len) {
-        return error.InvalidRegistry;
-    }
     const data_param = command.params[command.params.len - 1];
+    if (!(count_param.is_buffer_len and data_param.is_optional)) {
+        return null;
+    }
+
+    // Uses a bool out-parameter for an "incomplete" result, and so would need a
+    // special case implementation.
+    if (mem.eql(u8, name, "vkGetFaultData")) {
+        return null;
+    }
+
+    // TODO: Extra validation.
+
     return switch (data_param.param_type) {
         .pointer => |pointer| pointer.child.*,
-        else => error.InvalidRegistry,
+        else => null,
     };
 }
 
@@ -1456,8 +1437,8 @@ fn Renderer(comptime WriterType: type) type {
                 // for newer versions of vulkan can still invoke extension behavior on older
                 // implementations.
                 try self.renderWrapper(decl.name, command);
-                if (enumerate_functions.has(decl.name)) {
-                    try self.renderWrapperAlloc(decl.name, command);
+                if (getEnumerateFunctionDataType(decl.name, command)) |data_type| {
+                    try self.renderWrapperAlloc(decl.name, command, data_type);
                 }
             }
 
@@ -1565,8 +1546,8 @@ fn Renderer(comptime WriterType: type) type {
                 }
 
                 try self.renderProxyCommand(decl.name, command, dispatch_handle);
-                if (enumerate_functions.has(decl.name)) {
-                    try self.renderProxyCommandAlloc(decl.name, command, dispatch_handle);
+                if (getEnumerateFunctionDataType(decl.name, command)) |data_type| {
+                    try self.renderProxyCommandAlloc(decl.name, command, dispatch_handle, data_type);
                 }
             }
 
@@ -1636,7 +1617,13 @@ fn Renderer(comptime WriterType: type) type {
             return std.mem.concat(self.allocator, u8, &.{ wrapped_name[0..base_len], "Alloc", tag });
         }
 
-        fn renderProxyCommandAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
+        fn renderProxyCommandAlloc(
+            self: *Self,
+            wrapped_name: []const u8,
+            command: reg.Command,
+            dispatch_handle: []const u8,
+            data_type: reg.TypeInfo,
+        ) !void {
             const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
 
             const name = try self.makeAllocWrapperName(wrapped_name);
@@ -1646,7 +1633,6 @@ fn Renderer(comptime WriterType: type) type {
                 return error.InvalidRegistry;
             }
             const params = command.params[0 .. command.params.len - 2];
-            const data_type = try getEnumerateFunctionDataType(command);
 
             try self.writer.writeAll("pub const ");
             try self.renderErrorSetName(name);
@@ -1982,7 +1968,12 @@ fn Renderer(comptime WriterType: type) type {
             try self.renderTypeInfo(data_type);
         }
 
-        fn renderWrapperAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command) !void {
+        fn renderWrapperAlloc(
+            self: *Self,
+            wrapped_name: []const u8,
+            command: reg.Command,
+            data_type: reg.TypeInfo,
+        ) !void {
             const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
 
             const name = try self.makeAllocWrapperName(wrapped_name);
@@ -1992,7 +1983,6 @@ fn Renderer(comptime WriterType: type) type {
                 return error.InvalidRegistry;
             }
             const params = command.params[0 .. command.params.len - 2];
-            const data_type = try getEnumerateFunctionDataType(command);
 
             if (returns_vk_result) {
                 try self.writer.writeAll("pub const ");
