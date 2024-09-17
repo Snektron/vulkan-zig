@@ -26,6 +26,7 @@ const preamble =
     \\        .AAPCSVFP
     \\    else
     \\        .C;
+    // Note: Keep in sync with flag_functions
     \\pub fn FlagsMixin(comptime FlagsType: type) type {
     \\    return struct {
     \\        pub const IntType = @typeInfo(FlagsType).@"struct".backing_integer.?;
@@ -50,9 +51,9 @@ const preamble =
     \\        pub fn contains(lhs: FlagsType, rhs: FlagsType) bool {
     \\            return toInt(intersect(lhs, rhs)) == toInt(rhs);
     \\        }
-    \\        pub usingnamespace FlagFormatMixin(FlagsType);
     \\    };
     \\}
+    // Note: Keep in sync with flag_functions
     \\fn FlagFormatMixin(comptime FlagsType: type) type {
     \\    return struct {
     \\        pub fn format(
@@ -103,6 +104,76 @@ const preamble =
     \\    device_commands: DeviceCommandFlags = .{},
     \\};
 ;
+
+// Keep in sync with above definition of FlagsMixin
+const flag_functions: []const []const u8 = &.{
+    "toInt",
+    "fromInt",
+    "merge",
+    "intersect",
+    "complement",
+    "subtract",
+    "contains",
+};
+
+// Keep in sync with definition of command_flag_functions
+const command_flags_mixin =
+    \\pub fn CommandFlagsMixin(comptime CommandFlags: type) type {
+    \\    return struct {
+    \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+    \\            var result: CommandFlags = .{};
+    \\            @setEvalBranchQuota(10_000);
+    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
+    \\            }
+    \\            return result;
+    \\        }
+    \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+    \\            var result: CommandFlags = .{};
+    \\            @setEvalBranchQuota(10_000);
+    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
+    \\            }
+    \\            return result;
+    \\        }
+    \\        pub fn complement(self: CommandFlags) CommandFlags {
+    \\            var result: CommandFlags = .{};
+    \\            @setEvalBranchQuota(10_000);
+    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\                @field(result, field.name) = !@field(self, field.name);
+    \\            }
+    \\            return result;
+    \\        }
+    \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
+    \\            var result: CommandFlags = .{};
+    \\            @setEvalBranchQuota(10_000);
+    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
+    \\            }
+    \\            return result;
+    \\        }
+    \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
+    \\            @setEvalBranchQuota(10_000);
+    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
+    \\                    return false;
+    \\                }
+    \\            }
+    \\            return true;
+    \\        }
+    \\    };
+    \\}
+    \\
+;
+
+// Keep in sync with above definition of CommandFlagsMixin
+const command_flag_functions: []const []const u8 = &.{
+    "merge",
+    "intersect",
+    "complement",
+    "subtract",
+    "contains",
+};
 
 const builtin_types = std.StaticStringMap([]const u8).initComptime(.{
     .{ "void", @typeName(void) },
@@ -1009,9 +1080,8 @@ fn Renderer(comptime WriterType: type) type {
                     try self.writer.writeAll(": bool = false,");
                 }
             }
-            try self.writer.writeAll("pub usingnamespace FlagsMixin(");
-            try self.renderName(name);
-            try self.writer.writeAll(");\n};\n");
+            try self.renderFlagFunctions(name, "FlagsMixin", flag_functions, null);
+            try self.writer.writeAll("};\n");
         }
 
         fn renderBitmask(self: *Self, name: []const u8, bitmask: reg.Bitmask) !void {
@@ -1026,11 +1096,28 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.print(
                     \\ = packed struct {{
                     \\_reserved_bits: {s} = 0,
-                    \\pub usingnamespace FlagsMixin(
                 , .{flags_type});
-                try self.renderName(name);
-                try self.writer.writeAll(");\n};\n");
+                try self.renderFlagFunctions(name, "FlagsMixin", flag_functions, null);
+                try self.writer.writeAll("};\n");
             }
+        }
+
+        fn renderFlagFunctions(
+            self: *Self,
+            name: []const u8,
+            mixin: []const u8,
+            functions: []const []const u8,
+            name_suffix: ?[]const u8,
+        ) !void {
+            try self.writer.writeAll("\n");
+            for (functions) |function| {
+                try self.writer.print("pub const {s} = {s}(", .{ function, mixin });
+                try self.renderName(name);
+                try self.writer.print("{s}).{s};\n", .{ name_suffix orelse "", function });
+            }
+            try self.writer.writeAll("pub const format = FlagFormatMixin(");
+            try self.renderName(name);
+            try self.writer.print("{s}).format;\n", .{name_suffix orelse ""});
         }
 
         fn renderHandle(self: *Self, name: []const u8, handle: reg.Handle) !void {
@@ -1253,55 +1340,7 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderWrappers(self: *Self) !void {
-            try self.writer.writeAll(
-                \\pub fn CommandFlagsMixin(comptime CommandFlags: type) type {
-                \\    return struct {
-                \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
-                \\            var result: CommandFlags = .{};
-                \\            @setEvalBranchQuota(10_000);
-                \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
-                \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
-                \\            }
-                \\            return result;
-                \\        }
-                \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
-                \\            var result: CommandFlags = .{};
-                \\            @setEvalBranchQuota(10_000);
-                \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
-                \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
-                \\            }
-                \\            return result;
-                \\        }
-                \\        pub fn complement(self: CommandFlags) CommandFlags {
-                \\            var result: CommandFlags = .{};
-                \\            @setEvalBranchQuota(10_000);
-                \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
-                \\                @field(result, field.name) = !@field(self, field.name);
-                \\            }
-                \\            return result;
-                \\        }
-                \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
-                \\            var result: CommandFlags = .{};
-                \\            @setEvalBranchQuota(10_000);
-                \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
-                \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
-                \\            }
-                \\            return result;
-                \\        }
-                \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
-                \\            @setEvalBranchQuota(10_000);
-                \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
-                \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
-                \\                    return false;
-                \\                }
-                \\            }
-                \\            return true;
-                \\        }
-                \\        pub usingnamespace FlagFormatMixin(CommandFlags);
-                \\    };
-                \\}
-                \\
-            );
+            try self.writer.writeAll(command_flags_mixin);
             try self.renderWrappersOfDispatchType(.base);
             try self.renderWrappersOfDispatchType(.instance);
             try self.renderWrappersOfDispatchType(.device);
@@ -1380,13 +1419,10 @@ fn Renderer(comptime WriterType: type) type {
             }
             try self.writer.writeAll("    };\n}");
 
-            try self.writer.print(
-                \\    pub usingnamespace CommandFlagsMixin({s}CommandFlags);
-                \\}};
-                \\
-            , .{name});
+            try self.renderFlagFunctions(name, "CommandFlagsMixin", command_flag_functions, "CommandFlags");
 
             try self.writer.print(
+                \\}};
                 \\pub fn {0s}Wrapper(comptime apis: []const ApiInfo) type {{
                 \\    return struct {{
                 \\        dispatch: Dispatch,
