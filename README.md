@@ -54,7 +54,7 @@ const vkzig_dep = b.dependency("vulkan_zig", .{
     .registry = @as([]const u8, b.pathFromRoot("path/to/vk.xml")),
 });
 const vkzig_bindings = vkzig_dep.module("vulkan-zig");
-exe.addModule("vulkan", vkzig_bindings);
+exe.root_module.addImport("vulkan", vkzig_bindings);
 ```
 That will allow you to `@import("vulkan")` in your executable's source.
 
@@ -93,27 +93,6 @@ exe.root_module.addImport("vulkan", vulkan_zig);
 ```
 
 See [examples/build.zig](examples/build.zig) and [examples/build.zig.zon](examples/build.zig.zon) for a concrete example.
-
-### (Deprecated) Generation from build.zig
-
-Vulkan bindings can be generated from the Vulkan XML registry at compile time with build.zig, by using the provided Vulkan generation step. This requires adding vulkan-zig to your dependencies as shown above. After than, vulkan-zig can be imported at build time as follows:
-```zig
-const vkgen = @import("vulkan_zig");
-
-pub fn build(b: *Builder) void {
-    ...
-    const exe = b.addExecutable("my-executable", "src/main.zig");
-
-    // Create a step that generates vk.zig (stored in zig-cache) from the provided vulkan registry.
-    const gen = vkgen.VkGenerateStep.create(b, "path/to/vk.xml");
-
-    // Add the generated file as package to the final executable
-    exe.addModule("vulkan", gen.getModule());
-}
-```
-This reads vk.xml, parses its contents, and renders the Vulkan bindings to "vk.zig", which is then formatted and placed in `zig-cache`. The resulting file can then be added to an executable by using `addModule`, after which the bindings will be made available to the executable under the name passed to `getModule`.
-
-This feature is only provided for legacy reasons. If you are still using this, please migrate to one of the methods that involve the package manager, as this method will be removed in the near future.
 
 ### Function & field renaming
 
@@ -355,31 +334,32 @@ For some times (such as those from Google Games Platform) no default is known, b
 
 ### Shader compilation
 
-vulkan-zig provides functionality to help compile shaders to SPIR-V using glslc. It can be used from build.zig as follows:
-
+Shaders should be compiled by invoking a shader compiler via the build system. For example:
 ```zig
-const vkgen = @import("vulkan_zig");
-
 pub fn build(b: *Builder) void {
     ...
-    const shader_comp = vkgen.ShaderCompileStep.create(
-        builder,
-        &[_][]const u8{"glslc", "--target-env=vulkan1.2"},
-        "-o",
-    );
-    shader_comp.add("shader_frag", "path/to/shader.frag", .{});
-    shader_comp.add("shader_vert", "path/to/shader.vert", .{});
-    exe.addModule("shaders", shader_comp.getModule());
+    const vert_cmd = b.addSystemCommand(&.{
+        "glslc",
+        "--target-env=vulkan1.2",
+        "-o"
+    });
+    const vert_spv = vert_cmd.addOutputFileArg("vert.spv");
+    vert_cmd.addFileArg(b.path("shaders/triangle.vert"));
+    exe.root_module.addAnonymousImport("vertex_shader", .{
+        .root_source_file = vert_spv
+    });
+    ...
 }
 ```
 
-Upon compilation, glslc is invoked to compile each shader, and the result is placed within `zig-cache`. All shaders which are compiled using a particular `ShaderCompileStep` are imported in a single Zig file using `@embedFile`, and this file can be added to an executable as a module using `addModule`. To slightly improve compile times, shader compilation is cached; as long as a shader's source and its compile commands stay the same, the shader is not recompiled. The SPIR-V code for any particular shader is aligned to that of a 32-bit integer as follows, as required by vkCreateShaderModule:
-
+Note that SPIR-V must be 32-bit aligned when fed to Vulkan. The easiest way to do this is to dereference the shader's bytecode and manually align it as follows:
 ```zig
-pub const ${name} align(@alignOf(u32)) = @embedFile("${path}").*;
+const vert_spv align(@alignOf(u32)) = @embedFile("vertex_shader").*;
 ```
 
-See [build.zig](build.zig) for a working example.
+See [examples/build.zig](examples/build.zig) for a working example.
+
+For more advanced shader compiler usage, one may consider a library such as [shader_compiler](https://github.com/Games-by-Mason/shader_compiler).
 
 ## Limitations
 
@@ -391,3 +371,4 @@ See [build.zig](build.zig) for a working example.
 * Alternative binding generator: https://github.com/SpexGuy/Zig-Vulkan-Headers
 * Zig bindings for GLFW: https://github.com/hexops/mach-glfw
   * With vulkan-zig integration example: https://github.com/hexops/mach-glfw-vulkan-example
+* Advanced shader compilation: https://github.com/Games-by-Mason/shader_compiler

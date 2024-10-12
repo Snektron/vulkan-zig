@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const vkgen = @import("vulkan_zig");
-const ShaderCompileStep = vkgen.ShaderCompileStep;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -33,14 +32,27 @@ pub fn build(b: *std.Build) void {
         .root_source_file = vk_generate_cmd.addOutputFileArg("vk.zig"),
     });
 
-    const shaders = ShaderCompileStep.create(
-        b,
-        &[_][]const u8{ "glslc", "--target-env=vulkan1.2" },
+    const vert_cmd = b.addSystemCommand(&.{
+        "glslc",
+        "--target-env=vulkan1.2",
         "-o",
-    );
-    shaders.add("triangle_vert", "shaders/triangle.vert", .{});
-    shaders.add("triangle_frag", "shaders/triangle.frag", .{});
-    triangle_exe.root_module.addImport("shaders", shaders.getModule());
+    });
+    const vert_spv = vert_cmd.addOutputFileArg("vert.spv");
+    vert_cmd.addFileArg(b.path("shaders/triangle.vert"));
+    triangle_exe.root_module.addAnonymousImport("vertex_shader", .{
+        .root_source_file = vert_spv,
+    });
+
+    const frag_cmd = b.addSystemCommand(&.{
+        "glslc",
+        "--target-env=vulkan1.2",
+        "-o",
+    });
+    const frag_spv = frag_cmd.addOutputFileArg("frag.spv");
+    frag_cmd.addFileArg(b.path("shaders/triangle.frag"));
+    triangle_exe.root_module.addAnonymousImport("fragment_shader", .{
+        .root_source_file = frag_spv,
+    });
 
     const triangle_run_cmd = b.addRunArtifact(triangle_exe);
     triangle_run_cmd.step.dependOn(b.getInstallStep());

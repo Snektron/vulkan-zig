@@ -1,0 +1,11 @@
+.{
+    .name = "vulkan",
+    .version = "0.0.0",
+    .minimum_zig_version = "0.14.0-dev.1359+e9a00ba7f",
+    .paths = .{
+        "build.zig",
+        "LICENSE",
+        "README.md",
+        "src",
+    },
+}

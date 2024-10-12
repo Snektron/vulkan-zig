@@ -1,9 +1,5 @@
 const std = @import("std");
 
-const vkgen = @import("src/main.zig");
-pub const ShaderCompileStep = vkgen.ShaderCompileStep;
-pub const VkGenerateStep = vkgen.VkGenerateStep;
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});

@@ -93,7 +93,7 @@ pub const StdVideoEncodeH265ReferenceInfoFlags = u32;
 pub const StdVideoEncodeH265ReferenceModificationFlags = u32;
 
 comptime {
-    @setEvalBranchQuota(100000);
+    @setEvalBranchQuota(1000000);
     reallyRefAllDecls(vk);
 }
 
