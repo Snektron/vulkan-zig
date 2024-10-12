@@ -29,7 +29,7 @@ const preamble =
     // Note: Keep in sync with flag_functions
     \\pub fn FlagsMixin(comptime FlagsType: type) type {
     \\    return struct {
-    \\        pub const IntType = @typeInfo(FlagsType).@"struct".backing_integer.?;
+    \\        pub const IntType = @typeInfo(FlagsType).Struct.backing_integer.?;
     \\        pub fn toInt(self: FlagsType) IntType {
     \\            return @bitCast(self);
     \\        }
@@ -123,7 +123,7 @@ const command_flags_mixin =
     \\        pub fn merge(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
     \\            var result: CommandFlags = .{};
     \\            @setEvalBranchQuota(10_000);
-    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
     \\                @field(result, field.name) = @field(lhs, field.name) or @field(rhs, field.name);
     \\            }
     \\            return result;
@@ -131,7 +131,7 @@ const command_flags_mixin =
     \\        pub fn intersect(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
     \\            var result: CommandFlags = .{};
     \\            @setEvalBranchQuota(10_000);
-    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
     \\                @field(result, field.name) = @field(lhs, field.name) and @field(rhs, field.name);
     \\            }
     \\            return result;
@@ -139,7 +139,7 @@ const command_flags_mixin =
     \\        pub fn complement(self: CommandFlags) CommandFlags {
     \\            var result: CommandFlags = .{};
     \\            @setEvalBranchQuota(10_000);
-    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
     \\                @field(result, field.name) = !@field(self, field.name);
     \\            }
     \\            return result;
@@ -147,14 +147,14 @@ const command_flags_mixin =
     \\        pub fn subtract(lhs: CommandFlags, rhs: CommandFlags) CommandFlags {
     \\            var result: CommandFlags = .{};
     \\            @setEvalBranchQuota(10_000);
-    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
     \\                @field(result, field.name) = @field(lhs, field.name) and !@field(rhs, field.name);
     \\            }
     \\            return result;
     \\        }
     \\        pub fn contains(lhs: CommandFlags, rhs: CommandFlags) bool {
     \\            @setEvalBranchQuota(10_000);
-    \\            inline for (@typeInfo(CommandFlags).@"struct".fields) |field| {
+    \\            inline for (@typeInfo(CommandFlags).Struct.fields) |field| {
     \\                if (!@field(lhs, field.name) and @field(rhs, field.name)) {
     \\                    return false;
     \\                }
@@ -1440,14 +1440,14 @@ fn Renderer(comptime WriterType: type) type {
                 \\            const Type = std.builtin.Type;
                 \\            const fields_len = fields_len: {{
                 \\                var fields_len: u32 = 0;
-                \\                for (@typeInfo({0s}CommandFlags).@"struct".fields) |field| {{
+                \\                for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
                 \\                    fields_len += @intCast(@intFromBool(@field(commands, field.name)));
                 \\                }}
                 \\                break :fields_len fields_len;
                 \\            }};
                 \\            var fields: [fields_len]Type.StructField = undefined;
                 \\            var i: usize = 0;
-                \\            for (@typeInfo({0s}CommandFlags).@"struct".fields) |field| {{
+                \\            for (@typeInfo({0s}CommandFlags).Struct.fields) |field| {{
                 \\                if (@field(commands, field.name)) {{
                 \\                    const field_tag = std.enums.nameCast(std.meta.FieldEnum({0s}CommandFlags), field.name);
                 \\                    const PfnType = {0s}CommandFlags.CmdType(field_tag);
@@ -1462,7 +1462,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\                }}
                 \\            }}
                 \\            break :blk @Type(.{{
-                \\                .@"struct" = .{{
+                \\                .Struct = .{{
                 \\                    .layout = .auto,
                 \\                    .fields = &fields,
                 \\                    .decls = &[_]std.builtin.Type.Declaration{{}},
