@@ -83,7 +83,7 @@ const vk_gen = b.dependency("vulkan_zig", .{}).artifact("vulkan-zig-generator");
 // Set up a run step to generate the bindings
 const vk_generate_cmd = b.addRunArtifact(vk_gen);
 // Pass the registry to the generator
-generate_cmd.addArg(registry);
+vk_generate_cmd.addFileArg(registry);
 // Create a module from the generator's output...
 const vulkan_zig = b.addModule("vulkan-zig", .{
     .root_source_file = vk_generate_cmd.addOutputFileArg("vk.zig"),
