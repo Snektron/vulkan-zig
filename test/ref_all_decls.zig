@@ -91,6 +91,7 @@ pub const StdVideoEncodeH265ReferenceListsInfo = u32;
 pub const StdVideoEncodeH265SliceSegmentHeaderFlags = u32;
 pub const StdVideoEncodeH265ReferenceInfoFlags = u32;
 pub const StdVideoEncodeH265ReferenceModificationFlags = u32;
+pub const StdVideoEncodeAV1OperatingPointInfo = u32;
 
 comptime {
     @setEvalBranchQuota(1000000);
