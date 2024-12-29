@@ -50,13 +50,34 @@ There is also support for adding this project as a dependency through zig packag
 ```
 And then in your build.zig file, you'll need to add a line like this to your build function:
 ```zig
-const vkzig_dep = b.dependency("vulkan_zig", .{
-    .registry = @as([]const u8, b.pathFromRoot("path/to/vk.xml")),
-});
-const vkzig_bindings = vkzig_dep.module("vulkan-zig");
-exe.root_module.addImport("vulkan", vkzig_bindings);
+const vulkan = b.dependency("vulkan_zig", .{
+    .registry = b.path("path/to/vk.xml"),
+}).module("vulkan-zig");
+exe.root_module.addImport("vulkan", vulkan);
 ```
 That will allow you to `@import("vulkan")` in your executable's source.
+
+#### Generating bindings directly from Vulkan-Headers
+
+Bindings can be generated directly from the Vulkan-Headers repository by adding Vulkan-Headers as a dependency, and then passing the path to `vk.xml` from that dependency:
+```zig
+.{
+    // -- snip --
+    .dependencies = .{
+        // -- snip --
+        .vulkan_headers = .{
+            .url = "https://github.com/KhronosGroup/Vulkan-Headers/archive/v1.3.283.tar.gz",
+            .hash = "<dependency hash>",
+        },
+    },
+}
+```
+```zig
+const vulkan = b.dependency("vulkan_zig", .{
+    .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
+}).module("vulkan-zig");
+exe.root_module.addImport("vulkan", vulkan);
+```
 
 ### Manual generation with the package manager from build.zig
 

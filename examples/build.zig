@@ -19,18 +19,16 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(triangle_exe);
     triangle_exe.linkSystemLibrary("glfw");
 
-    const vk_gen = b.dependency("vulkan_zig", .{}).artifact("vulkan-zig-generator");
-    const vk_generate_cmd = b.addRunArtifact(vk_gen);
+    const registry_path: std.Build.LazyPath = if (maybe_override_registry) |override_registry|
+        .{ .cwd_relative = override_registry }
+    else
+        registry;
 
-    if (maybe_override_registry) |override_registry| {
-        vk_generate_cmd.addFileArg(.{ .cwd_relative = override_registry });
-    } else {
-        vk_generate_cmd.addFileArg(registry);
-    }
+    const vulkan = b.dependency("vulkan_zig", .{
+        .registry = registry_path,
+    }).module("vulkan-zig");
 
-    triangle_exe.root_module.addAnonymousImport("vulkan", .{
-        .root_source_file = vk_generate_cmd.addOutputFileArg("vk.zig"),
-    });
+    triangle_exe.root_module.addImport("vulkan", vulkan);
 
     const vert_cmd = b.addSystemCommand(&.{
         "glslc",
