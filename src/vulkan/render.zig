@@ -1454,7 +1454,7 @@ fn Renderer(comptime WriterType: type) type {
                 \\                    fields[i] = .{{
                 \\                        .name = {0s}CommandFlags.cmdName(field_tag),
                 \\                        .type = PfnType,
-                \\                        .default_value = null,
+                \\                        .default_value_ptr = null,
                 \\                        .is_comptime = false,
                 \\                        .alignment = @alignOf(PfnType),
                 \\                    }};
