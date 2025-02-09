@@ -894,6 +894,87 @@ fn Renderer(comptime WriterType: type) type {
                     .{maybe_author orelse ""},
                 );
                 return true;
+            } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureGeometryIndexAndGeometryFlags")) {
+                try self.writer.print(
+                    \\packed struct(u32) {{
+                    \\    geometry_index: u24,
+                    \\    reserved: u5 = 0,
+                    \\    geometry_flags: u3, // ClusterAccelerationStructureGeometryFlags{0s}
+                    \\}};
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
+            } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureBuildTriangleClusterInfo")) {
+                try self.writer.print(
+                    \\extern struct {{
+                    \\    cluster_id: u32,
+                    \\    cluster_flags: ClusterAccelerationStructureClusterFlags{0s},
+                    \\    cluster_data: packed struct(u32) {{
+                    \\        triangle_count: u9,
+                    \\        vertex_count: u9,
+                    \\        position_truncate_bit_count: u6,
+                    \\        index_type: u4,
+                    \\        opacity_micromap_index_type: u4,
+                    \\    }},
+                    \\    base_geometry_index_and_geometry_flags: ClusterAccelerationStructureGeometryIndexAndGeometryFlags{0s},
+                    \\    index_buffer_stride: u16,
+                    \\    vertex_buffer_stride: u16,
+                    \\    geometry_index_and_flags_buffer_stride: u16,
+                    \\    opacity_micromap_index_buffer_stride: u16,
+                    \\    index_buffer: DeviceAddress,
+                    \\    vertex_buffer: DeviceAddress,
+                    \\    geometry_index_and_flags_buffer: DeviceAddress,
+                    \\    opacity_micromap_array: DeviceAddress,
+                    \\    opacity_micromap_index_buffer: DeviceAddress,
+                    \\}};
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
+            } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureBuildTriangleClusterTemplateInfo")) {
+                try self.writer.print(
+                    \\extern struct {{
+                    \\    cluster_id: u32,
+                    \\    cluster_flags: ClusterAccelerationStructureClusterFlags{0s},
+                    \\    cluster_data: packed struct(u32) {{
+                    \\        triangle_count: u9,
+                    \\        vertex_count: u9,
+                    \\        position_truncate_bit_count: u6,
+                    \\        index_type: u4,
+                    \\        opacity_micromap_index_type: u4,
+                    \\    }},
+                    \\    base_geometry_index_and_geometry_flags: ClusterAccelerationStructureGeometryIndexAndGeometryFlags{0s},
+                    \\    index_buffer_stride: u16,
+                    \\    vertex_buffer_stride: u16,
+                    \\    geometry_index_and_flags_buffer_stride: u16,
+                    \\    opacity_micromap_index_buffer_stride: u16,
+                    \\    index_buffer: DeviceAddress,
+                    \\    vertex_buffer: DeviceAddress,
+                    \\    geometry_index_and_flags_buffer: DeviceAddress,
+                    \\    opacity_micromap_array: DeviceAddress,
+                    \\    opacity_micromap_index_buffer: DeviceAddress,
+                    \\    instantiation_bounding_box_limit: DeviceAddress,
+                    \\}};
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
+            } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureInstantiateClusterInfo")) {
+                try self.writer.print(
+                    \\extern struct {{
+                    \\    cluster_id_offset: u32,
+                    \\    geometry_index_offset: packed struct(u32) {{
+                    \\       offset: u24,
+                    \\       reserved: u8 = 0,
+                    \\    }},
+                    \\    cluster_template_address: DeviceAddress,
+                    \\    vertex_buffer: StridedDeviceAddress{0s},
+                    \\}};
+                ,
+                    .{maybe_author orelse ""},
+                );
+                return true;
             }
 
             return false;
