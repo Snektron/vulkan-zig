@@ -1,5 +1,6 @@
 .{
-    .name = "vulkan-zig-examples",
+    .name = .vulkan_zig_examples,
+    .fingerprint = 0x60508bcca14cfc6d,
     .version = "0.1.0",
     .dependencies = .{
         .vulkan_zig = .{

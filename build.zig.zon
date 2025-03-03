@@ -1,5 +1,6 @@
 .{
-    .name = "vulkan",
+    .name = .vulkan,
+    .fingerprint = 0xbe155a03c72db6af,
     .version = "0.0.0",
     .minimum_zig_version = "0.14.0-dev.1359+e9a00ba7f",
     .paths = .{
