@@ -199,7 +199,13 @@ pub const Api = reg.Api;
 /// and the resulting binding is written to `writer`. `allocator` will be used to allocate temporary
 /// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
 /// directly. `api` is the API to generate the bindings for, usually `.vulkan`.
-pub fn generate(allocator: Allocator, api: Api, spec_xml: []const u8, maybe_video_spec_xml: ?[]const u8, writer: anytype) !void {
+pub fn generate(
+    allocator: Allocator,
+    api: Api,
+    spec_xml: []const u8,
+    maybe_video_spec_xml: ?[]const u8,
+    writer: anytype,
+) !void {
     const spec = xml.parse(allocator, spec_xml) catch |err| switch (err) {
         error.InvalidDocument,
         error.UnexpectedEof,
