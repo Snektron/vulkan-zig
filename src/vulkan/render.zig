@@ -81,24 +81,18 @@ const preamble =
     \\        }
     \\    };
     \\}
-    \\pub fn makeApiVersion(variant: u3, major: u7, minor: u10, patch: u12) u32 {
-    \\    return (@as(u32, variant) << 29) | (@as(u32, major) << 22) | (@as(u32, minor) << 12) | patch;
-    \\}
-    \\pub fn apiVersionVariant(version: u32) u3 {
-    \\    return @truncate(version >> 29);
-    \\}
-    \\pub fn apiVersionMajor(version: u32) u7 {
-    \\    return @truncate(version >> 22);
-    \\}
-    \\pub fn apiVersionMinor(version: u32) u10 {
-    \\    return @truncate(version >> 12);
-    \\}
-    \\pub fn apiVersionPatch(version: u32) u12 {
-    \\    return @truncate(version);
+    \\pub const Version = packed struct(u32) {
+    \\    patch: u12,
+    \\    minor: u10,
+    \\    major: u7,
+    \\    variant: u3,
+    \\};
+    \\pub fn makeApiVersion(variant: u3, major: u7, minor: u10, patch: u12) Version {
+    \\    return .{ .variant = variant, .major = major, .minor = minor, .patch = patch };
     \\}
     \\pub const ApiInfo = struct {
     \\    name: [:0]const u8 = "custom",
-    \\    version: u32 = makeApiVersion(0, 0, 0, 0),
+    \\    version: Version = makeApiVersion(0, 0, 0, 0),
     \\    base_commands: BaseCommandFlags = .{},
     \\    instance_commands: InstanceCommandFlags = .{},
     \\    device_commands: DeviceCommandFlags = .{},
@@ -375,25 +369,43 @@ fn Renderer(comptime WriterType: type) type {
         allocator: Allocator,
         registry: *const reg.Registry,
         id_renderer: *IdRenderer,
-        declarations_by_name: std.StringHashMap(*const reg.DeclarationType),
+        decls_by_name: std.StringArrayHashMap(reg.DeclarationType),
         structure_types: std.StringHashMap(void),
+        have_video: bool,
 
-        fn init(writer: WriterType, allocator: Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !Self {
-            var declarations_by_name = std.StringHashMap(*const reg.DeclarationType).init(allocator);
-            errdefer declarations_by_name.deinit();
+        fn init(
+            writer: WriterType,
+            allocator: Allocator,
+            registry: *const reg.Registry,
+            id_renderer: *IdRenderer,
+            have_video: bool,
+        ) !Self {
+            var decls_by_name = std.StringArrayHashMap(reg.DeclarationType).init(allocator);
+            errdefer decls_by_name.deinit();
 
             for (registry.decls) |*decl| {
-                const result = try declarations_by_name.getOrPut(decl.name);
+                const result = try decls_by_name.getOrPut(decl.name);
                 if (result.found_existing) {
-                    std.log.err("duplicate registry entry '{s}'", .{decl.name});
-                    return error.InvalidRegistry;
+                    // Allow overriding 'foreign' types. These are for example the Vulkan Video types
+                    // declared as foreign type in the vk.xml, then defined in video.xml. Sometimes
+                    // this also includes types like uint32_t, for these we don't really care.
+                    // Just make sure to keep the non-foreign variant.
+                    if (result.value_ptr.* == .foreign) {
+                        result.value_ptr.* = decl.decl_type;
+                    } else if (decl.decl_type == .foreign) {
+                        // Foreign type trying to override a non-foreign one. Just keep the current
+                        // one, and don't generate an error.
+                    } else {
+                        std.log.err("duplicate registry entry '{s}'", .{decl.name});
+                        return error.InvalidRegistry;
+                    }
+                } else {
+                    result.value_ptr.* = decl.decl_type;
                 }
-
-                result.value_ptr.* = &decl.decl_type;
             }
 
-            const vk_structure_type_decl = declarations_by_name.get("VkStructureType") orelse return error.InvalidRegistry;
-            const vk_structure_type = switch (vk_structure_type_decl.*) {
+            const vk_structure_type_decl = decls_by_name.get("VkStructureType") orelse return error.InvalidRegistry;
+            const vk_structure_type = switch (vk_structure_type_decl) {
                 .enumeration => |e| e,
                 else => return error.InvalidRegistry,
             };
@@ -409,13 +421,14 @@ fn Renderer(comptime WriterType: type) type {
                 .allocator = allocator,
                 .registry = registry,
                 .id_renderer = id_renderer,
-                .declarations_by_name = declarations_by_name,
+                .decls_by_name = decls_by_name,
                 .structure_types = structure_types,
+                .have_video = have_video,
             };
         }
 
         fn deinit(self: *Self) void {
-            self.declarations_by_name.deinit();
+            self.decls_by_name.deinit();
         }
 
         fn writeIdentifier(self: Self, id: []const u8) !void {
@@ -501,8 +514,8 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn resolveDeclaration(self: Self, name: []const u8) ?reg.DeclarationType {
-            const decl = self.declarations_by_name.get(name) orelse return null;
-            return self.resolveAlias(decl.*) catch return null;
+            const decl = self.decls_by_name.get(name) orelse return null;
+            return self.resolveAlias(decl) catch return null;
         }
 
         fn resolveAlias(self: Self, start_decl: reg.DeclarationType) !reg.DeclarationType {
@@ -513,8 +526,7 @@ fn Renderer(comptime WriterType: type) type {
                     else => return decl,
                 };
 
-                const decl_ptr = self.declarations_by_name.get(name) orelse return error.InvalidRegistry;
-                decl = decl_ptr.*;
+                decl = self.decls_by_name.get(name) orelse return error.InvalidRegistry;
             }
         }
 
@@ -614,12 +626,17 @@ fn Renderer(comptime WriterType: type) type {
         fn render(self: *Self) !void {
             try self.writer.writeAll(preamble);
 
+            try self.writer.print("pub const have_vulkan_video = {};\n", .{self.have_video});
+
             for (self.registry.api_constants) |api_constant| {
                 try self.renderApiConstant(api_constant);
             }
 
-            for (self.registry.decls) |decl| {
-                try self.renderDecl(decl);
+            for (self.decls_by_name.keys(), self.decls_by_name.values()) |name, decl_type| {
+                try self.renderDecl(.{
+                    .name = name,
+                    .decl_type = decl_type,
+                });
             }
 
             try self.renderCommandPtrs();
@@ -636,8 +653,12 @@ fn Renderer(comptime WriterType: type) type {
 
             switch (api_constant.value) {
                 .expr => |expr| try self.renderApiConstantExpr(expr),
-                .version => |version| {
+                inline .version, .video_std_version => |version, kind| {
                     try self.writer.writeAll("makeApiVersion(");
+                    // For Vulkan Video, just re-use the API version and set the variant to 0.
+                    if (kind == .video_std_version) {
+                        try self.writer.writeAll("0, ");
+                    }
                     for (version, 0..) |part, i| {
                         if (i != 0) {
                             try self.writer.writeAll(", ");
@@ -688,6 +709,7 @@ fn Renderer(comptime WriterType: type) type {
                         } else if (mem.eql(u8, suffix.text, "U")) {
                             try self.writer.print("@as(u32, {s})", .{tok.text});
                         } else {
+                            std.debug.print("aaa {s}\n", .{suffix.text});
                             return error.InvalidApiConstant;
                         }
                     },
@@ -894,17 +916,6 @@ fn Renderer(comptime WriterType: type) type {
                     .{maybe_author orelse ""},
                 );
                 return true;
-            } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureGeometryIndexAndGeometryFlags")) {
-                try self.writer.print(
-                    \\packed struct(u32) {{
-                    \\    geometry_index: u24,
-                    \\    reserved: u5 = 0,
-                    \\    geometry_flags: u3, // ClusterAccelerationStructureGeometryFlags{0s}
-                    \\}};
-                ,
-                    .{maybe_author orelse ""},
-                );
-                return true;
             } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureBuildTriangleClusterInfo")) {
                 try self.writer.print(
                     \\extern struct {{
@@ -980,10 +991,49 @@ fn Renderer(comptime WriterType: type) type {
             return false;
         }
 
+        fn renderSimpleBitContainer(self: *Self, container: reg.Container) !bool {
+            var total_bits: usize = 0;
+            for (container.fields) |field| {
+                total_bits += field.bits orelse {
+                    // C abi type - not a packed struct.
+                    return false;
+                };
+            }
+
+            try self.writer.writeAll("packed struct(u32) {");
+
+            for (container.fields) |field| {
+                const bits = field.bits.?;
+                try self.writeIdentifierWithCase(.snake, field.name);
+                try self.writer.writeAll(": ");
+
+                // Default-zero fields that look like they are not used.
+                if (std.mem.eql(u8, field.name, "reserved")) {
+                    try self.writer.print(" u{} = 0,\n", .{field.bits.?});
+                } else if (bits == 1) {
+                    // Assume its a flag.
+                    try self.writer.writeAll(" bool,\n");
+                } else {
+                    try self.writer.print(" u{},\n", .{field.bits.?});
+                }
+            }
+
+            if (total_bits != 32) {
+                try self.writer.print("_reserved: u{} = 0,\n", .{32 - total_bits});
+            }
+
+            try self.writer.writeAll("};\n");
+            return true;
+        }
+
         fn renderContainer(self: *Self, name: []const u8, container: reg.Container) !void {
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
             try self.writer.writeAll(" = ");
+
+            if (try self.renderSimpleBitContainer(container)) {
+                return;
+            }
 
             if (try self.renderSpecialContainer(name)) {
                 return;
@@ -1231,7 +1281,9 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderForeign(self: *Self, name: []const u8, foreign: reg.Foreign) !void {
-            if (mem.eql(u8, foreign.depends, "vk_platform")) {
+            if (mem.eql(u8, foreign.depends, "vk_platform") or
+                builtin_types.get(name) != null)
+            {
                 return; // Skip built-in types, they are handled differently
             }
 
@@ -1262,18 +1314,18 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderCommandPtrs(self: *Self) !void {
-            for (self.registry.decls) |decl| {
-                switch (decl.decl_type) {
+            for (self.decls_by_name.keys(), self.decls_by_name.values()) |name, decl_type| {
+                switch (decl_type) {
                     .command => {
                         try self.writer.writeAll("pub const ");
-                        try self.renderCommandPtrName(decl.name);
+                        try self.renderCommandPtrName(name);
                         try self.writer.writeAll(" = ");
-                        try self.renderCommandPtr(decl.decl_type.command, false);
+                        try self.renderCommandPtr(decl_type.command, false);
                         try self.writer.writeAll(";\n");
                     },
                     .alias => |alias| if (alias.target == .other_command) {
                         try self.writer.writeAll("pub const ");
-                        try self.renderCommandPtrName(decl.name);
+                        try self.renderCommandPtrName(name);
                         try self.writer.writeAll(" = ");
                         try self.renderCommandPtrName(alias.name);
                         try self.writer.writeAll(";\n");
@@ -1289,13 +1341,17 @@ fn Renderer(comptime WriterType: type) type {
                 \\
             );
             // The commands in a feature level are not pre-sorted based on if they are instance or device functions.
-            var base_commands = std.BufSet.init(self.allocator);
+            var base_commands = std.StringArrayHashMap(void).init(self.allocator);
             defer base_commands.deinit();
-            var instance_commands = std.BufSet.init(self.allocator);
+            var instance_commands = std.StringArrayHashMap(void).init(self.allocator);
             defer instance_commands.deinit();
-            var device_commands = std.BufSet.init(self.allocator);
+            var device_commands = std.StringArrayHashMap(void).init(self.allocator);
             defer device_commands.deinit();
             for (self.registry.features) |feature| {
+                base_commands.clearRetainingCapacity();
+                instance_commands.clearRetainingCapacity();
+                device_commands.clearRetainingCapacity();
+
                 try self.writer.writeAll("pub const ");
                 try self.writeIdentifierWithCase(.snake, trimVkNamespace(feature.name));
                 try self.writer.writeAll("= ApiInfo {\n");
@@ -1317,31 +1373,28 @@ fn Renderer(comptime WriterType: type) type {
                         };
                         const class = classifyCommandDispatch(command_name, command);
                         switch (class) {
-                            .base => {
-                                try base_commands.insert(command_name);
-                            },
-                            .instance => {
-                                try instance_commands.insert(command_name);
-                            },
-                            .device => {
-                                try device_commands.insert(command_name);
-                            },
+                            .base => try base_commands.put(command_name, {}),
+                            .instance => try instance_commands.put(command_name, {}),
+                            .device => try device_commands.put(command_name, {}),
                         }
                     }
                 }
                 // and write them out
                 // clear command lists for next iteration
-                try self.writer.writeAll(".base_commands = ");
-                try self.renderCommandFlags(&base_commands);
-                base_commands.hash_map.clearRetainingCapacity();
+                if (base_commands.count() != 0) {
+                    try self.writer.writeAll(".base_commands = ");
+                    try self.renderCommandFlags(base_commands.keys());
+                }
 
-                try self.writer.writeAll(".instance_commands = ");
-                try self.renderCommandFlags(&instance_commands);
-                instance_commands.hash_map.clearRetainingCapacity();
+                if (instance_commands.count() != 0) {
+                    try self.writer.writeAll(".instance_commands = ");
+                    try self.renderCommandFlags(instance_commands.keys());
+                }
 
-                try self.writer.writeAll(".device_commands = ");
-                try self.renderCommandFlags(&device_commands);
-                device_commands.hash_map.clearRetainingCapacity();
+                if (device_commands.count() != 0) {
+                    try self.writer.writeAll(".device_commands = ");
+                    try self.renderCommandFlags(device_commands.keys());
+                }
 
                 try self.writer.writeAll("};\n");
             }
@@ -1355,17 +1408,35 @@ fn Renderer(comptime WriterType: type) type {
                 \\
             );
             // The commands in an extension are not pre-sorted based on if they are instance or device functions.
-            var base_commands = std.BufSet.init(self.allocator);
+            var base_commands = std.StringArrayHashMap(void).init(self.allocator);
             defer base_commands.deinit();
-            var instance_commands = std.BufSet.init(self.allocator);
+            var instance_commands = std.StringArrayHashMap(void).init(self.allocator);
             defer instance_commands.deinit();
-            var device_commands = std.BufSet.init(self.allocator);
+            var device_commands = std.StringArrayHashMap(void).init(self.allocator);
             defer device_commands.deinit();
             for (self.registry.extensions) |ext| {
+                base_commands.clearRetainingCapacity();
+                instance_commands.clearRetainingCapacity();
+                device_commands.clearRetainingCapacity();
+
                 try self.writer.writeAll("pub const ");
-                try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
+                if (ext.extension_type == .video) {
+                    // These are already in the right form, and the auto-casing style transformer
+                    // is prone to messing up these names.
+                    try self.writeIdentifier(trimVkNamespace(ext.name));
+                } else {
+                    try self.writeIdentifierWithCase(.snake, trimVkNamespace(ext.name));
+                }
                 try self.writer.writeAll("= ApiInfo {\n");
-                try self.writer.print(".name = \"{s}\", .version = {},", .{ ext.name, ext.version });
+                try self.writer.print(".name = \"{s}\", .version = ", .{ext.name});
+                switch (ext.version) {
+                    .int => |version| try self.writer.print("makeApiVersion(0, {}, 0, 0)", .{version}),
+                    // This should be the same as in self.renderApiConstant.
+                    // We assume that this is already a vk.Version type.
+                    .alias => |alias| try self.renderName(alias),
+                    .unknown => try self.writer.writeAll("makeApiVersion(0, 0, 0, 0)"),
+                }
+                try self.writer.writeByte(',');
                 // collect extension functions
                 for (ext.requires) |require| {
                     for (require.commands) |command_name| {
@@ -1379,42 +1450,38 @@ fn Renderer(comptime WriterType: type) type {
                         };
                         const class = classifyCommandDispatch(command_name, command);
                         switch (class) {
-                            .base => {
-                                try base_commands.insert(command_name);
-                            },
-                            .instance => {
-                                try instance_commands.insert(command_name);
-                            },
-                            .device => {
-                                try device_commands.insert(command_name);
-                            },
+                            .base => try base_commands.put(command_name, {}),
+                            .instance => try instance_commands.put(command_name, {}),
+                            .device => try device_commands.put(command_name, {}),
                         }
                     }
                 }
                 // and write them out
-                try self.writer.writeAll(".base_commands = ");
-                try self.renderCommandFlags(&base_commands);
-                base_commands.hash_map.clearRetainingCapacity();
+                if (base_commands.count() != 0) {
+                    try self.writer.writeAll(".base_commands = ");
+                    try self.renderCommandFlags(base_commands.keys());
+                }
 
-                try self.writer.writeAll(".instance_commands = ");
-                try self.renderCommandFlags(&instance_commands);
-                instance_commands.hash_map.clearRetainingCapacity();
+                if (instance_commands.count() != 0) {
+                    try self.writer.writeAll(".instance_commands = ");
+                    try self.renderCommandFlags(instance_commands.keys());
+                }
 
-                try self.writer.writeAll(".device_commands = ");
-                try self.renderCommandFlags(&device_commands);
-                device_commands.hash_map.clearRetainingCapacity();
+                if (device_commands.count() != 0) {
+                    try self.writer.writeAll(".device_commands = ");
+                    try self.renderCommandFlags(device_commands.keys());
+                }
 
                 try self.writer.writeAll("};\n");
             }
             try self.writer.writeAll("};\n");
         }
 
-        fn renderCommandFlags(self: *Self, commands: *const std.BufSet) !void {
+        fn renderCommandFlags(self: *Self, commands: []const []const u8) !void {
             try self.writer.writeAll(".{\n");
-            var iterator = commands.iterator();
-            while (iterator.next()) |command_name| {
+            for (commands) |command_name| {
                 try self.writer.writeAll(".");
-                try self.writeIdentifierWithCase(.camel, trimVkNamespace(command_name.*));
+                try self.writeIdentifierWithCase(.camel, trimVkNamespace(command_name));
                 try self.writer.writeAll(" = true, \n");
             }
             try self.writer.writeAll("},\n");
@@ -2226,8 +2293,14 @@ fn Renderer(comptime WriterType: type) type {
     };
 }
 
-pub fn render(writer: anytype, allocator: Allocator, registry: *const reg.Registry, id_renderer: *IdRenderer) !void {
-    var renderer = try Renderer(@TypeOf(writer)).init(writer, allocator, registry, id_renderer);
+pub fn render(
+    writer: anytype,
+    allocator: Allocator,
+    registry: *const reg.Registry,
+    id_renderer: *IdRenderer,
+    have_video: bool,
+) !void {
+    var renderer = try Renderer(@TypeOf(writer)).init(writer, allocator, registry, id_renderer, have_video);
     defer renderer.deinit();
     try renderer.render();
 }

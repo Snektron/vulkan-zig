@@ -90,10 +90,18 @@ pub const CTokenizer = struct {
         const start = self.offset;
         _ = self.consumeNoEof();
 
+        const hex = self.peek() == 'x';
+        if (hex) {
+            _ = self.consumeNoEof();
+        }
+
         while (true) {
-            const c = self.peek() orelse break;
-            switch (c) {
+            switch (self.peek() orelse break) {
                 '0'...'9' => _ = self.consumeNoEof(),
+                'A'...'F', 'a'...'f' => {
+                    if (!hex) break;
+                    _ = self.consumeNoEof();
+                },
                 else => break,
             }
         }
@@ -164,7 +172,12 @@ pub const XmlCTokenizer = struct {
     }
 
     fn elemToToken(elem: *xml.Element) !?Token {
-        if (elem.children.len != 1 or elem.children[0] != .char_data) {
+        // Sometimes we encounter empty comment tags. Filter those out
+        // by early returning here, otherwise the next check will
+        // determine that the input is not valid XML.
+        if (mem.eql(u8, elem.tag, "comment")) {
+            return null;
+        } else if (elem.children.len != 1 or elem.children[0] != .char_data) {
             return error.InvalidXml;
         }
 
@@ -175,8 +188,6 @@ pub const XmlCTokenizer = struct {
             return Token{ .kind = .enum_name, .text = text };
         } else if (mem.eql(u8, elem.tag, "name")) {
             return Token{ .kind = .name, .text = text };
-        } else if (mem.eql(u8, elem.tag, "comment")) {
-            return null;
         } else {
             return error.InvalidTag;
         }
@@ -530,7 +541,10 @@ fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
                 error.InvalidCharacter => unreachable,
             },
         },
-        .enum_name => .{ .alias = size_tok.text },
+        // Sometimes, arrays are declared as `<type>T</type> <name>aa</name>[<enum>SIZE</enum>]`,
+        // and sometimes just as `<type>T</type> <name>aa</name>[SIZE]`, so we have to account
+        // for both `.enum_name` and `.id` here.
+        .enum_name, .id => .{ .alias = size_tok.text },
         else => return error.InvalidSyntax,
     };
 
@@ -538,7 +552,7 @@ fn parseArrayDeclarator(xctok: *XmlCTokenizer) !?ArraySize {
     return size;
 }
 
-pub fn parseVersion(xctok: *XmlCTokenizer) ![4][]const u8 {
+pub fn parseVersion(xctok: *XmlCTokenizer) !registry.ApiConstant.Value {
     _ = try xctok.expect(.hash);
     const define = try xctok.expect(.id);
     if (!mem.eql(u8, define.text, "define")) {
@@ -547,12 +561,22 @@ pub fn parseVersion(xctok: *XmlCTokenizer) ![4][]const u8 {
 
     _ = try xctok.expect(.name);
     const vk_make_version = try xctok.expect(.type_name);
-    if (!mem.eql(u8, vk_make_version.text, "VK_MAKE_API_VERSION")) {
+    if (mem.eql(u8, vk_make_version.text, "VK_MAKE_API_VERSION")) {
+        return .{
+            .version = try parseVersionValues(xctok, 4),
+        };
+    } else if (mem.eql(u8, vk_make_version.text, "VK_MAKE_VIDEO_STD_VERSION")) {
+        return .{
+            .video_std_version = try parseVersionValues(xctok, 3),
+        };
+    } else {
         return error.NotVersion;
     }
+}
 
+fn parseVersionValues(xctok: *XmlCTokenizer, comptime count: usize) ![count][]const u8 {
     _ = try xctok.expect(.lparen);
-    var version: [4][]const u8 = undefined;
+    var version: [count][]const u8 = undefined;
     for (&version, 0..) |*part, i| {
         if (i != 0) {
             _ = try xctok.expect(.comma);

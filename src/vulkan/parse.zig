@@ -17,18 +17,43 @@ pub const ParseResult = struct {
     }
 };
 
-pub fn parseXml(backing_allocator: Allocator, root: *xml.Element, api: registry.Api) !ParseResult {
+pub fn parseXml(
+    backing_allocator: Allocator,
+    root: *xml.Element,
+    maybe_video_root: ?*xml.Element,
+    api: registry.Api,
+) !ParseResult {
     var arena = ArenaAllocator.init(backing_allocator);
     errdefer arena.deinit();
 
     const allocator = arena.allocator();
 
+    var decls: std.ArrayListUnmanaged(registry.Declaration) = .{};
+    var api_constants: std.ArrayListUnmanaged(registry.ApiConstant) = .{};
+    var tags: std.ArrayListUnmanaged(registry.Tag) = .{};
+    var features: std.ArrayListUnmanaged(registry.Feature) = .{};
+    var extensions: std.ArrayListUnmanaged(registry.Extension) = .{};
+
+    try parseDeclarations(allocator, root, api, &decls);
+    try parseApiConstants(allocator, root, api, &api_constants);
+    try parseTags(allocator, root, &tags);
+    try parseFeatures(allocator, root, api, &features);
+    try parseExtensions(allocator, root, api, &extensions);
+
+    if (maybe_video_root) |video_root| {
+        try parseDeclarations(allocator, video_root, api, &decls);
+        try parseApiConstants(allocator, video_root, api, &api_constants);
+        try parseTags(allocator, video_root, &tags);
+        try parseFeatures(allocator, video_root, api, &features);
+        try parseExtensions(allocator, video_root, api, &extensions);
+    }
+
     const reg = registry.Registry{
-        .decls = try parseDeclarations(allocator, root, api),
-        .api_constants = try parseApiConstants(allocator, root, api),
-        .tags = try parseTags(allocator, root),
-        .features = try parseFeatures(allocator, root, api),
-        .extensions = try parseExtensions(allocator, root, api),
+        .decls = decls.items,
+        .api_constants = api_constants.items,
+        .tags = tags.items,
+        .features = features.items,
+        .extensions = extensions.items,
     };
 
     return ParseResult{
@@ -37,25 +62,33 @@ pub fn parseXml(backing_allocator: Allocator, root: *xml.Element, api: registry.
     };
 }
 
-fn parseDeclarations(allocator: Allocator, root: *xml.Element, api: registry.Api) ![]registry.Declaration {
+fn parseDeclarations(
+    allocator: Allocator,
+    root: *xml.Element,
+    api: registry.Api,
+    decls: *std.ArrayListUnmanaged(registry.Declaration),
+) !void {
     const types_elem = root.findChildByTag("types") orelse return error.InvalidRegistry;
-    const commands_elem = root.findChildByTag("commands") orelse return error.InvalidRegistry;
+    try decls.ensureUnusedCapacity(allocator, types_elem.children.len);
 
-    const decl_upper_bound = types_elem.children.len + commands_elem.children.len;
-    const decls = try allocator.alloc(registry.Declaration, decl_upper_bound);
+    try parseTypes(allocator, types_elem, api, decls);
+    try parseEnums(allocator, root, api, decls);
 
-    var count: usize = 0;
-    count += try parseTypes(allocator, decls, types_elem, api);
-    count += try parseEnums(allocator, decls[count..], root, api);
-    count += try parseCommands(allocator, decls[count..], commands_elem, api);
-    return decls[0..count];
+    if (root.findChildByTag("commands")) |commands_elem| {
+        try decls.ensureUnusedCapacity(allocator, commands_elem.children.len);
+        try parseCommands(allocator, commands_elem, api, decls);
+    }
 }
 
-fn parseTypes(allocator: Allocator, out: []registry.Declaration, types_elem: *xml.Element, api: registry.Api) !usize {
-    var i: usize = 0;
+fn parseTypes(
+    allocator: Allocator,
+    types_elem: *xml.Element,
+    api: registry.Api,
+    decls: *std.ArrayListUnmanaged(registry.Declaration),
+) !void {
     var it = types_elem.findChildrenByTag("type");
     while (it.next()) |ty| {
-        out[i] = blk: {
+        try decls.append(allocator, blk: {
             if (!requiredByApi(ty, api))
                 continue;
 
@@ -80,12 +113,8 @@ fn parseTypes(allocator: Allocator, out: []registry.Declaration, types_elem: *xm
             }
 
             continue;
-        };
-
-        i += 1;
+        });
     }
-
-    return i;
 }
 
 fn parseForeigntype(ty: *xml.Element) !registry.Declaration {
@@ -388,8 +417,7 @@ fn parseEnumAlias(elem: *xml.Element) !?registry.Declaration {
     return null;
 }
 
-fn parseEnums(allocator: Allocator, out: []registry.Declaration, root: *xml.Element, api: registry.Api) !usize {
-    var i: usize = 0;
+fn parseEnums(allocator: Allocator, root: *xml.Element, api: registry.Api, decls: *std.ArrayListUnmanaged(registry.Declaration)) !void {
     var it = root.findChildrenByTag("enums");
     while (it.next()) |enums| {
         const name = enums.getAttribute("name") orelse return error.InvalidRegistry;
@@ -397,14 +425,11 @@ fn parseEnums(allocator: Allocator, out: []registry.Declaration, root: *xml.Elem
             continue;
         }
 
-        out[i] = .{
+        try decls.append(allocator, .{
             .name = name,
             .decl_type = .{ .enumeration = try parseEnumFields(allocator, enums, api) },
-        };
-        i += 1;
+        });
     }
-
-    return i;
 }
 
 fn parseEnumFields(allocator: Allocator, elem: *xml.Element, api: registry.Api) !registry.Enum {
@@ -477,18 +502,19 @@ fn parseEnumField(field: *xml.Element) !registry.Enum.Field {
     };
 }
 
-fn parseCommands(allocator: Allocator, out: []registry.Declaration, commands_elem: *xml.Element, api: registry.Api) !usize {
-    var i: usize = 0;
+fn parseCommands(
+    allocator: Allocator,
+    commands_elem: *xml.Element,
+    api: registry.Api,
+    decls: *std.ArrayListUnmanaged(registry.Declaration),
+) !void {
     var it = commands_elem.findChildrenByTag("command");
     while (it.next()) |elem| {
         if (!requiredByApi(elem, api))
             continue;
 
-        out[i] = try parseCommand(allocator, elem, api);
-        i += 1;
+        try decls.append(allocator, try parseCommand(allocator, elem, api));
     }
-
-    return i;
 }
 
 fn splitCommaAlloc(allocator: Allocator, text: []const u8) ![][]const u8 {
@@ -587,8 +613,13 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element, api: registry.Api) !re
     };
 }
 
-fn parseApiConstants(allocator: Allocator, root: *xml.Element, api: registry.Api) ![]registry.ApiConstant {
-    var enums = blk: {
+fn parseApiConstants(
+    allocator: Allocator,
+    root: *xml.Element,
+    api: registry.Api,
+    api_constants: *std.ArrayListUnmanaged(registry.ApiConstant),
+) !void {
+    const maybe_enums = blk: {
         var it = root.findChildrenByTag("enums");
         while (it.next()) |child| {
             const name = child.getAttribute("name") orelse continue;
@@ -597,52 +628,39 @@ fn parseApiConstants(allocator: Allocator, root: *xml.Element, api: registry.Api
             }
         }
 
-        return error.InvalidRegistry;
+        break :blk null;
     };
 
-    var types = root.findChildByTag("types") orelse return error.InvalidRegistry;
-    const n_defines = blk: {
-        var n_defines: usize = 0;
-        var it = types.findChildrenByTag("type");
-        while (it.next()) |ty| {
-            if (ty.getAttribute("category")) |category| {
-                if (mem.eql(u8, category, "define")) {
-                    n_defines += 1;
-                }
-            }
+    if (maybe_enums) |enums| {
+        var it = enums.findChildrenByTag("enum");
+        while (it.next()) |constant| {
+            if (!requiredByApi(constant, api))
+                continue;
+
+            const expr = if (constant.getAttribute("value")) |expr|
+                expr
+            else if (constant.getAttribute("alias")) |alias|
+                alias
+            else
+                return error.InvalidRegistry;
+
+            try api_constants.append(allocator, .{
+                .name = constant.getAttribute("name") orelse return error.InvalidRegistry,
+                .value = .{ .expr = expr },
+            });
         }
-        break :blk n_defines;
-    };
-
-    const constants = try allocator.alloc(registry.ApiConstant, enums.children.len + n_defines);
-
-    var i: usize = 0;
-    var it = enums.findChildrenByTag("enum");
-    while (it.next()) |constant| {
-        if (!requiredByApi(constant, api))
-            continue;
-
-        const expr = if (constant.getAttribute("value")) |expr|
-            expr
-        else if (constant.getAttribute("alias")) |alias|
-            alias
-        else
-            return error.InvalidRegistry;
-
-        constants[i] = .{
-            .name = constant.getAttribute("name") orelse return error.InvalidRegistry,
-            .value = .{ .expr = expr },
-        };
-
-        i += 1;
     }
 
-    i += try parseDefines(types, constants[i..], api);
-    return constants[0..i];
+    const types = root.findChildByTag("types") orelse return error.InvalidRegistry;
+    try parseDefines(allocator, types, api, api_constants);
 }
 
-fn parseDefines(types: *xml.Element, out: []registry.ApiConstant, api: registry.Api) !usize {
-    var i: usize = 0;
+fn parseDefines(
+    allocator: Allocator,
+    types: *xml.Element,
+    api: registry.Api,
+    api_constants: *std.ArrayListUnmanaged(registry.ApiConstant),
+) !void {
     var it = types.findChildrenByTag("type");
     while (it.next()) |ty| {
         if (!requiredByApi(ty, api))
@@ -655,58 +673,45 @@ fn parseDefines(types: *xml.Element, out: []registry.ApiConstant, api: registry.
 
         const name = ty.getCharData("name") orelse continue;
         if (mem.eql(u8, name, "VK_HEADER_VERSION") or mem.eql(u8, name, "VKSC_API_VARIANT")) {
-            out[i] = .{
+            try api_constants.append(allocator, .{
                 .name = name,
                 .value = .{ .expr = mem.trim(u8, ty.children[2].char_data, " ") },
-            };
+            });
         } else {
             var xctok = cparse.XmlCTokenizer.init(ty);
-            out[i] = .{
+            try api_constants.append(allocator, .{
                 .name = name,
-                .value = .{ .version = cparse.parseVersion(&xctok) catch continue },
-            };
+                .value = cparse.parseVersion(&xctok) catch continue,
+            });
         }
-        i += 1;
     }
-
-    return i;
 }
 
-fn parseTags(allocator: Allocator, root: *xml.Element) ![]registry.Tag {
-    var tags_elem = root.findChildByTag("tags") orelse return error.InvalidRegistry;
-    const tags = try allocator.alloc(registry.Tag, tags_elem.children.len);
+fn parseTags(
+    allocator: Allocator,
+    root: *xml.Element,
+    tags: *std.ArrayListUnmanaged(registry.Tag),
+) !void {
+    var tags_elem = root.findChildByTag("tags") orelse return;
+    try tags.ensureUnusedCapacity(allocator, tags_elem.children.len);
 
-    var i: usize = 0;
     var it = tags_elem.findChildrenByTag("tag");
     while (it.next()) |tag| {
-        tags[i] = .{
+        tags.appendAssumeCapacity(.{
             .name = tag.getAttribute("name") orelse return error.InvalidRegistry,
             .author = tag.getAttribute("author") orelse return error.InvalidRegistry,
-        };
-
-        i += 1;
+        });
     }
-
-    return tags[0..i];
 }
 
-fn parseFeatures(allocator: Allocator, root: *xml.Element, api: registry.Api) ![]registry.Feature {
+fn parseFeatures(allocator: Allocator, root: *xml.Element, api: registry.Api, features: *std.ArrayListUnmanaged(registry.Feature)) !void {
     var it = root.findChildrenByTag("feature");
-    var count: usize = 0;
-    while (it.next()) |_| count += 1;
-
-    const features = try allocator.alloc(registry.Feature, count);
-    var i: usize = 0;
-    it = root.findChildrenByTag("feature");
     while (it.next()) |feature| {
         if (!requiredByApi(feature, api))
             continue;
 
-        features[i] = try parseFeature(allocator, feature, api);
-        i += 1;
+        try features.append(allocator, try parseFeature(allocator, feature, api));
     }
-
-    return features[0..i];
 }
 
 fn parseFeature(allocator: Allocator, feature: *xml.Element, api: registry.Api) !registry.Feature {
@@ -736,11 +741,24 @@ fn parseFeature(allocator: Allocator, feature: *xml.Element, api: registry.Api) 
 
 fn parseEnumExtension(elem: *xml.Element, parent_extnumber: ?u31) !?registry.Require.EnumExtension {
     // check for either _SPEC_VERSION or _EXTENSION_NAME
-    const extends = elem.getAttribute("extends") orelse return null;
+    const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
+    if (std.mem.endsWith(u8, name, "_SPEC_VERSION") or std.mem.endsWith(u8, name, "_EXTENSION_NAME")) {
+        return null;
+    }
+
+    const extends = elem.getAttribute("extends") orelse {
+        const expr = elem.getAttribute("value") orelse return null;
+        // This adds a value to the 'API constants' set
+
+        return registry.Require.EnumExtension{
+            .extends = name,
+            .extnumber = null,
+            .value = .{ .new_api_constant_expr = expr },
+        };
+    };
 
     if (elem.getAttribute("offset")) |offset_str| {
         const offset = try std.fmt.parseInt(u31, offset_str, 10);
-        const name = elem.getAttribute("name") orelse return error.InvalidRegistry;
         const extnumber = if (elem.getAttribute("extnumber")) |num|
             try std.fmt.parseInt(u31, num, 10)
         else
@@ -763,9 +781,11 @@ fn parseEnumExtension(elem: *xml.Element, parent_extnumber: ?u31) !?registry.Req
         return registry.Require.EnumExtension{
             .extends = extends,
             .extnumber = actual_extnumber,
-            .field = .{
-                .name = name,
-                .value = .{ .int = value },
+            .value = .{
+                .field = .{
+                    .name = name,
+                    .value = .{ .int = value },
+                },
             },
         };
     }
@@ -773,7 +793,7 @@ fn parseEnumExtension(elem: *xml.Element, parent_extnumber: ?u31) !?registry.Req
     return registry.Require.EnumExtension{
         .extends = extends,
         .extnumber = parent_extnumber,
-        .field = try parseEnumField(elem),
+        .value = .{ .field = try parseEnumField(elem) },
     };
 }
 
@@ -844,11 +864,15 @@ fn parseRequire(allocator: Allocator, require: *xml.Element, extnumber: ?u31, ap
     };
 }
 
-fn parseExtensions(allocator: Allocator, root: *xml.Element, api: registry.Api) ![]registry.Extension {
+fn parseExtensions(
+    allocator: Allocator,
+    root: *xml.Element,
+    api: registry.Api,
+    extensions: *std.ArrayListUnmanaged(registry.Extension),
+) !void {
     const extensions_elem = root.findChildByTag("extensions") orelse return error.InvalidRegistry;
+    try extensions.ensureUnusedCapacity(allocator, extensions_elem.children.len);
 
-    const extensions = try allocator.alloc(registry.Extension, extensions_elem.children.len);
-    var i: usize = 0;
     var it = extensions_elem.findChildrenByTag("extension");
     while (it.next()) |extension| {
         if (!requiredByApi(extension, api))
@@ -860,14 +884,11 @@ fn parseExtensions(allocator: Allocator, root: *xml.Element, api: registry.Api) 
             }
         }
 
-        extensions[i] = try parseExtension(allocator, extension, api);
-        i += 1;
+        extensions.appendAssumeCapacity(try parseExtension(allocator, extension, api));
     }
-
-    return extensions[0..i];
 }
 
-fn findExtVersion(extension: *xml.Element) !u32 {
+fn findExtVersion(extension: *xml.Element) !registry.Extension.Version {
     var req_it = extension.findChildrenByTag("require");
     while (req_it.next()) |req| {
         var enum_it = req.findChildrenByTag("enum");
@@ -875,17 +896,23 @@ fn findExtVersion(extension: *xml.Element) !u32 {
             const name = e.getAttribute("name") orelse continue;
             const value = e.getAttribute("value") orelse continue;
             if (mem.endsWith(u8, name, "_SPEC_VERSION")) {
-                return try std.fmt.parseInt(u32, value, 10);
+                // Vulkan Video extensions are sometimes aliases.
+                // If we fail to parse it as integer, just assume that its an alias and return that.
+                const version = std.fmt.parseInt(u32, value, 10) catch return .{ .alias = value };
+                return .{ .int = version };
             }
         }
     }
 
-    return error.InvalidRegistry;
+    return .unknown;
 }
 
 fn parseExtension(allocator: Allocator, extension: *xml.Element, api: registry.Api) !registry.Extension {
     const name = extension.getAttribute("name") orelse return error.InvalidRegistry;
     const platform = extension.getAttribute("platform");
+
+    const is_video = std.mem.startsWith(u8, name, "vulkan_video_");
+
     const version = try findExtVersion(extension);
 
     // For some reason there are two ways for an extension to state its required
@@ -907,11 +934,14 @@ fn parseExtension(allocator: Allocator, extension: *xml.Element, api: registry.A
     };
 
     const number = blk: {
+        // Vulkan Video extensions do not have numbers.
+        if (is_video) break :blk 0;
         const number_str = extension.getAttribute("number") orelse return error.InvalidRegistry;
         break :blk try std.fmt.parseInt(u31, number_str, 10);
     };
 
     const ext_type: ?registry.Extension.ExtensionType = blk: {
+        if (is_video) break :blk .video;
         const ext_type_str = extension.getAttribute("type") orelse break :blk null;
         if (mem.eql(u8, ext_type_str, "instance")) {
             break :blk .instance;

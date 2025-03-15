@@ -58,10 +58,10 @@ pub const GraphicsContext = struct {
 
         const app_info = vk.ApplicationInfo{
             .p_application_name = app_name,
-            .application_version = vk.makeApiVersion(0, 0, 0, 0),
+            .application_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
             .p_engine_name = app_name,
-            .engine_version = vk.makeApiVersion(0, 0, 0, 0),
-            .api_version = vk.API_VERSION_1_2,
+            .engine_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
+            .api_version = @bitCast(vk.API_VERSION_1_2),
         };
 
         const instance = try self.vkb.createInstance(&.{

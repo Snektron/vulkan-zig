@@ -10,11 +10,13 @@ const FeatureLevel = reg.FeatureLevel;
 
 const EnumFieldMerger = struct {
     const EnumExtensionMap = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(reg.Enum.Field));
+    const ApiConstantMap = std.StringArrayHashMapUnmanaged(reg.ApiConstant);
     const FieldSet = std.StringArrayHashMapUnmanaged(void);
 
     arena: Allocator,
     registry: *reg.Registry,
     enum_extensions: EnumExtensionMap,
+    api_constants: ApiConstantMap,
     field_set: FieldSet,
 
     fn init(arena: Allocator, registry: *reg.Registry) EnumFieldMerger {
@@ -22,6 +24,7 @@ const EnumFieldMerger = struct {
             .arena = arena,
             .registry = registry,
             .enum_extensions = .{},
+            .api_constants = .{},
             .field_set = .{},
         };
     }
@@ -38,7 +41,17 @@ const EnumFieldMerger = struct {
     fn addRequires(self: *EnumFieldMerger, reqs: []const reg.Require) !void {
         for (reqs) |req| {
             for (req.extends) |enum_ext| {
-                try self.putEnumExtension(enum_ext.extends, enum_ext.field);
+                switch (enum_ext.value) {
+                    .field => try self.putEnumExtension(enum_ext.extends, enum_ext.value.field),
+                    .new_api_constant_expr => |expr| try self.api_constants.put(
+                        self.arena,
+                        enum_ext.extends,
+                        .{
+                            .name = enum_ext.extends,
+                            .value = .{ .expr = expr },
+                        },
+                    ),
+                }
             }
         }
     }
@@ -76,6 +89,10 @@ const EnumFieldMerger = struct {
     }
 
     fn merge(self: *EnumFieldMerger) !void {
+        for (self.registry.api_constants) |api_constant| {
+            try self.api_constants.put(self.arena, api_constant.name, api_constant);
+        }
+
         for (self.registry.features) |feature| {
             try self.addRequires(feature.requires);
         }
@@ -91,6 +108,8 @@ const EnumFieldMerger = struct {
                 try self.mergeEnumFields(decl.name, &decl.decl_type.enumeration);
             }
         }
+
+        self.registry.api_constants = self.api_constants.values();
     }
 };
 
@@ -98,9 +117,10 @@ pub const Generator = struct {
     arena: std.heap.ArenaAllocator,
     registry: reg.Registry,
     id_renderer: IdRenderer,
+    have_video: bool,
 
-    fn init(allocator: Allocator, spec: *xml.Element, api: reg.Api) !Generator {
-        const result = try parseXml(allocator, spec, api);
+    fn init(allocator: Allocator, spec: *xml.Element, maybe_video_spec: ?*xml.Element, api: reg.Api) !Generator {
+        const result = try parseXml(allocator, spec, maybe_video_spec, api);
 
         const tags = try allocator.alloc([]const u8, result.registry.tags.len);
         for (tags, result.registry.tags) |*tag, registry_tag| tag.* = registry_tag.name;
@@ -109,6 +129,7 @@ pub const Generator = struct {
             .arena = result.arena,
             .registry = result.registry,
             .id_renderer = IdRenderer.init(allocator, tags),
+            .have_video = maybe_video_spec != null,
         };
     }
 
@@ -166,7 +187,7 @@ pub const Generator = struct {
     }
 
     fn render(self: *Generator, writer: anytype) !void {
-        try renderRegistry(writer, self.arena.allocator(), &self.registry, &self.id_renderer);
+        try renderRegistry(writer, self.arena.allocator(), &self.registry, &self.id_renderer, self.have_video);
     }
 };
 
@@ -178,7 +199,7 @@ pub const Api = reg.Api;
 /// and the resulting binding is written to `writer`. `allocator` will be used to allocate temporary
 /// internal datastructures - mostly via an ArenaAllocator, but sometimes a hashmap uses this allocator
 /// directly. `api` is the API to generate the bindings for, usually `.vulkan`.
-pub fn generate(allocator: Allocator, api: Api, spec_xml: []const u8, writer: anytype) !void {
+pub fn generate(allocator: Allocator, api: Api, spec_xml: []const u8, maybe_video_spec_xml: ?[]const u8, writer: anytype) !void {
     const spec = xml.parse(allocator, spec_xml) catch |err| switch (err) {
         error.InvalidDocument,
         error.UnexpectedEof,
@@ -195,7 +216,26 @@ pub fn generate(allocator: Allocator, api: Api, spec_xml: []const u8, writer: an
     };
     defer spec.deinit();
 
-    var gen = Generator.init(allocator, spec.root, api) catch |err| switch (err) {
+    const maybe_video_spec_root = if (maybe_video_spec_xml) |video_spec_xml| blk: {
+        const video_spec = xml.parse(allocator, video_spec_xml) catch |err| switch (err) {
+            error.InvalidDocument,
+            error.UnexpectedEof,
+            error.UnexpectedCharacter,
+            error.IllegalCharacter,
+            error.InvalidEntity,
+            error.InvalidName,
+            error.InvalidStandaloneValue,
+            error.NonMatchingClosingTag,
+            error.UnclosedComment,
+            error.UnclosedValue,
+            => return error.InvalidXml,
+            error.OutOfMemory => return error.OutOfMemory,
+        };
+
+        break :blk video_spec.root;
+    } else null;
+
+    var gen = Generator.init(allocator, spec.root, maybe_video_spec_root, api) catch |err| switch (err) {
         error.InvalidXml,
         error.InvalidCharacter,
         error.Overflow,

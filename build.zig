@@ -4,6 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const maybe_registry = b.option(std.Build.LazyPath, "registry", "Set the path to the Vulkan registry (vk.xml)");
+    const maybe_video = b.option(std.Build.LazyPath, "video", "Set the path to the Vulkan Video registry (video.xml)");
     const test_step = b.step("test", "Run all the tests");
 
     // Using the package manager, this artifact can be obtained by the user
@@ -22,6 +23,11 @@ pub fn build(b: *std.Build) void {
     // and then obtain the module directly via `.module("vulkan-zig")`.
     if (maybe_registry) |registry| {
         const vk_generate_cmd = b.addRunArtifact(generator_exe);
+
+        if (maybe_video) |video| {
+            vk_generate_cmd.addArg("--video");
+            vk_generate_cmd.addFileArg(video);
+        }
 
         vk_generate_cmd.addFileArg(registry);
 
