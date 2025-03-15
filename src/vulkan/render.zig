@@ -993,11 +993,16 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderSimpleBitContainer(self: *Self, container: reg.Container) !bool {
             var total_bits: usize = 0;
+            var is_flags_container = true;
             for (container.fields) |field| {
-                total_bits += field.bits orelse {
+                const bits = field.bits orelse {
                     // C abi type - not a packed struct.
                     return false;
                 };
+                total_bits += bits;
+                if (bits != 1) {
+                    is_flags_container = false;
+                }
             }
 
             try self.writer.writeAll("packed struct(u32) {");
@@ -1012,7 +1017,11 @@ fn Renderer(comptime WriterType: type) type {
                     try self.writer.print(" u{} = 0,\n", .{field.bits.?});
                 } else if (bits == 1) {
                     // Assume its a flag.
-                    try self.writer.writeAll(" bool,\n");
+                    if (is_flags_container) {
+                        try self.writer.writeAll(" bool = false,\n");
+                    } else {
+                        try self.writer.writeAll(" bool,\n");
+                    }
                 } else {
                     try self.writer.print(" u{},\n", .{field.bits.?});
                 }

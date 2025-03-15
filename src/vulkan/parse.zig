@@ -417,7 +417,12 @@ fn parseEnumAlias(elem: *xml.Element) !?registry.Declaration {
     return null;
 }
 
-fn parseEnums(allocator: Allocator, root: *xml.Element, api: registry.Api, decls: *std.ArrayListUnmanaged(registry.Declaration)) !void {
+fn parseEnums(
+    allocator: Allocator,
+    root: *xml.Element,
+    api: registry.Api,
+    decls: *std.ArrayListUnmanaged(registry.Declaration),
+) !void {
     var it = root.findChildrenByTag("enums");
     while (it.next()) |enums| {
         const name = enums.getAttribute("name") orelse return error.InvalidRegistry;
