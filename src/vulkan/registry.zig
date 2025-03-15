@@ -42,6 +42,7 @@ pub const ApiConstant = struct {
     pub const Value = union(enum) {
         expr: []const u8,
         version: [4][]const u8,
+        video_std_version: [3][]const u8,
     };
 
     name: []const u8,
@@ -179,6 +180,7 @@ pub const Extension = struct {
     pub const ExtensionType = enum {
         instance,
         device,
+        video,
     };
 
     pub const Promotion = union(enum) {
@@ -187,9 +189,15 @@ pub const Extension = struct {
         extension: []const u8,
     };
 
+    pub const Version = union(enum) {
+        int: u32,
+        alias: []const u8,
+        unknown,
+    };
+
     name: []const u8,
     number: u31,
-    version: u32,
+    version: Version,
     extension_type: ?ExtensionType,
     depends: []const []const u8, // Other extensions
     promoted_to: Promotion,
@@ -200,9 +208,13 @@ pub const Extension = struct {
 
 pub const Require = struct {
     pub const EnumExtension = struct {
+        pub const Value = union(enum) {
+            field: Enum.Field,
+            new_api_constant_expr: []const u8,
+        };
         extends: []const u8,
         extnumber: ?u31,
-        field: Enum.Field,
+        value: Value,
     };
 
     extends: []EnumExtension,

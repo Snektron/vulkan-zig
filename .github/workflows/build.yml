@@ -31,10 +31,15 @@ jobs:
         sudo apt install shaderc libglfw3 libglfw3-dev
 
     - name: Fetch latest vk.xml
-      run: wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
+      run: |
+        wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/vk.xml
+        wget https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/main/xml/video.xml
 
     - name: Test and install with latest zig & latest vk.xml
       run: zig build test install -Dregistry=$(pwd)/vk.xml
+
+    - name: Test and install with latest zig & latest vk.xml & latest video.xml
+      run: zig build test install -p zig-out-video -Dregistry=$(pwd)/vk.xml -Dvideo=$(pwd)/video.xml
 
     - name: Build example with latest zig & vk.xml from dependency
       run: zig build --build-file $(pwd)/examples/build.zig
@@ -46,5 +51,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: vk.zig
-        path: zig-out/src/vk.zig
+        path: |
+          zig-out/src/vk.zig
+          zig-out-video/src/vk.zig
         if-no-files-found: error

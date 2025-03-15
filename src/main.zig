@@ -22,7 +22,7 @@ fn reportParseErrors(tree: std.zig.Ast) !void {
     }
 }
 
-pub fn main() void {
+pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -34,6 +34,7 @@ pub fn main() void {
 
     var maybe_xml_path: ?[]const u8 = null;
     var maybe_out_path: ?[]const u8 = null;
+    var maybe_video_xml_path: ?[]const u8 = null;
     var debug: bool = false;
     var api = generator.Api.vulkan;
 
@@ -52,7 +53,9 @@ pub fn main() void {
                 \\Options:
                 \\-h --help        show this message and exit.
                 \\-a --api <api>   Generate API for 'vulkan' or 'vulkansc'. Defaults to 'vulkan'.
-                \\--debug Write out unformatted source if does not parse correctly.
+                \\--debug          Write out unformatted source if does not parse correctly.
+                \\--video <path>   Also gnerate Vulkan Video API bindings from video.xml
+                \\                 registry at <path>.
                 \\
             ,
                 .{prog_name},
@@ -68,12 +71,16 @@ pub fn main() void {
             api = std.meta.stringToEnum(generator.Api, api_str) orelse {
                 invalidUsage(prog_name, "invalid api '{s}'", .{api_str});
             };
+        } else if (std.mem.eql(u8, arg, "--debug")) {
+            debug = true;
+        } else if (std.mem.eql(u8, arg, "--video")) {
+            maybe_video_xml_path = args.next() orelse {
+                invalidUsage(prog_name, "{s} expects argument <path>", .{arg});
+            };
         } else if (maybe_xml_path == null) {
             maybe_xml_path = arg;
         } else if (maybe_out_path == null) {
             maybe_out_path = arg;
-        } else if (std.mem.eql(u8, arg, "--debug")) {
-            debug = true;
         } else {
             invalidUsage(prog_name, "superficial argument '{s}'", .{arg});
         }
@@ -93,8 +100,16 @@ pub fn main() void {
         std.process.exit(1);
     };
 
+    const maybe_video_xml_src = if (maybe_video_xml_path) |video_xml_path|
+        cwd.readFileAlloc(allocator, video_xml_path, std.math.maxInt(usize)) catch |err| {
+            std.log.err("failed to open input file '{s}' ({s})", .{ video_xml_path, @errorName(err) });
+            std.process.exit(1);
+        }
+    else
+        null;
+
     var out_buffer = std.ArrayList(u8).init(allocator);
-    generator.generate(allocator, api, xml_src, out_buffer.writer()) catch |err| switch (err) {
+    generator.generate(allocator, api, xml_src, maybe_video_xml_src, out_buffer.writer()) catch |err| switch (err) {
         error.InvalidXml => {
             std.log.err("invalid vulkan registry - invalid xml", .{});
             std.log.err("please check that the correct vk.xml file is passed", .{});
