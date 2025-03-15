@@ -127,9 +127,9 @@ Functions and fields are renamed to be more or less in line with [Zig's standard
 * Container fields and function parameter names are generated in (lower) snake case in a similar manner: `ppEnabledLayerNames` becomes `pp_enabled_layer_names`.
 * Any name which is either an illegal Zig name or a reserved identifier is rendered using `@"name"` syntax. For example, `VK_IMAGE_TYPE_2D` is translated to `@"2d"`.
 
-### Function pointers & Wrappers
+### Dispatch Tables
 
-vulkan-zig provides no integration for statically linking libvulkan, and these symbols are not generated at all. Instead, vulkan functions are to be loaded dynamically. For each Vulkan function, a function pointer type is generated using the exact parameters and return types as defined by the Vulkan specification:
+Vulkan-zig provides no integration for statically linking libvulkan, and these symbols are not generated at all. Instead, vulkan functions are to be loaded dynamically. For each Vulkan function, a function pointer type is generated using the exact parameters and return types as defined by the Vulkan specification:
 ```zig
 pub const PfnCreateInstance = fn (
     p_create_info: *const InstanceCreateInfo,
@@ -138,77 +138,58 @@ pub const PfnCreateInstance = fn (
 ) callconv(vulkan_call_conv) Result;
 ```
 
-For each function, a wrapper is generated into one of three structs:
-* BaseWrapper. This contains wrappers for functions which are loaded by `vkGetInstanceProcAddr` without an instance, such as `vkCreateInstance`, `vkEnumerateInstanceVersion`, etc.
-* InstanceWrapper. This contains wrappers for functions which are otherwise loaded by `vkGetInstanceProcAddr`.
-* DeviceWrapper. This contains wrappers for functions which are loaded by `vkGetDeviceProcAddr`.
+A set of _dispatch table_ structures is generated. A dispatch table simply contains a set of (optional) function pointers to Vulkan API functions, and not much else. Function pointers grouped by the nature of the function as follows:
+* Vulkan functions which are loaded by `vkGetInstanceProcAddr` without the need for passing an instance are placed in `BaseDispatch`.
+* Vulkan functions which are loaded by `vkGetInstanceProcAddr` but do need an instance are placed in `InstanceDispatch`.
+* Vulkan functions which are loaded by `vkGetDeviceProcAddr` are placed in `DeviceDispatch`.
 
-To create a wrapper type, an "api specification" should be passed to it. This is a list of `ApiInfo` structs, which allows one to specify the functions that should be made available. An `ApiInfo` structure is initialized 3 optional fields, `base_commands`, `instance_commands`, and `device_commands`. Each of these takes a set of the vulkan functions that should be made available for that category, for example, setting `.createInstance = true` in `base_commands` makes the `createInstance` function available (loaded from `vkCreateInstance`). An entire feature level or extension can be pulled in at once too, for example, `vk.features.version_1_0` contains all functions for Vulkan 1.0. `vk.extensions.khr_surface` contains all functions for the `VK_KHR_surface` extension.
+### Wrappers
 
-```zig
-const vk = @import("vulkan");
-/// To construct base, instance and device wrappers for vulkan-zig, you need to pass a list of 'apis' to it.
-const apis: []const vk.ApiInfo = &.{
-    // You can either add invidiual functions by manually creating an 'api'
-    .{
-        .base_commands = .{
-            .createInstance = true,
-        },
-        .instance_commands = .{
-            .createDevice = true,
-        },
-    },
-    // Or you can add entire feature sets or extensions
-    vk.features.version_1_0,
-    vk.extensions.khr_surface,
-    vk.extensions.khr_swapchain,
-};
-const BaseDispatch = vk.BaseWrapper(apis);
-```
+To provide more interesting functionality, a set of _wrapper_ types is also generated, one for each dispatch table type. These contain the Zig-versions of each Vulkan API function, along with corresponding error set definitions, return type definitions, etc, where appropriate.
+
 The wrapper struct then provides wrapper functions for each function pointer in the dispatch struct:
 ```zig
-pub const BaseWrapper(comptime cmds: anytype) type {
-    ...
+pub const BaseWrapper = struct {
+    const Self = @This();
     const Dispatch = CreateDispatchStruct(cmds);
-    return struct {
-        dispatch: Dispatch,
 
-        pub const CreateInstanceError = error{
-            OutOfHostMemory,
-            OutOfDeviceMemory,
-            InitializationFailed,
-            LayerNotPresent,
-            ExtensionNotPresent,
-            IncompatibleDriver,
-            Unknown,
-        };
-        pub fn createInstance(
-            self: Self,
-            create_info: InstanceCreateInfo,
-            p_allocator: ?*const AllocationCallbacks,
-        ) CreateInstanceError!Instance {
-            var instance: Instance = undefined;
-            const result = self.dispatch.vkCreateInstance(
-                &create_info,
-                p_allocator,
-                &instance,
-            );
-            switch (result) {
-                .success => {},
-                .error_out_of_host_memory => return error.OutOfHostMemory,
-                .error_out_of_device_memory => return error.OutOfDeviceMemory,
-                .error_initialization_failed => return error.InitializationFailed,
-                .error_layer_not_present => return error.LayerNotPresent,
-                .error_extension_not_present => return error.ExtensionNotPresent,
-                .error_incompatible_driver => return error.IncompatibleDriver,
-                else => return error.Unknown,
-            }
-            return instance;
+    dispatch: Dispatch,
+
+    pub const CreateInstanceError = error{
+        OutOfHostMemory,
+        OutOfDeviceMemory,
+        InitializationFailed,
+        LayerNotPresent,
+        ExtensionNotPresent,
+        IncompatibleDriver,
+        Unknown,
+    };
+    pub fn createInstance(
+        self: Self,
+        create_info: InstanceCreateInfo,
+        p_allocator: ?*const AllocationCallbacks,
+    ) CreateInstanceError!Instance {
+        var instance: Instance = undefined;
+        const result = self.dispatch.vkCreateInstance.?(
+            &create_info,
+            p_allocator,
+            &instance,
+        );
+        switch (result) {
+            .success => {},
+            .error_out_of_host_memory => return error.OutOfHostMemory,
+            .error_out_of_device_memory => return error.OutOfDeviceMemory,
+            .error_initialization_failed => return error.InitializationFailed,
+            .error_layer_not_present => return error.LayerNotPresent,
+            .error_extension_not_present => return error.ExtensionNotPresent,
+            .error_incompatible_driver => return error.IncompatibleDriver,
+            else => return error.Unknown,
         }
-
-        ...
+        return instance;
     }
-}
+
+    ...
+};
 ```
 Wrappers are generated according to the following rules:
 * The return type is determined from the original return type and the parameters.
@@ -219,10 +200,12 @@ Wrappers are generated according to the following rules:
 * Error codes are translated into Zig errors.
 * As of yet, there is no specific handling of enumeration style commands or other commands which accept slices.
 
-Furthermore, each wrapper contains a function to load each function pointer member when passed either `PfnGetInstanceProcAddr` or `PfnGetDeviceProcAddr`, which attempts to load each member as function pointer and casts it to the appropriate type. These functions are loaded literally, and any wrongly named member or member with a wrong function pointer type will result in problems.
-* For `BaseWrapper`, this function has signature `fn load(loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr` (with optionally having a different calling convention).
-* For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr`.
-* For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: anytype) error{CommandFailure}!Self`, where the type of `loader` must resemble `PfnGetDeviceProcAddr`.
+#### Initializing Wrappers
+
+Wrapper types are initialized by the `load` function, which must be passed a _loader_: A function which loads a function pointer by name.
+* For `BaseWrapper`, this function has signature `fn load(loader: anytype) Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr` (with optionally having a different calling convention).
+* For `InstanceWrapper`, this function has signature `fn load(instance: Instance, loader: anytype) Self`, where the type of `loader` must resemble `PfnGetInstanceProcAddr`.
+* For `DeviceWrapper`, this function has signature `fn load(device: Device, loader: anytype) Self`, where the type of `loader` must resemble `PfnGetDeviceProcAddr`.
 
 Note that these functions accepts a loader with the signature of `anytype` instead of `PfnGetInstanceProcAddr`. This is because it is valid for `vkGetInstanceProcAddr` to load itself, in which case the returned function is to be called with the vulkan calling convention. This calling convention is not required for loading vulkan-zig itself, though, and a loader to be called with any calling convention with the target architecture may be passed in. This is particularly useful when interacting with C libraries that provide `vkGetInstanceProcAddr`.
 
@@ -238,31 +221,32 @@ fn customGetInstanceProcAddress(instance: vk.Instance, procname: [*:0]const u8) 
     ...
 }
 
-// Both calls are valid, even
-const vkb = try BaseDispatch.load(glfwGetInstanceProcAddress);
-const vkb = try BaseDispatch.load(customGetInstanceProcAddress);
+// Both calls are valid.
+const vkb = BaseWrapper.load(glfwGetInstanceProcAddress);
+const vkb = BaseWrapper.load(customGetInstanceProcAddress);
 ```
 
-By default, wrapper `load` functions return `error.CommandLoadFailure` if a call to the loader resulted in `null`. If this behaviour is not desired, one can use `loadNoFail`. This function accepts the same parameters as `load`, but does not return an error any function pointer fails to load and sets its value to `undefined` instead. It is at the programmer's discretion not to invoke invalid functions, which can be tested for by checking whether the required core and extension versions the function requires are supported.
+The `load` function tries to load all function pointers unconditionally, regardless of enabled extensions or platform. If a function pointer could not be loaded, its entry in the dispatch table is set to `null`. When invoking a function on a wrapper table, the function pointer is checked for null, and there will be a crash or undefined behavior if it was not loaded properly. That means that **it is up to the programmer to ensure that a function pointer is valid for the platform before calling it**, either by checking whether the associated extension or Vulkan version is supported or simply by checking whether the function pointer is non-null.
 
-One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant(..)`.
+One can access the underlying unwrapped C functions by doing `wrapper.dispatch.vkFuncYouWant.?(..)`.
 
 #### Proxying Wrappers
 
 Proxying wrappers wrap a wrapper and a pointer to the associated handle in a single struct, and automatically passes this handle to commands as appropriate. Besides the proxying wrappers for instances and devices, there are also proxying wrappers for queues and command buffers. Proxying wrapper type are constructed in the same way as a regular wrapper, by passing an api specification to them. To initialize a proxying wrapper, it must be passed a handle and a pointer to an appropriate wrapper. For queue and command buffer proxying wrappers, a pointer to a device wrapper must be passed.
 
 ```zig
-// Create the dispatch tables
-const InstanceDispatch = vk.InstanceWrapper(apis);
-const Instance = vk.InstanceProxy(apis);
+const InstanceWrapper = vk.InstanceWrapper;
+const Instance = vk.InstanceProxy;
 
 const instance_handle = try vkb.createInstance(...);
-const vki = try InstanceDispatch.load(instance_handle, vkb.vkGetInstanceProcAddr);
+const vki = try InstanceWrapper.load(instance_handle, vkb.dispatch.vkGetInstanceProcAddr.?);
 const instance = Instance.load(instance_handle, &vki);
 defer instance.destroyInstance(null);
 ```
 
 For queue and command buffer proxying wrappers, the `queue` and `cmd` prefix is removed for functions where appropriate. Note that the device proxying wrappers also have the queue and command buffer functions made available for convenience, but there the prefix is not stripped.
+
+Note that the proxy must be passed a _pointer_ to a wrapper. This is because there was a limitation with LLVM in the past, where a struct with an object pointer and its associated function pointers wouldn't be optimized properly. By using a separate function pointer, LLVM knows that the "vtable" dispatch struct can never be modified and so it can subject each call to vtable optimizations.
 
 ### Bitflags
 
