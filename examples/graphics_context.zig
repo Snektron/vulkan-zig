@@ -5,38 +5,34 @@ const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
-/// To construct base, instance and device wrappers for vulkan-zig, you need to pass a list of 'apis' to it.
-const apis: []const vk.ApiInfo = &.{
-    // You can either add invidiual functions by manually creating an 'api'
-    .{
-        .base_commands = .{
-            .createInstance = true,
-        },
-        .instance_commands = .{
-            .createDevice = true,
-        },
-    },
-    // Or you can add entire feature sets or extensions
-    vk.features.version_1_0,
-    vk.extensions.khr_surface,
-    vk.extensions.khr_swapchain,
-};
+/// There are 3 levels of bindings in vulkan-zig:
+/// - The Dispatch types (vk.BaseDispatch, vk.InstanceDispatch, vk.DeviceDispatch)
+///   are "plain" structs which just contain the function pointers for a particular
+///   object.
+/// - The Wrapper types (vk.Basewrapper, vk.InstanceWrapper, vk.DeviceWrapper) contains
+///   the Dispatch type, as well as Ziggified Vulkan functions - these return Zig errors,
+///   etc.
+/// - The Proxy types (vk.InstanceProxy, vk.DeviceProxy, vk.CommandBufferProxy,
+///   vk.QueueProxy) contain a pointer to a Wrapper and also contain the object's handle.
+///   Calling Ziggified functions on these types automatically passes the handle as
+///   the first parameter of each function. Note that this type accepts a pointer to
+///   a wrapper struct as there is a problem with LLVM where embedding function pointers
+///   and object pointer in the same struct leads to missed optimizations. If the wrapper
+///   member is a pointer, LLVM will try to optimize it as any other vtable.
+/// The wrappers contain
+const BaseWrapper = vk.BaseWrapper;
+const InstanceWrapper = vk.InstanceWrapper;
+const DeviceWrapper = vk.DeviceWrapper;
 
-/// Next, pass the `apis` to the wrappers to create dispatch tables.
-const BaseDispatch = vk.BaseWrapper(apis);
-const InstanceDispatch = vk.InstanceWrapper(apis);
-const DeviceDispatch = vk.DeviceWrapper(apis);
-
-// Also create some proxying wrappers, which also have the respective handles
-const Instance = vk.InstanceProxy(apis);
-const Device = vk.DeviceProxy(apis);
+const Instance = vk.InstanceProxy;
+const Device = vk.DeviceProxy;
 
 pub const GraphicsContext = struct {
-    pub const CommandBuffer = vk.CommandBufferProxy(apis);
+    pub const CommandBuffer = vk.CommandBufferProxy;
 
     allocator: Allocator,
 
-    vkb: BaseDispatch,
+    vkb: BaseWrapper,
 
     instance: Instance,
     surface: vk.SurfaceKHR,
@@ -51,7 +47,7 @@ pub const GraphicsContext = struct {
     pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: *c.GLFWwindow) !GraphicsContext {
         var self: GraphicsContext = undefined;
         self.allocator = allocator;
-        self.vkb = try BaseDispatch.load(c.glfwGetInstanceProcAddress);
+        self.vkb = BaseWrapper.load(c.glfwGetInstanceProcAddress);
 
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);
@@ -70,9 +66,9 @@ pub const GraphicsContext = struct {
             .pp_enabled_extension_names = @ptrCast(glfw_exts),
         }, null);
 
-        const vki = try allocator.create(InstanceDispatch);
+        const vki = try allocator.create(InstanceWrapper);
         errdefer allocator.destroy(vki);
-        vki.* = try InstanceDispatch.load(instance, self.vkb.dispatch.vkGetInstanceProcAddr);
+        vki.* = InstanceWrapper.load(instance, self.vkb.dispatch.vkGetInstanceProcAddr.?);
         self.instance = Instance.init(instance, vki);
         errdefer self.instance.destroyInstance(null);
 
@@ -85,9 +81,9 @@ pub const GraphicsContext = struct {
 
         const dev = try initializeCandidate(self.instance, candidate);
 
-        const vkd = try allocator.create(DeviceDispatch);
+        const vkd = try allocator.create(DeviceWrapper);
         errdefer allocator.destroy(vkd);
-        vkd.* = try DeviceDispatch.load(dev, self.instance.wrapper.dispatch.vkGetDeviceProcAddr);
+        vkd.* = DeviceWrapper.load(dev, self.instance.wrapper.dispatch.vkGetDeviceProcAddr.?);
         self.dev = Device.init(dev, vkd);
         errdefer self.dev.destroyDevice(null);
 
