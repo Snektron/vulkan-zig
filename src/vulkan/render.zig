@@ -1440,12 +1440,13 @@ fn Renderer(comptime WriterType: type) type {
             const name = dispatch_type.name();
 
             try self.writer.print(
-                \\pub const {0s}Wrapper = struct {{
-                \\    const Self = @This();
-                \\    pub const Dispatch = {0s}Dispatch;
+                \\pub const {0s}Wrapper = {0s}WrapperWithCustomDispatch({0s}Dispatch);
+                \\pub fn {0s}WrapperWithCustomDispatch(DispatchType: type) type {{
+                \\    return struct {{
+                \\        const Self = @This();
+                \\        pub const Dispatch = DispatchType;
                 \\
-                \\    dispatch: Dispatch,
-                \\
+                \\        dispatch: Dispatch,
                 \\
             , .{name});
 
@@ -1473,7 +1474,7 @@ fn Renderer(comptime WriterType: type) type {
                 }
             }
 
-            try self.writer.writeAll("};\n");
+            try self.writer.writeAll("};}\n");
         }
 
         fn renderWrapperLoader(self: *Self, dispatch_type: CommandDispatchType) !void {
@@ -1520,11 +1521,13 @@ fn Renderer(comptime WriterType: type) type {
             const loader_name = dispatch_type.name();
 
             try self.writer.print(
-                \\pub const {0s}Proxy = struct {{
-                \\    const Self = @This();
-                \\    pub const Wrapper = {1s}Wrapper;
+                \\pub const {0s}Proxy = {0s}ProxyWithCustomDispatch({1s}Dispatch);
+                \\pub fn {0s}ProxyWithCustomDispatch(DispatchType: type) type {{
+                \\    return struct {{
+                \\        const Self = @This();
+                \\        pub const Wrapper = {1s}WrapperWithCustomDispatch(DispatchType);
                 \\
-                \\    handle: {0s},
+                \\        handle: {0s},
                 // Note: This is a pointer because in the past there were some performance
                 // issues with putting an object and vtable in the same structure. This also
                 // affected std.mem.Allocator, which is why its like that too.
@@ -1571,8 +1574,8 @@ fn Renderer(comptime WriterType: type) type {
             }
 
             try self.writer.writeAll(
-                \\};
-                \\
+                \\    };
+                \\}
             );
         }
 
