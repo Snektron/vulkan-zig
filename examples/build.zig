@@ -6,6 +6,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const maybe_override_registry = b.option([]const u8, "override-registry", "Override the path to the Vulkan registry used for the examples");
+    const use_zig_shaders = b.option(bool, "zig-shader", "Use Zig shaders instead of GLSL") orelse false;
 
     const registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
 
@@ -30,27 +31,59 @@ pub fn build(b: *std.Build) void {
 
     triangle_exe.root_module.addImport("vulkan", vulkan);
 
-    const vert_cmd = b.addSystemCommand(&.{
-        "glslc",
-        "--target-env=vulkan1.2",
-        "-o",
-    });
-    const vert_spv = vert_cmd.addOutputFileArg("vert.spv");
-    vert_cmd.addFileArg(b.path("shaders/triangle.vert"));
-    triangle_exe.root_module.addAnonymousImport("vertex_shader", .{
-        .root_source_file = vert_spv,
-    });
+    if (use_zig_shaders) {
+        const spirv_target = b.resolveTargetQuery(.{
+            .cpu_arch = .spirv64,
+            .os_tag = .vulkan,
+            .cpu_model = .{ .explicit = &std.Target.spirv.cpu.vulkan_v1_2 },
+            .cpu_features_add = std.Target.spirv.featureSet(&.{.int64}),
+            .ofmt = .spirv,
+        });
 
-    const frag_cmd = b.addSystemCommand(&.{
-        "glslc",
-        "--target-env=vulkan1.2",
-        "-o",
-    });
-    const frag_spv = frag_cmd.addOutputFileArg("frag.spv");
-    frag_cmd.addFileArg(b.path("shaders/triangle.frag"));
-    triangle_exe.root_module.addAnonymousImport("fragment_shader", .{
-        .root_source_file = frag_spv,
-    });
+        const vert_spv = b.addObject(.{
+            .name = "vertex_shader",
+            .root_source_file = b.path("shaders/vertex.zig"),
+            .target = spirv_target,
+            .use_llvm = false,
+        });
+        triangle_exe.root_module.addAnonymousImport(
+            "vertex_shader",
+            .{ .root_source_file = vert_spv.getEmittedBin() },
+        );
+
+        const frag_spv = b.addObject(.{
+            .name = "fragment_shader",
+            .root_source_file = b.path("shaders/fragment.zig"),
+            .target = spirv_target,
+            .use_llvm = false,
+        });
+        triangle_exe.root_module.addAnonymousImport(
+            "fragment_shader",
+            .{ .root_source_file = frag_spv.getEmittedBin() },
+        );
+    } else {
+        const vert_cmd = b.addSystemCommand(&.{
+            "glslc",
+            "--target-env=vulkan1.2",
+            "-o",
+        });
+        const vert_spv = vert_cmd.addOutputFileArg("vert.spv");
+        vert_cmd.addFileArg(b.path("shaders/triangle.vert"));
+        triangle_exe.root_module.addAnonymousImport("vertex_shader", .{
+            .root_source_file = vert_spv,
+        });
+
+        const frag_cmd = b.addSystemCommand(&.{
+            "glslc",
+            "--target-env=vulkan1.2",
+            "-o",
+        });
+        const frag_spv = frag_cmd.addOutputFileArg("frag.spv");
+        frag_cmd.addFileArg(b.path("shaders/triangle.frag"));
+        triangle_exe.root_module.addAnonymousImport("fragment_shader", .{
+            .root_source_file = frag_spv,
+        });
+    }
 
     const triangle_run_cmd = b.addRunArtifact(triangle_exe);
     triangle_run_cmd.step.dependOn(b.getInstallStep());
