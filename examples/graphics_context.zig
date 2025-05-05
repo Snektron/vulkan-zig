@@ -49,8 +49,20 @@ pub const GraphicsContext = struct {
         self.allocator = allocator;
         self.vkb = BaseWrapper.load(c.glfwGetInstanceProcAddress);
 
+        var extension_names = std.ArrayList([*:0]const u8).init(allocator);
+        defer extension_names.deinit();
+        // these extensions are to support vulkan in mac os
+        // see https://github.com/glfw/glfw/issues/2335
+        try extension_names.append("VK_KHR_portability_enumeration");
+        try extension_names.append("VK_KHR_get_physical_device_properties2");
+
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);
+
+        var i: usize = 0;
+        while (i < glfw_exts_count) : (i += 1) {
+            try extension_names.append(glfw_exts[i]);
+        }
 
         const app_info = vk.ApplicationInfo{
             .p_application_name = app_name,
@@ -60,11 +72,11 @@ pub const GraphicsContext = struct {
             .api_version = @bitCast(vk.API_VERSION_1_2),
         };
 
-        const instance = try self.vkb.createInstance(&.{
-            .p_application_info = &app_info,
-            .enabled_extension_count = glfw_exts_count,
-            .pp_enabled_extension_names = @ptrCast(glfw_exts),
-        }, null);
+        // enumerate_portability_bit_khr to support vulkan in mac os
+        // see https://github.com/glfw/glfw/issues/2335
+        const flags: vk.InstanceCreateFlags = .{ .enumerate_portability_bit_khr = true };
+
+        const instance = try self.vkb.createInstance(&.{ .p_application_info = &app_info, .enabled_extension_count = @intCast(extension_names.items.len), .pp_enabled_extension_names = extension_names.items.ptr, .flags = flags }, null);
 
         const vki = try allocator.create(InstanceWrapper);
         errdefer allocator.destroy(vki);
