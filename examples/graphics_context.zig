@@ -58,11 +58,7 @@ pub const GraphicsContext = struct {
 
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);
-
-        var i: usize = 0;
-        while (i < glfw_exts_count) : (i += 1) {
-            try extension_names.append(glfw_exts[i]);
-        }
+        try extension_names.appendSlice(@ptrCast(glfw_exts[0..glfw_exts_count]));
 
         const instance = try self.vkb.createInstance(&.{
             .p_application_info = &.{
