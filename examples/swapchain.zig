@@ -80,7 +80,11 @@ pub const Swapchain = struct {
         errdefer gc.dev.destroySemaphore(next_image_acquired, null);
 
         const result = try gc.dev.acquireNextImageKHR(handle, std.math.maxInt(u64), next_image_acquired, .null_handle);
-        if (result.result != .success) {
+        // event with a .suboptimal_khr we can still go on to present
+        // if we error even for .suboptimal_khr the example will crash and segfault
+        // on resize, since even the recreated swapchain can be suboptimal during a
+        // resize.
+        if (result.result == .not_ready or result.result == .timeout) {
             return error.ImageAcquireFailed;
         }
 
