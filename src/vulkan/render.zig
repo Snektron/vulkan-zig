@@ -213,6 +213,10 @@ const foreign_types = std.StaticStringMap([]const u8).initComptime(.{
     // We don't know the true size of these but whatever Stadia is dead anyway.
     .{ "GgpStreamDescriptor", "*opaque{}" },
     .{ "GgpFrameToken", "*opaque{}" },
+    // The Vulkan Video tokens cannot be "opaque {}" and have to be handled
+    // separately.
+    .{ "StdVideoVP9Profile", "u32" },
+    .{ "StdVideoVP9Level", "u32" },
 });
 
 const CommandDispatchType = enum {
