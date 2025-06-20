@@ -137,7 +137,6 @@ pub fn main() !void {
 
         const cmdbuf = cmdbufs[swapchain.image_index];
 
-
         if (state == .suboptimal or extent.width != @as(u32, @intCast(w)) or extent.height != @as(u32, @intCast(h))) {
             extent.width = @intCast(w);
             extent.height = @intCast(h);
