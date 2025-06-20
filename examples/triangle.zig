@@ -123,6 +123,7 @@ pub fn main() !void {
     );
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
+    var state: Swapchain.PresentState = .optimal;
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
         var w: c_int = undefined;
         var h: c_int = undefined;
@@ -136,10 +137,6 @@ pub fn main() !void {
 
         const cmdbuf = cmdbufs[swapchain.image_index];
 
-        const state = swapchain.present(cmdbuf) catch |err| switch (err) {
-            error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-            else => |narrow| return narrow,
-        };
 
         if (state == .suboptimal or extent.width != @as(u32, @intCast(w)) or extent.height != @as(u32, @intCast(h))) {
             extent.width = @intCast(w);
@@ -161,6 +158,10 @@ pub fn main() !void {
                 framebuffers,
             );
         }
+        state = swapchain.present(cmdbuf) catch |err| switch (err) {
+            error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+            else => |narrow| return narrow,
+        };
 
         c.glfwPollEvents();
     }
