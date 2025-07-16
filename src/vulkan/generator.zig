@@ -186,7 +186,7 @@ pub const Generator = struct {
         self.registry.decls.len = i;
     }
 
-    fn render(self: *Generator, writer: anytype) !void {
+    fn render(self: *Generator, writer: *std.Io.Writer) !void {
         try renderRegistry(writer, self.arena.allocator(), &self.registry, &self.id_renderer, self.have_video);
     }
 };
@@ -204,7 +204,7 @@ pub fn generate(
     api: Api,
     spec_xml: []const u8,
     maybe_video_spec_xml: ?[]const u8,
-    writer: anytype,
+    writer: *std.Io.Writer,
 ) !void {
     const spec = xml.parse(allocator, spec_xml) catch |err| switch (err) {
         error.InvalidDocument,

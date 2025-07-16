@@ -8,17 +8,18 @@ fn invalidUsage(prog_name: []const u8, comptime fmt: []const u8, args: anytype) 
 }
 
 fn reportParseErrors(tree: std.zig.Ast) !void {
-    const stderr = std.io.getStdErr().writer();
-
+    var buf: [1024]u8 = undefined;
+    var stderr = std.fs.File.stderr().writer(&buf);
+    const w = &stderr.interface;
     for (tree.errors) |err| {
         const loc = tree.tokenLocation(0, err.token);
-        try stderr.print("(vulkan-zig error):{}:{}: error: ", .{ loc.line + 1, loc.column + 1 });
-        try tree.renderError(err, stderr);
-        try stderr.print("\n{s}\n", .{tree.source[loc.line_start..loc.line_end]});
+        try w.print("(vulkan-zig error):{}:{}: error: ", .{ loc.line + 1, loc.column + 1 });
+        try tree.renderError(err, w);
+        try w.print("\n{s}\n", .{tree.source[loc.line_start..loc.line_end]});
         for (0..loc.column) |_| {
-            try stderr.writeAll(" ");
+            try w.writeAll(" ");
         }
-        try stderr.writeAll("^\n");
+        try w.writeAll("^\n");
     }
 }
 
@@ -41,7 +42,9 @@ pub fn main() !void {
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             @setEvalBranchQuota(2000);
-            std.io.getStdOut().writer().print(
+            var buf: [1024]u8 = undefined;
+            var w = std.fs.File.stdout().writer(&buf);
+            w.interface.print(
                 \\Utility to generate a Zig binding from the Vulkan XML API registry.
                 \\
                 \\The most recent Vulkan XML API registry can be obtained from
@@ -109,24 +112,12 @@ pub fn main() !void {
         null;
 
     var out_buffer = std.ArrayList(u8).init(allocator);
-    generator.generate(allocator, api, xml_src, maybe_video_xml_src, out_buffer.writer()) catch |err| switch (err) {
-        error.InvalidXml => {
-            std.log.err("invalid vulkan registry - invalid xml", .{});
-            std.log.err("please check that the correct vk.xml file is passed", .{});
-            std.process.exit(1);
-        },
-        error.InvalidRegistry => {
-            std.log.err("invalid vulkan registry - registry is valid xml but contents are invalid", .{});
-            std.log.err("please check that the correct vk.xml file is passed", .{});
-            std.process.exit(1);
-        },
-        error.UnhandledBitfieldStruct => {
-            std.log.err("unhandled struct with bit fields detected in vk.xml", .{});
-            std.log.err("this is a bug in vulkan-zig", .{});
-            std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
-            std.process.exit(1);
-        },
-        error.OutOfMemory => @panic("oom"),
+    var w = out_buffer.writer().adaptToNewApi();
+    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &w.new_interface) catch {
+        std.process.fatal(
+            "generating failed. please check that the correct vk.xml file is passed",
+            .{},
+        );
     };
 
     out_buffer.append(0) catch @panic("oom");
