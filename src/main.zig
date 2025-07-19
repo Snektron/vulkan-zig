@@ -63,8 +63,7 @@ pub fn main() !void {
             ,
                 .{prog_name},
             ) catch |err| {
-                std.log.err("failed to write to stdout: {s}", .{@errorName(err)});
-                std.process.exit(1);
+                std.process.fatal("failed to write to stdout: {s}", .{@errorName(err)});
             };
             return;
         } else if (std.mem.eql(u8, arg, "-a") or std.mem.eql(u8, arg, "--api")) {
@@ -99,25 +98,36 @@ pub fn main() !void {
 
     const cwd = std.fs.cwd();
     const xml_src = cwd.readFileAlloc(allocator, xml_path, std.math.maxInt(usize)) catch |err| {
-        std.log.err("failed to open input file '{s}' ({s})", .{ xml_path, @errorName(err) });
-        std.process.exit(1);
+        std.process.fatal("failed to open input file '{s}' ({s})", .{ xml_path, @errorName(err) });
     };
 
     const maybe_video_xml_src = if (maybe_video_xml_path) |video_xml_path|
         cwd.readFileAlloc(allocator, video_xml_path, std.math.maxInt(usize)) catch |err| {
-            std.log.err("failed to open input file '{s}' ({s})", .{ video_xml_path, @errorName(err) });
-            std.process.exit(1);
+            std.process.fatal("failed to open input file '{s}' ({s})", .{ video_xml_path, @errorName(err) });
         }
     else
         null;
 
     var out_buffer = std.ArrayList(u8).init(allocator);
     var w = out_buffer.writer().adaptToNewApi();
-    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &w.new_interface) catch {
-        std.process.fatal(
-            "generating failed. please check that the correct vk.xml file is passed",
-            .{},
-        );
+    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &w.new_interface) catch |err| switch (err) {
+        error.InvalidXml => {
+            std.log.err("invalid vulkan registry - invalid xml", .{});
+            std.log.err("please check that the correct vk.xml file is passed", .{});
+            std.process.exit(1);
+        },
+        error.InvalidRegistry => {
+            std.log.err("invalid vulkan registry - registry is valid xml but contents are invalid", .{});
+            std.log.err("please check that the correct vk.xml file is passed", .{});
+            std.process.exit(1);
+        },
+        error.UnhandledBitfieldStruct => {
+            std.log.err("unhandled struct with bit fields detected in vk.xml", .{});
+            std.log.err("this is a bug in vulkan-zig", .{});
+            std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
+            std.process.exit(1);
+        },
+        error.OutOfMemory, error.WriteFailed => @panic("oom"),
     };
 
     out_buffer.append(0) catch @panic("oom");
@@ -134,22 +144,20 @@ pub fn main() !void {
         std.log.err("or run with --debug to write out unformatted source", .{});
 
         reportParseErrors(tree) catch |err| {
-            std.log.err("failed to dump ast errors: {s}", .{@errorName(err)});
-            std.process.exit(1);
+            std.process.fatal("failed to dump ast errors: {s}", .{@errorName(err)});
         };
 
         if (debug) {
             break :blk src;
         }
         std.process.exit(1);
-    } else tree.render(allocator) catch |err| switch (err) {
+    } else tree.renderAlloc(allocator) catch |err| switch (err) {
         error.OutOfMemory => @panic("oom"),
     };
 
     if (std.fs.path.dirname(out_path)) |dir| {
         cwd.makePath(dir) catch |err| {
-            std.log.err("failed to create output directory '{s}' ({s})", .{ dir, @errorName(err) });
-            std.process.exit(1);
+            std.process.fatal("failed to create output directory '{s}' ({s})", .{ dir, @errorName(err) });
         };
     }
 
@@ -157,8 +165,7 @@ pub fn main() !void {
         .sub_path = out_path,
         .data = formatted,
     }) catch |err| {
-        std.log.err("failed to write to output file '{s}' ({s})", .{ out_path, @errorName(err) });
-        std.process.exit(1);
+        std.process.fatal("failed to write to output file '{s}' ({s})", .{ out_path, @errorName(err) });
     };
 }
 
