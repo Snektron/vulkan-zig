@@ -365,10 +365,18 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
             else => break,
         };
 
-        if (it.next()) |_| {
+        if (it.next()) |_| ignore: {
             // There are more elements in the `len` attribute than there are pointers
             // Something probably went wrong
-            std.log.err("len: {s}", .{lens});
+            switch (current_type_info.*) {
+                .name => |name| if (std.mem.eql(u8, name, "StdVideoH265SubLayerHrdParameters")) {
+                    // Known issue: https://github.com/KhronosGroup/Vulkan-Docs/issues/2557
+                    break :ignore;
+                },
+                else => {},
+            }
+
+            std.log.err("excessive pointer lengths: {s}", .{lens});
             return error.InvalidRegistry;
         }
     }

@@ -110,24 +110,30 @@ pub fn main() !void {
 
     var out_buffer = std.ArrayList(u8).init(allocator);
     var w = out_buffer.writer().adaptToNewApi();
-    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &w.new_interface) catch |err| switch (err) {
-        error.InvalidXml => {
-            std.log.err("invalid vulkan registry - invalid xml", .{});
-            std.log.err("please check that the correct vk.xml file is passed", .{});
-            std.process.exit(1);
-        },
-        error.InvalidRegistry => {
-            std.log.err("invalid vulkan registry - registry is valid xml but contents are invalid", .{});
-            std.log.err("please check that the correct vk.xml file is passed", .{});
-            std.process.exit(1);
-        },
-        error.UnhandledBitfieldStruct => {
-            std.log.err("unhandled struct with bit fields detected in vk.xml", .{});
-            std.log.err("this is a bug in vulkan-zig", .{});
-            std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
-            std.process.exit(1);
-        },
-        error.OutOfMemory, error.WriteFailed => @panic("oom"),
+    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &w.new_interface) catch |err| {
+        if (debug) {
+            return err;
+        }
+
+        switch (err) {
+            error.InvalidXml => {
+                std.log.err("invalid vulkan registry - invalid xml", .{});
+                std.log.err("please check that the correct vk.xml file is passed", .{});
+                std.process.exit(1);
+            },
+            error.InvalidRegistry => {
+                std.log.err("invalid vulkan registry - registry is valid xml but contents are invalid", .{});
+                std.log.err("please check that the correct vk.xml file is passed", .{});
+                std.process.exit(1);
+            },
+            error.UnhandledBitfieldStruct => {
+                std.log.err("unhandled struct with bit fields detected in vk.xml", .{});
+                std.log.err("this is a bug in vulkan-zig", .{});
+                std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
+                std.process.exit(1);
+            },
+            error.OutOfMemory, error.WriteFailed => @panic("oom"),
+        }
     };
 
     out_buffer.append(0) catch @panic("oom");
