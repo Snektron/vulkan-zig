@@ -12,10 +12,14 @@ pub fn build(b: *std.Build) void {
 
     const triangle_exe = b.addExecutable(.{
         .name = "triangle",
-        .root_source_file = b.path("triangle.zig"),
-        .target = target,
-        .link_libc = true,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("triangle.zig"),
+            .target = target,
+            .link_libc = true,
+            .optimize = optimize,
+        }),
+        // TODO: Remove this once x86_64 is stable
+        .use_llvm = true,
     });
     b.installArtifact(triangle_exe);
     triangle_exe.linkSystemLibrary("glfw");
@@ -33,17 +37,18 @@ pub fn build(b: *std.Build) void {
 
     if (use_zig_shaders) {
         const spirv_target = b.resolveTargetQuery(.{
-            .cpu_arch = .spirv64,
+            .cpu_arch = .spirv32,
             .os_tag = .vulkan,
             .cpu_model = .{ .explicit = &std.Target.spirv.cpu.vulkan_v1_2 },
-            .cpu_features_add = std.Target.spirv.featureSet(&.{.int64}),
             .ofmt = .spirv,
         });
 
         const vert_spv = b.addObject(.{
             .name = "vertex_shader",
-            .root_source_file = b.path("shaders/vertex.zig"),
-            .target = spirv_target,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("shaders/vertex.zig"),
+                .target = spirv_target,
+            }),
             .use_llvm = false,
         });
         triangle_exe.root_module.addAnonymousImport(
@@ -53,8 +58,10 @@ pub fn build(b: *std.Build) void {
 
         const frag_spv = b.addObject(.{
             .name = "fragment_shader",
-            .root_source_file = b.path("shaders/fragment.zig"),
-            .target = spirv_target,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("shaders/fragment.zig"),
+                .target = spirv_target,
+            }),
             .use_llvm = false,
         });
         triangle_exe.root_module.addAnonymousImport(

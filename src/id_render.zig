@@ -52,13 +52,8 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
     return false;
 }
 
-pub fn writeIdentifier(writer: anytype, id: []const u8) !void {
-    // https://github.com/ziglang/zig/issues/2897
-    if (isZigPrimitiveType(id)) {
-        try writer.print("@\"{}\"", .{std.zig.fmtEscapes(id)});
-    } else {
-        try writer.print("{}", .{std.zig.fmtId(id)});
-    }
+pub fn writeIdentifier(w: *std.io.Writer, id: []const u8) !void {
+    try w.print("{f}", .{std.zig.fmtId(id)});
 }
 
 pub const CaseStyle = enum {
@@ -196,13 +191,13 @@ pub const IdRenderer = struct {
         }
     }
 
-    pub fn renderFmt(self: *IdRenderer, out: anytype, comptime fmt: []const u8, args: anytype) !void {
+    pub fn renderFmt(self: *IdRenderer, out: *std.Io.Writer, comptime fmt: []const u8, args: anytype) !void {
         self.text_cache.items.len = 0;
         try std.fmt.format(self.text_cache.writer(), fmt, args);
         try writeIdentifier(out, self.text_cache.items);
     }
 
-    pub fn renderWithCase(self: *IdRenderer, out: anytype, case_style: CaseStyle, id: []const u8) !void {
+    pub fn renderWithCase(self: *IdRenderer, out: *std.Io.Writer, case_style: CaseStyle, id: []const u8) !void {
         const tag = self.getAuthorTag(id);
         // The trailing underscore doesn't need to be removed here as its removed by the SegmentIterator.
         const adjusted_id = if (tag) |name| id[0 .. id.len - name.len] else id;

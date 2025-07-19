@@ -7,15 +7,19 @@ pub fn build(b: *std.Build) void {
     const maybe_video = b.option(std.Build.LazyPath, "video", "Set the path to the Vulkan Video registry (video.xml)");
     const test_step = b.step("test", "Run all the tests");
 
+    const root_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Using the package manager, this artifact can be obtained by the user
     // through `b.dependency(<name in build.zig.zon>, .{}).artifact("vulkan-zig-generator")`.
     // with that, the user need only `.addArg("path/to/vk.xml")`, and then obtain
     // a file source to the generated code with `.addOutputArg("vk.zig")`
     const generator_exe = b.addExecutable(.{
         .name = "vulkan-zig-generator",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = root_module,
     });
     b.installArtifact(generator_exe);
 
@@ -47,16 +51,16 @@ pub fn build(b: *std.Build) void {
         // It does not need to run anyway.
         const ref_all_decls_test = b.addObject(.{
             .name = "ref-all-decls-test",
-            .root_source_file = b.path("test/ref_all_decls.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("test/ref_all_decls.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         ref_all_decls_test.root_module.addImport("vulkan", vk_zig_module);
         test_step.dependOn(&ref_all_decls_test.step);
     }
 
-    const test_target = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-    });
+    const test_target = b.addTest(.{ .root_module = root_module });
     test_step.dependOn(&b.addRunArtifact(test_target).step);
 }
