@@ -63,6 +63,23 @@ pub fn main() !void {
     ) orelse return error.WindowInitFailed;
     defer c.glfwDestroyWindow(window);
 
+    // According to the GLFW docs:
+    //
+    // > Window systems put limits on window sizes. Very large or very small window dimensions
+    // > may be overridden by the window system on creation. Check the actual size after creation.
+    // -- https://www.glfw.org/docs/3.3/group__window.html#ga3555a418df92ad53f917597fe2f64aeb
+    //
+    // This happens in practice, for example, when using Wayland with a scaling factor that is not a
+    // divisor of the initial window size (see https://github.com/Snektron/vulkan-zig/pull/192).
+    // To fix it, just fetch the actual size here, after the windowing system has had the time to
+    // update the window.
+    extent.width, extent.height = blk: {
+        var w: c_int = undefined;
+        var h: c_int = undefined;
+        c.glfwGetFramebufferSize(window, &w, &h);
+        break :blk .{ @intCast(w), @intCast(h) };
+    };
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -123,6 +140,7 @@ pub fn main() !void {
     );
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
+    var state: Swapchain.PresentState = .optimal;
     while (c.glfwWindowShouldClose(window) == c.GLFW_FALSE) {
         var w: c_int = undefined;
         var h: c_int = undefined;
@@ -135,11 +153,6 @@ pub fn main() !void {
         }
 
         const cmdbuf = cmdbufs[swapchain.image_index];
-
-        const state = swapchain.present(cmdbuf) catch |err| switch (err) {
-            error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-            else => |narrow| return narrow,
-        };
 
         if (state == .suboptimal or extent.width != @as(u32, @intCast(w)) or extent.height != @as(u32, @intCast(h))) {
             extent.width = @intCast(w);
@@ -161,6 +174,10 @@ pub fn main() !void {
                 framebuffers,
             );
         }
+        state = swapchain.present(cmdbuf) catch |err| switch (err) {
+            error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+            else => |narrow| return narrow,
+        };
 
         c.glfwPollEvents();
     }
