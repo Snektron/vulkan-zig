@@ -18,7 +18,7 @@ const preamble =
     \\
     \\pub const vulkan_call_conv: std.builtin.CallingConvention = if (builtin.os.tag == .windows and builtin.cpu.arch == .x86)
     \\        .winapi
-    \\    else if (builtin.abi == .android and (builtin.cpu.arch.isARM() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
+    \\    else if (builtin.abi == .android and (builtin.cpu.arch.isArm() or builtin.cpu.arch.isThumb()) and std.Target.arm.featureSetHas(builtin.cpu.features, .has_v7) and builtin.cpu.arch.ptrBitWidth() == 32)
     \\        // On Android 32-bit ARM targets, Vulkan functions use the "hardfloat"
     \\        // calling convention, i.e. float parameters are passed in registers. This
     \\        // is true even if the rest of the application passes floats on the stack,
