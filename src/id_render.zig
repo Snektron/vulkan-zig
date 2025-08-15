@@ -121,12 +121,12 @@ pub const SegmentIterator = struct {
 
 pub const IdRenderer = struct {
     tags: []const []const u8,
-    text_cache: std.ArrayList(u8),
+    text_cache: std.io.Writer.Allocating,
 
     pub fn init(allocator: Allocator, tags: []const []const u8) IdRenderer {
         return .{
             .tags = tags,
-            .text_cache = std.ArrayList(u8).init(allocator),
+            .text_cache = .init(allocator),
         };
     }
 
@@ -142,19 +142,19 @@ pub const IdRenderer = struct {
             if (first) {
                 first = false;
             } else {
-                try self.text_cache.append('_');
+                try self.text_cache.writer.writeByte('_');
             }
 
             for (segment) |c| {
-                try self.text_cache.append(if (screaming) std.ascii.toUpper(c) else std.ascii.toLower(c));
+                try self.text_cache.writer.writeByte(if (screaming) std.ascii.toUpper(c) else std.ascii.toLower(c));
             }
         }
 
         if (tag) |name| {
-            try self.text_cache.append('_');
+            try self.text_cache.writer.writeByte('_');
 
             for (name) |c| {
-                try self.text_cache.append(if (screaming) std.ascii.toUpper(c) else std.ascii.toLower(c));
+                try self.text_cache.writer.writeByte(if (screaming) std.ascii.toUpper(c) else std.ascii.toLower(c));
             }
         }
     }
@@ -166,7 +166,7 @@ pub const IdRenderer = struct {
         while (it.next()) |segment| {
             var i: usize = 0;
             while (i < segment.len and std.ascii.isDigit(segment[i])) {
-                try self.text_cache.append(segment[i]);
+                try self.text_cache.writer.writeByte(segment[i]);
                 i += 1;
             }
 
@@ -175,26 +175,26 @@ pub const IdRenderer = struct {
             }
 
             if (i == 0 and lower_first) {
-                try self.text_cache.append(std.ascii.toLower(segment[i]));
+                try self.text_cache.writer.writeByte(std.ascii.toLower(segment[i]));
             } else {
-                try self.text_cache.append(std.ascii.toUpper(segment[i]));
+                try self.text_cache.writer.writeByte(std.ascii.toUpper(segment[i]));
             }
             lower_first = false;
 
             for (segment[i + 1 ..]) |c| {
-                try self.text_cache.append(std.ascii.toLower(c));
+                try self.text_cache.writer.writeByte(std.ascii.toLower(c));
             }
         }
 
         if (tag) |name| {
-            try self.text_cache.appendSlice(name);
+            try self.text_cache.writer.writeAll(name);
         }
     }
 
     pub fn renderFmt(self: *IdRenderer, out: *std.Io.Writer, comptime fmt: []const u8, args: anytype) !void {
-        self.text_cache.items.len = 0;
-        try std.fmt.format(self.text_cache.writer(), fmt, args);
-        try writeIdentifier(out, self.text_cache.items);
+        _ = self.text_cache.writer.consumeAll();
+        try self.text_cache.writer.print(fmt, args);
+        try writeIdentifier(out, self.text_cache.writer.buffered());
     }
 
     pub fn renderWithCase(self: *IdRenderer, out: *std.Io.Writer, case_style: CaseStyle, id: []const u8) !void {
@@ -202,7 +202,7 @@ pub const IdRenderer = struct {
         // The trailing underscore doesn't need to be removed here as its removed by the SegmentIterator.
         const adjusted_id = if (tag) |name| id[0 .. id.len - name.len] else id;
 
-        self.text_cache.items.len = 0;
+        _ = self.text_cache.writer.consumeAll();
 
         switch (case_style) {
             .snake => try self.renderSnake(false, adjusted_id, tag),
@@ -211,7 +211,7 @@ pub const IdRenderer = struct {
             .camel => try self.renderCamel(false, adjusted_id, tag),
         }
 
-        try writeIdentifier(out, self.text_cache.items);
+        try writeIdentifier(out, self.text_cache.writer.buffered());
     }
 
     pub fn getAuthorTag(self: IdRenderer, id: []const u8) ?[]const u8 {

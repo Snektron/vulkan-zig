@@ -49,16 +49,16 @@ pub const GraphicsContext = struct {
         self.allocator = allocator;
         self.vkb = BaseWrapper.load(c.glfwGetInstanceProcAddress);
 
-        var extension_names = std.ArrayList([*:0]const u8).init(allocator);
-        defer extension_names.deinit();
+        var extension_names: std.ArrayList([*:0]const u8) = .empty;
+        defer extension_names.deinit(allocator);
         // these extensions are to support vulkan in mac os
         // see https://github.com/glfw/glfw/issues/2335
-        try extension_names.append("VK_KHR_portability_enumeration");
-        try extension_names.append("VK_KHR_get_physical_device_properties2");
+        try extension_names.append(allocator, "VK_KHR_portability_enumeration");
+        try extension_names.append(allocator, "VK_KHR_get_physical_device_properties2");
 
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);
-        try extension_names.appendSlice(@ptrCast(glfw_exts[0..glfw_exts_count]));
+        try extension_names.appendSlice(allocator, @ptrCast(glfw_exts[0..glfw_exts_count]));
 
         const instance = try self.vkb.createInstance(&.{
             .p_application_info = &.{

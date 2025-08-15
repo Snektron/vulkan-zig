@@ -457,8 +457,8 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
     // There is no good way to estimate the number of parameters beforehand.
     // Fortunately, there are usually a relatively low number of parameters to a function pointer,
     // so an ArrayList backed by an arena allocator is good enough.
-    var params = std.ArrayList(registry.Command.Param).init(allocator);
-    try params.append(.{
+    var params: std.ArrayList(registry.Command.Param) = .empty;
+    try params.append(allocator, .{
         .name = first_param.name.?,
         .param_type = first_param.decl_type,
         .is_buffer_len = false,
@@ -473,7 +473,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
         }
 
         const decl = try parseDeclaration(allocator, xctok, ptrs_optional);
-        try params.append(.{
+        try params.append(allocator, .{
             .name = decl.name orelse return error.MissingTypeIdentifier,
             .param_type = decl.decl_type,
             .is_buffer_len = false,
@@ -482,7 +482,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
     }
 
     _ = try xctok.nextNoEof();
-    command_ptr.decl_type.command_ptr.params = try params.toOwnedSlice();
+    command_ptr.decl_type.command_ptr.params = try params.toOwnedSlice(allocator);
     return command_ptr;
 }
 
