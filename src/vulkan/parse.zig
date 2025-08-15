@@ -28,11 +28,11 @@ pub fn parseXml(
 
     const allocator = arena.allocator();
 
-    var decls: std.ArrayListUnmanaged(registry.Declaration) = .{};
-    var api_constants: std.ArrayListUnmanaged(registry.ApiConstant) = .{};
-    var tags: std.ArrayListUnmanaged(registry.Tag) = .{};
-    var features: std.ArrayListUnmanaged(registry.Feature) = .{};
-    var extensions: std.ArrayListUnmanaged(registry.Extension) = .{};
+    var decls: std.ArrayList(registry.Declaration) = .empty;
+    var api_constants: std.ArrayList(registry.ApiConstant) = .empty;
+    var tags: std.ArrayList(registry.Tag) = .empty;
+    var features: std.ArrayList(registry.Feature) = .empty;
+    var extensions: std.ArrayList(registry.Extension) = .empty;
 
     try parseDeclarations(allocator, root, api, &decls);
     try parseApiConstants(allocator, root, api, &api_constants);
@@ -66,7 +66,7 @@ fn parseDeclarations(
     allocator: Allocator,
     root: *xml.Element,
     api: registry.Api,
-    decls: *std.ArrayListUnmanaged(registry.Declaration),
+    decls: *std.ArrayList(registry.Declaration),
 ) !void {
     const types_elem = root.findChildByTag("types") orelse return error.InvalidRegistry;
     try decls.ensureUnusedCapacity(allocator, types_elem.children.len);
@@ -84,7 +84,7 @@ fn parseTypes(
     allocator: Allocator,
     types_elem: *xml.Element,
     api: registry.Api,
-    decls: *std.ArrayListUnmanaged(registry.Declaration),
+    decls: *std.ArrayList(registry.Declaration),
 ) !void {
     var it = types_elem.findChildrenByTag("type");
     while (it.next()) |ty| {
@@ -429,7 +429,7 @@ fn parseEnums(
     allocator: Allocator,
     root: *xml.Element,
     api: registry.Api,
-    decls: *std.ArrayListUnmanaged(registry.Declaration),
+    decls: *std.ArrayList(registry.Declaration),
 ) !void {
     var it = root.findChildrenByTag("enums");
     while (it.next()) |enums| {
@@ -519,7 +519,7 @@ fn parseCommands(
     allocator: Allocator,
     commands_elem: *xml.Element,
     api: registry.Api,
-    decls: *std.ArrayListUnmanaged(registry.Declaration),
+    decls: *std.ArrayList(registry.Declaration),
 ) !void {
     var it = commands_elem.findChildrenByTag("command");
     while (it.next()) |elem| {
@@ -630,7 +630,7 @@ fn parseApiConstants(
     allocator: Allocator,
     root: *xml.Element,
     api: registry.Api,
-    api_constants: *std.ArrayListUnmanaged(registry.ApiConstant),
+    api_constants: *std.ArrayList(registry.ApiConstant),
 ) !void {
     const maybe_enums = blk: {
         var it = root.findChildrenByTag("enums");
@@ -672,7 +672,7 @@ fn parseDefines(
     allocator: Allocator,
     types: *xml.Element,
     api: registry.Api,
-    api_constants: *std.ArrayListUnmanaged(registry.ApiConstant),
+    api_constants: *std.ArrayList(registry.ApiConstant),
 ) !void {
     var it = types.findChildrenByTag("type");
     while (it.next()) |ty| {
@@ -703,7 +703,7 @@ fn parseDefines(
 fn parseTags(
     allocator: Allocator,
     root: *xml.Element,
-    tags: *std.ArrayListUnmanaged(registry.Tag),
+    tags: *std.ArrayList(registry.Tag),
 ) !void {
     var tags_elem = root.findChildByTag("tags") orelse return;
     try tags.ensureUnusedCapacity(allocator, tags_elem.children.len);
@@ -717,7 +717,7 @@ fn parseTags(
     }
 }
 
-fn parseFeatures(allocator: Allocator, root: *xml.Element, api: registry.Api, features: *std.ArrayListUnmanaged(registry.Feature)) !void {
+fn parseFeatures(allocator: Allocator, root: *xml.Element, api: registry.Api, features: *std.ArrayList(registry.Feature)) !void {
     var it = root.findChildrenByTag("feature");
     while (it.next()) |feature| {
         if (!requiredByApi(feature, api))
@@ -881,7 +881,7 @@ fn parseExtensions(
     allocator: Allocator,
     root: *xml.Element,
     api: registry.Api,
-    extensions: *std.ArrayListUnmanaged(registry.Extension),
+    extensions: *std.ArrayList(registry.Extension),
 ) !void {
     const extensions_elem = root.findChildByTag("extensions") orelse return error.InvalidRegistry;
     try extensions.ensureUnusedCapacity(allocator, extensions_elem.children.len);

@@ -1,4 +1,5 @@
 const std = @import("std");
+
 const generator = @import("vulkan/generator.zig");
 
 fn invalidUsage(prog_name: []const u8, comptime fmt: []const u8, args: anytype) noreturn {
@@ -23,13 +24,17 @@ fn reportParseErrors(tree: std.zig.Ast) !void {
     }
 }
 
+fn oomPanic() noreturn {
+    @panic("Out of memory");
+}
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
     var args = std.process.argsWithAllocator(allocator) catch |err| switch (err) {
-        error.OutOfMemory => @panic("OOM"),
+        error.OutOfMemory => oomPanic(),
     };
     const prog_name = args.next() orelse "vulkan-zig-generator";
 
@@ -108,9 +113,8 @@ pub fn main() !void {
     else
         null;
 
-    var out_buffer = std.ArrayList(u8).init(allocator);
-    var w = out_buffer.writer().adaptToNewApi();
-    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &w.new_interface) catch |err| {
+    var aw: std.io.Writer.Allocating = .init(allocator);
+    generator.generate(allocator, api, xml_src, maybe_video_xml_src, &aw.writer) catch |err| {
         if (debug) {
             return err;
         }
@@ -132,15 +136,16 @@ pub fn main() !void {
                 std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
                 std.process.exit(1);
             },
-            error.OutOfMemory, error.WriteFailed => @panic("oom"),
+            error.OutOfMemory, error.WriteFailed => oomPanic(),
         }
     };
 
-    out_buffer.append(0) catch @panic("oom");
+    aw.writer.writeByte(0) catch oomPanic();
 
-    const src = out_buffer.items[0 .. out_buffer.items.len - 1 :0];
+    const buffered = aw.writer.buffered();
+    const src = buffered[0 .. buffered.len - 1 :0];
     const tree = std.zig.Ast.parse(allocator, src, .zig) catch |err| switch (err) {
-        error.OutOfMemory => @panic("oom"),
+        error.OutOfMemory => oomPanic(),
     };
 
     const formatted = if (tree.errors.len > 0) blk: {
@@ -158,7 +163,7 @@ pub fn main() !void {
         }
         std.process.exit(1);
     } else tree.renderAlloc(allocator) catch |err| switch (err) {
-        error.OutOfMemory => @panic("oom"),
+        error.OutOfMemory => oomPanic(),
     };
 
     if (std.fs.path.dirname(out_path)) |dir| {

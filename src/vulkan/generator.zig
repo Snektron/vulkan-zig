@@ -32,7 +32,7 @@ const EnumFieldMerger = struct {
     fn putEnumExtension(self: *EnumFieldMerger, enum_name: []const u8, field: reg.Enum.Field) !void {
         const res = try self.enum_extensions.getOrPut(self.arena, enum_name);
         if (!res.found_existing) {
-            res.value_ptr.* = std.ArrayListUnmanaged(reg.Enum.Field){};
+            res.value_ptr.* = .empty;
         }
 
         try res.value_ptr.append(self.arena, field);

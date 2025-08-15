@@ -439,15 +439,15 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
         },
     };
 
-    var attributes = std.ArrayList(Attribute).init(alloc);
-    defer attributes.deinit();
+    var attributes: std.ArrayList(Attribute) = .empty;
+    defer attributes.deinit(alloc);
 
-    var children = std.ArrayList(Content).init(alloc);
-    defer children.deinit();
+    var children: std.ArrayList(Content) = .empty;
+    defer children.deinit(alloc);
 
     while (parser.eatWs()) {
         const attr = (try parseAttr(parser, alloc)) orelse break;
-        try attributes.append(attr);
+        try attributes.append(alloc, attr);
     }
 
     switch (kind) {
@@ -464,7 +464,7 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
                     }
 
                     const content = try parseContent(parser, alloc);
-                    try children.append(content);
+                    try children.append(alloc, content);
                 }
 
                 const closing_tag = try parseNameNoDupe(parser);
@@ -481,8 +481,8 @@ fn parseElement(parser: *Parser, alloc: Allocator, comptime kind: ElementKind) !
     const element = try alloc.create(Element);
     element.* = .{
         .tag = try alloc.dupe(u8, tag),
-        .attributes = try attributes.toOwnedSlice(),
-        .children = try children.toOwnedSlice(),
+        .attributes = try attributes.toOwnedSlice(alloc),
+        .children = try children.toOwnedSlice(alloc),
     };
     return element;
 }

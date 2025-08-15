@@ -1,11 +1,12 @@
 const std = @import("std");
-const reg = @import("registry.zig");
-const id_render = @import("../id_render.zig");
-const cparse = @import("c_parse.zig");
 const mem = std.mem;
 const Allocator = mem.Allocator;
+
+const id_render = @import("../id_render.zig");
 const CaseStyle = id_render.CaseStyle;
 const IdRenderer = id_render.IdRenderer;
+const cparse = @import("c_parse.zig");
+const reg = @import("registry.zig");
 
 const preamble =
     \\// This file is generated from the Khronos Vulkan XML API registry by vulkan-zig.
@@ -1810,12 +1811,13 @@ const Renderer = struct {
     }
 
     fn extractReturns(self: *Self, command: reg.Command) ![]const ReturnValue {
-        var returns = std.ArrayList(ReturnValue).init(self.allocator);
+        const allocator = self.allocator;
+        var returns: std.ArrayList(ReturnValue) = .empty;
 
         if (command.return_type.* == .name) {
             const return_name = command.return_type.name;
             if (!mem.eql(u8, return_name, "void") and !mem.eql(u8, return_name, "VkResult")) {
-                try returns.append(.{
+                try returns.append(allocator, .{
                     .name = "return_value",
                     .return_value_type = command.return_type.*,
                     .origin = .inner_return_value,
@@ -1828,7 +1830,7 @@ const Renderer = struct {
                 return error.InvalidRegistry;
             }
 
-            try returns.append(.{
+            try returns.append(allocator, .{
                 .name = "result",
                 .return_value_type = command.return_type.*,
                 .origin = .inner_return_value,
@@ -1839,7 +1841,7 @@ const Renderer = struct {
 
         for (command.params) |param| {
             if ((try self.classifyParam(param)) == .out_pointer) {
-                try returns.append(.{
+                try returns.append(allocator, .{
                     .name = derefName(param.name),
                     .return_value_type = param.param_type.pointer.child.*,
                     .origin = .parameter,
@@ -1847,7 +1849,7 @@ const Renderer = struct {
             }
         }
 
-        return try returns.toOwnedSlice();
+        return try returns.toOwnedSlice(allocator);
     }
 
     fn renderReturnStructName(self: *Self, command_name: []const u8) !void {
