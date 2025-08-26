@@ -259,9 +259,25 @@ pub fn parseTypedef(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: 
     if (try xctok.peek()) |_| {
         return error.InvalidSyntax;
     }
+    const name = decl.name orelse return error.MissingTypeIdentifier;
 
+    if (mem.eql(u8, name, "VkBool32")) {
+        const fields = [_]registry.Enum.Field{
+            .{ .name = "false", .value = .{ .int = 0 } },
+            .{ .name = "true", .value = .{ .int = 1 } },
+        };
+        const enumeration = registry.Enum{
+            .fields = try allocator.dupe(registry.Enum.Field, &fields),
+            .bitwidth = 32,
+            .is_bitmask = false,
+        };
+        return registry.Declaration{
+            .name = name,
+            .decl_type = .{ .enumeration = enumeration },
+        };
+    }
     return registry.Declaration{
-        .name = decl.name orelse return error.MissingTypeIdentifier,
+        .name = name,
         .decl_type = .{ .typedef = decl.decl_type },
     };
 }

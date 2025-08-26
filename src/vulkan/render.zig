@@ -1109,7 +1109,7 @@ const Renderer = struct {
             try self.writer.writeAll(" = .");
             try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
         } else if (field.field_type == .name and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(name, container.extends)) {
-            try self.writer.writeAll(" = FALSE");
+            try self.writer.writeAll(" = .false");
         } else if (field.is_optional) {
             if (field.field_type == .name) {
                 const field_type_name = field.field_type.name;
