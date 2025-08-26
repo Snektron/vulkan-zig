@@ -60,7 +60,7 @@ pub const Swapchain = struct {
             .pre_transform = caps.current_transform,
             .composite_alpha = .{ .opaque_bit_khr = true },
             .present_mode = present_mode,
-            .clipped = vk.TRUE,
+            .clipped = .true,
             .old_swapchain = old_handle,
         }, null) catch {
             return error.SwapchainCreationFailed;
@@ -261,7 +261,7 @@ const SwapImage = struct {
     }
 
     fn waitForFence(self: SwapImage, gc: *const GraphicsContext) !void {
-        _ = try gc.dev.waitForFences(1, @ptrCast(&self.frame_fence), vk.TRUE, std.math.maxInt(u64));
+        _ = try gc.dev.waitForFences(1, @ptrCast(&self.frame_fence), .true, std.math.maxInt(u64));
     }
 };
 
