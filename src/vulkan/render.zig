@@ -848,6 +848,10 @@ const Renderer = struct {
     }
 
     fn renderDecl(self: *Self, decl: reg.Declaration) !void {
+        if (try self.renderSpecial(decl.name)) {
+            return;
+        }
+
         switch (decl.decl_type) {
             .container => |container| try self.renderContainer(decl.name, container),
             .enumeration => |enumeration| try self.renderEnumeration(decl.name, enumeration),
@@ -861,10 +865,27 @@ const Renderer = struct {
         }
     }
 
-    fn renderSpecialContainer(self: *Self, name: []const u8) !bool {
+    fn renderAssign(self: *Self, name: []const u8) !void {
+        try self.writer.writeAll("pub const ");
+        try self.renderName(name);
+        try self.writer.writeAll(" = ");
+    }
+
+    fn renderSpecial(self: *Self, name: []const u8) !bool {
         const maybe_author = self.id_renderer.getAuthorTag(name);
         const basename = self.id_renderer.stripAuthorTag(name);
-        if (std.mem.eql(u8, basename, "VkAccelerationStructureInstance")) {
+        if (std.mem.eql(u8, basename, "VkBool32")) {
+            try self.renderAssign(name);
+            try self.writer.writeAll(
+                \\enum(i32) {
+                \\    false,
+                \\    true,
+                \\    _,
+                \\};
+                \\
+            );
+        } else if (std.mem.eql(u8, basename, "VkAccelerationStructureInstance")) {
+            try self.renderAssign(name);
             try self.writer.print(
                 \\extern struct {{
                 \\    transform: TransformMatrix{s},
@@ -882,8 +903,8 @@ const Renderer = struct {
             ,
                 .{maybe_author orelse ""},
             );
-            return true;
         } else if (std.mem.eql(u8, basename, "VkAccelerationStructureSRTMotionInstance")) {
+            try self.renderAssign(name);
             try self.writer.print(
                 \\extern struct {{
                 \\    transform_t0: SRTData{0s},
@@ -902,8 +923,8 @@ const Renderer = struct {
             ,
                 .{maybe_author orelse ""},
             );
-            return true;
         } else if (std.mem.eql(u8, basename, "VkAccelerationStructureMatrixMotionInstance")) {
+            try self.renderAssign(name);
             try self.writer.print(
                 \\extern struct {{
                 \\    transform_t0: TransformMatrix{0s},
@@ -922,8 +943,8 @@ const Renderer = struct {
             ,
                 .{maybe_author orelse ""},
             );
-            return true;
         } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureBuildTriangleClusterInfo")) {
+            try self.renderAssign(name);
             try self.writer.print(
                 \\extern struct {{
                 \\    cluster_id: u32,
@@ -949,8 +970,8 @@ const Renderer = struct {
             ,
                 .{maybe_author orelse ""},
             );
-            return true;
         } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureBuildTriangleClusterTemplateInfo")) {
+            try self.renderAssign(name);
             try self.writer.print(
                 \\extern struct {{
                 \\    cluster_id: u32,
@@ -977,8 +998,8 @@ const Renderer = struct {
             ,
                 .{maybe_author orelse ""},
             );
-            return true;
         } else if (std.mem.eql(u8, basename, "VkClusterAccelerationStructureInstantiateClusterInfo")) {
+            try self.renderAssign(name);
             try self.writer.print(
                 \\extern struct {{
                 \\    cluster_id_offset: u32,
@@ -992,10 +1013,11 @@ const Renderer = struct {
             ,
                 .{maybe_author orelse ""},
             );
-            return true;
+        } else {
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     fn renderSimpleBitContainer(self: *Self, container: reg.Container) !bool {
@@ -1048,10 +1070,6 @@ const Renderer = struct {
         try self.writer.writeAll(" = ");
 
         if (try self.renderSimpleBitContainer(container)) {
-            return;
-        }
-
-        if (try self.renderSpecialContainer(name)) {
             return;
         }
 
@@ -1109,7 +1127,7 @@ const Renderer = struct {
             try self.writer.writeAll(" = .");
             try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
         } else if (field.field_type == .name and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(name, container.extends)) {
-            try self.writer.writeAll(" = FALSE");
+            try self.writer.writeAll(" = .false");
         } else if (field.is_optional) {
             if (field.field_type == .name) {
                 const field_type_name = field.field_type.name;
@@ -1120,6 +1138,8 @@ const Renderer = struct {
                         try self.writer.writeAll(" = .{}");
                     } else if (decl_type == .typedef and decl_type.typedef == .command_ptr) {
                         try self.writer.writeAll(" = null");
+                    } else if (mem.eql(u8, "VkBool32", field.field_type.name)) {
+                        try self.writer.writeAll(" = .false");
                     } else if ((decl_type == .typedef and builtin_types.has(decl_type.typedef.name)) or
                         (decl_type == .foreign and builtin_types.has(field_type_name)))
                     {
