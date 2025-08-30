@@ -53,8 +53,8 @@ pub const GraphicsContext = struct {
         defer extension_names.deinit(allocator);
         // these extensions are to support vulkan in mac os
         // see https://github.com/glfw/glfw/issues/2335
-        try extension_names.append(allocator, "VK_KHR_portability_enumeration");
-        try extension_names.append(allocator, "VK_KHR_get_physical_device_properties2");
+        try extension_names.append(allocator, vk.extensions.khr_portability_enumeration.name);
+        try extension_names.append(allocator, vk.extensions.khr_get_physical_device_properties_2.name);
 
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);
