@@ -102,18 +102,18 @@ pub fn main() !void {
     };
 
     const cwd = std.fs.cwd();
-    const xml_src = cwd.readFileAlloc(allocator, xml_path, std.math.maxInt(usize)) catch |err| {
+    const xml_src = cwd.readFileAlloc(xml_path, allocator, .unlimited) catch |err| {
         std.process.fatal("failed to open input file '{s}' ({s})", .{ xml_path, @errorName(err) });
     };
 
     const maybe_video_xml_src = if (maybe_video_xml_path) |video_xml_path|
-        cwd.readFileAlloc(allocator, video_xml_path, std.math.maxInt(usize)) catch |err| {
+        cwd.readFileAlloc(video_xml_path, allocator, .unlimited) catch |err| {
             std.process.fatal("failed to open input file '{s}' ({s})", .{ video_xml_path, @errorName(err) });
         }
     else
         null;
 
-    var aw: std.io.Writer.Allocating = .init(allocator);
+    var aw: std.Io.Writer.Allocating = .init(allocator);
     generator.generate(allocator, api, xml_src, maybe_video_xml_src, &aw.writer) catch |err| {
         if (debug) {
             return err;

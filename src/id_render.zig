@@ -52,7 +52,7 @@ pub fn isZigPrimitiveType(name: []const u8) bool {
     return false;
 }
 
-pub fn writeIdentifier(w: *std.io.Writer, id: []const u8) !void {
+pub fn writeIdentifier(w: *std.Io.Writer, id: []const u8) !void {
     try w.print("{f}", .{std.zig.fmtId(id)});
 }
 
@@ -121,7 +121,7 @@ pub const SegmentIterator = struct {
 
 pub const IdRenderer = struct {
     tags: []const []const u8,
-    text_cache: std.io.Writer.Allocating,
+    text_cache: std.Io.Writer.Allocating,
 
     pub fn init(allocator: Allocator, tags: []const []const u8) IdRenderer {
         return .{
