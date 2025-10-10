@@ -2042,7 +2042,7 @@ const Renderer = struct {
 
             return error.InvalidRegistry;
         };
-        
+
         try self.renderAllocWrapperPrototype(name, params, returns_vk_result, data_type, "", .wrapper);
 
         try self.writer.writeAll("{\n");
