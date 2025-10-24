@@ -3,6 +3,8 @@ const vk = @import("vulkan");
 const c = @import("c.zig");
 const Allocator = std.mem.Allocator;
 
+const required_layer_names = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
+
 const required_device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
 /// There are 3 levels of bindings in vulkan-zig:
@@ -50,6 +52,10 @@ pub const GraphicsContext = struct {
         self.allocator = allocator;
         self.vkb = BaseWrapper.load(c.glfwGetInstanceProcAddress);
 
+        if (try checkLayerSupport(&self.vkb, self.allocator) == false) {
+            return error.MissingLayer;
+        }
+
         var extension_names: std.ArrayList([*:0]const u8) = .empty;
         defer extension_names.deinit(allocator);
         try extension_names.append(allocator, vk.extensions.ext_debug_utils.name);
@@ -70,6 +76,8 @@ pub const GraphicsContext = struct {
                 .engine_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
                 .api_version = @bitCast(vk.API_VERSION_1_2),
             },
+            .enabled_layer_count = required_layer_names.len,
+            .pp_enabled_layer_names = @ptrCast(&required_layer_names),
             .enabled_extension_count = @intCast(extension_names.items.len),
             .pp_enabled_extension_names = extension_names.items.ptr,
             // enumerate_portability_bit_khr to support vulkan in mac os
@@ -154,6 +162,21 @@ pub const GraphicsContext = struct {
         }, null);
     }
 };
+
+fn checkLayerSupport(vkb: *const BaseWrapper, alloc: Allocator) !bool {
+    const available_layers = try vkb.enumerateInstanceLayerPropertiesAlloc(alloc);
+    defer alloc.free(available_layers);
+    for (required_layer_names) |required_layer| {
+        for (available_layers) |layer| {
+            if (std.mem.eql(u8, std.mem.span(required_layer), std.mem.sliceTo(&layer.layer_name, 0))) {
+                break;
+            }
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
 
 pub const Queue = struct {
     handle: vk.Queue,
