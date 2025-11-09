@@ -2,7 +2,7 @@
     .name = .vulkan,
     .fingerprint = 0xbe155a03c72db6af,
     .version = "0.0.0",
-    .minimum_zig_version = "0.15.0-dev.1518+749f10af4",
+    .minimum_zig_version = "0.16.0-dev.700+c383cd50d",
     .paths = .{
         "build.zig",
         "LICENSE",
