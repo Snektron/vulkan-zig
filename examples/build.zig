@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
         .use_llvm = true,
     });
     b.installArtifact(triangle_exe);
-    triangle_exe.linkSystemLibrary("glfw");
+    triangle_exe.root_module.linkSystemLibrary("glfw", .{});
 
     const registry_path: std.Build.LazyPath = if (maybe_override_registry) |override_registry|
         .{ .cwd_relative = override_registry }
