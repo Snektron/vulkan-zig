@@ -493,7 +493,7 @@ const Renderer = struct {
         const tagless_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
 
         // Strip out the "version" number of a bitflag, like VkAccessFlagBits2KHR.
-        const base_name = std.mem.trimRight(u8, tagless_name, "0123456789");
+        const base_name = std.mem.trimEnd(u8, tagless_name, "0123456789");
 
         const maybe_flag_bits_index = mem.lastIndexOf(u8, base_name, "FlagBits");
         if (maybe_flag_bits_index == null) {
@@ -515,7 +515,7 @@ const Renderer = struct {
     fn isFlags(self: Self, name: []const u8) bool {
         const tag = self.id_renderer.getAuthorTag(name);
         const tagless_name = if (tag) |tag_name| name[0 .. name.len - tag_name.len] else name;
-        const base_name = std.mem.trimRight(u8, tagless_name, "0123456789");
+        const base_name = std.mem.trimEnd(u8, tagless_name, "0123456789");
         return mem.endsWith(u8, base_name, "Flags");
     }
 

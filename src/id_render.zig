@@ -226,7 +226,7 @@ pub const IdRenderer = struct {
 
     pub fn stripAuthorTag(self: IdRenderer, id: []const u8) []const u8 {
         if (self.getAuthorTag(id)) |tag| {
-            return mem.trimRight(u8, id[0 .. id.len - tag.len], "_");
+            return mem.trimEnd(u8, id[0 .. id.len - tag.len], "_");
         }
 
         return id;
