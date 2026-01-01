@@ -8,9 +8,9 @@ fn invalidUsage(prog_name: []const u8, comptime fmt: []const u8, args: anytype) 
     std.process.exit(1);
 }
 
-fn reportParseErrors(tree: std.zig.Ast) !void {
+fn reportParseErrors(io: std.Io, tree: std.zig.Ast) !void {
     var buf: [1024]u8 = undefined;
-    var stderr = std.fs.File.stderr().writer(&buf);
+    var stderr = std.Io.File.stderr().writer(io, &buf);
     const w = &stderr.interface;
     for (tree.errors) |err| {
         const loc = tree.tokenLocation(0, err.token);
@@ -33,6 +33,10 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    var threaded: std.Io.Threaded = .init(allocator, .{});
+    defer threaded.deinit();
+    const io = threaded.io();
+
     var args = std.process.argsWithAllocator(allocator) catch |err| switch (err) {
         error.OutOfMemory => oomPanic(),
     };
@@ -48,7 +52,7 @@ pub fn main() !void {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             @setEvalBranchQuota(2000);
             var buf: [1024]u8 = undefined;
-            var w = std.fs.File.stdout().writer(&buf);
+            var w = std.Io.File.stdout().writer(io, &buf);
             w.interface.print(
                 \\Utility to generate a Zig binding from the Vulkan XML API registry.
                 \\
@@ -101,13 +105,13 @@ pub fn main() !void {
         invalidUsage(prog_name, "missing required argument <output zig source>", .{});
     };
 
-    const cwd = std.fs.cwd();
-    const xml_src = cwd.readFileAlloc(xml_path, allocator, .unlimited) catch |err| {
+    const cwd = std.Io.Dir.cwd();
+    const xml_src = cwd.readFileAlloc(io, xml_path, allocator, .unlimited) catch |err| {
         std.process.fatal("failed to open input file '{s}' ({s})", .{ xml_path, @errorName(err) });
     };
 
     const maybe_video_xml_src = if (maybe_video_xml_path) |video_xml_path|
-        cwd.readFileAlloc(video_xml_path, allocator, .unlimited) catch |err| {
+        cwd.readFileAlloc(io, video_xml_path, allocator, .unlimited) catch |err| {
             std.process.fatal("failed to open input file '{s}' ({s})", .{ video_xml_path, @errorName(err) });
         }
     else
@@ -154,7 +158,7 @@ pub fn main() !void {
         std.log.err("please make a bug report at https://github.com/Snektron/vulkan-zig/issues/", .{});
         std.log.err("or run with --debug to write out unformatted source", .{});
 
-        reportParseErrors(tree) catch |err| {
+        reportParseErrors(io, tree) catch |err| {
             std.process.fatal("failed to dump ast errors: {s}", .{@errorName(err)});
         };
 
@@ -167,12 +171,13 @@ pub fn main() !void {
     };
 
     if (std.fs.path.dirname(out_path)) |dir| {
-        cwd.makePath(dir) catch |err| {
-            std.process.fatal("failed to create output directory '{s}' ({s})", .{ dir, @errorName(err) });
+        cwd.createDir(io, dir, .default_dir) catch |err| {
+            if (err != error.PathAlreadyExists)
+                std.process.fatal("failed to create output directory '{s}' ({s})", .{ dir, @errorName(err) });
         };
     }
 
-    cwd.writeFile(.{
+    cwd.writeFile(io, .{
         .sub_path = out_path,
         .data = formatted,
     }) catch |err| {
