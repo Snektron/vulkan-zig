@@ -28,16 +28,18 @@ fn oomPanic() noreturn {
     @panic("Out of memory");
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var threaded: std.Io.Threaded = .init(allocator, .{});
+    var threaded: std.Io.Threaded = .init(allocator, .{
+        .environ = .empty,
+    });
     defer threaded.deinit();
     const io = threaded.io();
 
-    var args = std.process.argsWithAllocator(allocator) catch |err| switch (err) {
+    var args = init.minimal.args.iterateAllocator(allocator) catch |err| switch (err) {
         error.OutOfMemory => oomPanic(),
     };
     const prog_name = args.next() orelse "vulkan-zig-generator";
