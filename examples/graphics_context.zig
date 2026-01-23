@@ -74,7 +74,7 @@ pub const GraphicsContext = struct {
                 .application_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
                 .p_engine_name = app_name,
                 .engine_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
-                .api_version = @bitCast(vk.API_VERSION_1_2),
+                .api_version = @bitCast(vk.API_VERSION_1_3),
             },
             .enabled_layer_count = required_layer_names.len,
             .pp_enabled_layer_names = @ptrCast(&required_layer_names),

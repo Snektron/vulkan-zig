@@ -111,7 +111,7 @@ pub const Swapchain = struct {
     }
 
     pub fn waitForAllFences(self: Swapchain) !void {
-        for (self.swap_images) |si| si.waitForFence(self.gc) catch {};
+        for (self.swap_images) |si| try si.waitForFence(self.gc);
     }
 
     pub fn deinit(self: Swapchain) void {
@@ -125,7 +125,13 @@ pub const Swapchain = struct {
         const gc = self.gc;
         const allocator = self.allocator;
         const old_handle = self.handle;
+
+        // We need to wait until all semaphores are signaled. This can be done either using a deferred
+        // destruction queue, or just by waiting until the associated queue is idle.
+        try self.gc.dev.queueWaitIdle(self.gc.present_queue.handle);
+
         self.deinitExceptSwapchain();
+
         // set current handle to NULL_HANDLE to signal that the current swapchain does no longer need to be
         // de-initialized if we fail to recreate it.
         self.handle = .null_handle;
