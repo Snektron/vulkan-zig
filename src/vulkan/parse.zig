@@ -107,7 +107,7 @@ fn parseTypes(
             } else if (mem.eql(u8, category, "union")) {
                 break :blk try parseContainer(allocator, ty, true, api);
             } else if (mem.eql(u8, category, "funcpointer")) {
-                break :blk try parseFuncPointer(allocator, ty);
+                break :blk try parseFuncPointer(allocator, ty, api);
             } else if (mem.eql(u8, category, "enum")) {
                 break :blk (try parseEnumAlias(ty)) orelse continue;
             }
@@ -287,9 +287,33 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool, api: r
     };
 }
 
-fn parseFuncPointer(allocator: Allocator, ty: *xml.Element) !registry.Declaration {
-    var xctok = cparse.XmlCTokenizer.init(ty);
-    return try cparse.parseTypedef(allocator, &xctok, true);
+fn parseFuncPointer(allocator: Allocator, ty: *xml.Element, api: registry.Api) !registry.Declaration {
+    // The layout of this field changed somewhere around version 339. Just try to parse it as the new
+    // version first and fall back to the old version of that fails...
+
+    const decl = parseCommand(allocator, ty, api) catch {
+        // Old definitions were a typedef like this
+        //
+        // <type category="funcpointer">typedef void (VKAPI_PTR *<name>PFN_vkInternalAllocationNotification</name>)(
+        // <type>void</type>*                                       pUserData,
+        // <type>size_t</type>                                      size,
+        // <type>VkInternalAllocationType</type>                    allocationType,
+        // <type>VkSystemAllocationScope</type>                     allocationScope);</type>
+
+        var xctok = cparse.XmlCTokenizer.init(ty);
+        return try cparse.parseTypedef(allocator, &xctok, true);
+    };
+
+    return switch (decl.decl_type) {
+        // We parsed it as command, but its actually a typedef to command_ptr.
+        .command => |cmd| .{
+            .name = decl.name,
+            .decl_type = .{
+                .typedef = .{ .command_ptr = cmd },
+            },
+        },
+        else => decl,
+    };
 }
 
 // For some reason, the DeclarationType cannot be passed to lenToPointer, as
