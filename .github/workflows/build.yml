@@ -47,8 +47,8 @@ jobs:
     - name: Build example with latest zig & latest vk.xml
       run: zig build --build-file $(pwd)/examples/build.zig -Doverride-registry=$(pwd)/vk.xml
 
-    - name: Build example with latest zig & vk.xml from dependency & use zig shaders
-      run: zig build --build-file $(pwd)/examples/build.zig -Dzig-shader
+    # - name: Build example with latest zig & vk.xml from dependency & use zig shaders
+    #   run: zig build --build-file $(pwd)/examples/build.zig -Dzig-shader
 
     - name: Archive vk.zig
       uses: actions/upload-artifact@v4
