@@ -3,8 +3,9 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const maybe_registry = b.option(std.Build.LazyPath, "registry", "Set the path to the Vulkan registry (vk.xml)");
-    const maybe_video = b.option(std.Build.LazyPath, "video", "Set the path to the Vulkan Video registry (video.xml)");
+    const auto_pull = b.option(bool, "auto_pull", "Automatically pulls xml files from the canonical address and caches the result") orelse false;
+    const maybe_registry = b.option(std.Build.LazyPath, "registry", "Set the path/url to the Vulkan registry (vk.xml)");
+    const maybe_video = b.option(std.Build.LazyPath, "video", "Set the path/url to the Vulkan Video registry (video.xml)");
     const test_step = b.step("test", "Run all the tests");
 
     const root_module = b.createModule(.{
@@ -23,9 +24,9 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(generator_exe);
 
-    // Or they can skip all that, and just make sure to pass `.registry = "path/to/vk.xml"` to `b.dependency`,
+    // Or they can skip all that, and just make sure to pass either `.auto_pull = true` or `.registry = "path_or_url/to/vk.xml"` to `b.dependency`,
     // and then obtain the module directly via `.module("vulkan-zig")`.
-    if (maybe_registry) |registry| {
+    if (maybe_registry != null or auto_pull) {
         const vk_generate_cmd = b.addRunArtifact(generator_exe);
 
         if (maybe_video) |video| {
@@ -33,7 +34,10 @@ pub fn build(b: *std.Build) void {
             vk_generate_cmd.addFileArg(video);
         }
 
-        vk_generate_cmd.addFileArg(registry);
+        if (maybe_registry) |registry|
+            vk_generate_cmd.addFileArg(registry)
+        else
+            vk_generate_cmd.addArg("--auto_pull");
 
         const vk_zig = vk_generate_cmd.addOutputFileArg("vk.zig");
         const vk_zig_module = b.addModule("vulkan-zig", .{

@@ -28,6 +28,31 @@ fn oomPanic() noreturn {
     @panic("Out of memory");
 }
 
+fn getFileContent(io: std.Io, cwd: std.Io.Dir, path: []const u8, allocator: std.mem.Allocator) []const u8 {
+    if (std.mem.startsWith(u8, path, "http://") or std.mem.startsWith(u8, path, "https://")) {
+        const uri = std.Uri.parse(path) catch |err|
+            std.process.fatal("failed to parse url '{s}' ({s})", .{ path, @errorName(err) });
+        var writer: std.Io.Writer.Allocating = .init(allocator);
+        var client: std.http.Client = .{ .allocator = allocator, .io = io };
+        defer client.deinit();
+        const result = client.fetch(.{
+            .keep_alive = false,
+            .location = .{ .uri = uri },
+            .method = .GET,
+            .response_writer = &writer.writer,
+        }) catch |err|
+            std.process.fatal("failed to download input file '{s}' ({s})", .{ path, @errorName(err) });
+        if (result.status != .ok) {
+            std.process.fatal("failed to download input file '{s}' ({s})", .{ path, @tagName(result.status) });
+        }
+        return writer.toOwnedSlice() catch oomPanic();
+    } else {
+        return cwd.readFileAlloc(io, path, allocator, .unlimited) catch |err| {
+            std.process.fatal("failed to open input file '{s}' ({s})", .{ path, @errorName(err) });
+        };
+    }
+}
+
 pub fn main(init: std.process.Init) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -43,10 +68,13 @@ pub fn main(init: std.process.Init) !void {
         error.OutOfMemory => oomPanic(),
     };
     const prog_name = args.next() orelse "vulkan-zig-generator";
+    const canonical_vk_xml = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/refs/heads/master/xml/vk.xml";
+    const canonical_video_xml = "https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/refs/heads/main/xml/video.xml";
 
     var maybe_xml_path: ?[]const u8 = null;
     var maybe_out_path: ?[]const u8 = null;
     var maybe_video_xml_path: ?[]const u8 = null;
+    var auto_pull: bool = false;
     var debug: bool = false;
     var api = generator.Api.vulkan;
 
@@ -70,6 +98,7 @@ pub fn main(init: std.process.Init) !void {
                     \\--debug          Write out unformatted source if does not parse correctly.
                     \\--video <path>   Also generate Vulkan Video API bindings from video.xml
                     \\                 registry at <path>.
+                    \\--auto_pull      Automatically pulls xml files from the canonical address.
                     \\
                 ,
                     .{prog_name},
@@ -92,7 +121,9 @@ pub fn main(init: std.process.Init) !void {
             maybe_video_xml_path = args.next() orelse {
                 invalidUsage(prog_name, "{s} expects argument <path>", .{arg});
             };
-        } else if (maybe_xml_path == null) {
+        } else if (std.mem.eql(u8, arg, "--auto_pull")) {
+            auto_pull = true;
+        } else if (maybe_xml_path == null and !auto_pull) {
             maybe_xml_path = arg;
         } else if (maybe_out_path == null) {
             maybe_out_path = arg;
@@ -101,23 +132,23 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    const xml_path = maybe_xml_path orelse {
+    const xml_path = maybe_xml_path orelse if (auto_pull)
+        canonical_vk_xml
+    else
         invalidUsage(prog_name, "missing required argument <spec xml path>", .{});
-    };
+    maybe_video_xml_path = maybe_video_xml_path orelse if (auto_pull)
+        canonical_video_xml
+    else
+        null;
 
     const out_path = maybe_out_path orelse {
         invalidUsage(prog_name, "missing required argument <output zig source>", .{});
     };
 
     const cwd = std.Io.Dir.cwd();
-    const xml_src = cwd.readFileAlloc(io, xml_path, allocator, .unlimited) catch |err| {
-        std.process.fatal("failed to open input file '{s}' ({s})", .{ xml_path, @errorName(err) });
-    };
-
+    const xml_src = getFileContent(io, cwd, xml_path, allocator);
     const maybe_video_xml_src = if (maybe_video_xml_path) |video_xml_path|
-        cwd.readFileAlloc(io, video_xml_path, allocator, .unlimited) catch |err| {
-            std.process.fatal("failed to open input file '{s}' ({s})", .{ video_xml_path, @errorName(err) });
-        }
+        getFileContent(io, cwd, video_xml_path, allocator)
     else
         null;
 
