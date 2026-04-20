@@ -1479,7 +1479,7 @@ const Renderer = struct {
 
     fn renderDispatchTable(self: *Self, dispatch_type: CommandDispatchType) !void {
         try self.writer.print(
-            "pub const {s}Dispatch = struct {{\n",
+            "pub const {s}Dispatch = extern struct {{\n",
             .{dispatch_type.name()},
         );
 
@@ -1505,20 +1505,9 @@ const Renderer = struct {
 
     fn renderWrappers(self: *Self) !void {
         try self.writer.writeAll(command_flags_mixin);
-        try self.renderWrappersCommon();
         try self.renderWrappersOfDispatchType(.base);
         try self.renderWrappersOfDispatchType(.instance);
         try self.renderWrappersOfDispatchType(.device);
-    }
-
-    fn renderWrappersCommon(self: *Self) !void {
-        try self.writer.print(
-            \\fn loadCommonImpl(loader: *const fn(usize, [*:0]const u8) PfnVoidFunction, handle: usize, names: []const [*:0]const u8, ptrs: [*]PfnVoidFunction) void {{
-            \\    for (ptrs[0..names.len], names) |*ptr, name| {{
-            \\        ptr.* = loader(handle, name);
-            \\    }}
-            \\}}
-        , .{});
     }
 
     fn renderWrappersOfDispatchType(self: *Self, dispatch_type: CommandDispatchType) !void {
@@ -1527,7 +1516,7 @@ const Renderer = struct {
         try self.writer.print(
             \\pub const {0s}Wrapper = {0s}WrapperWithCustomDispatch({0s}Dispatch);
             \\pub fn {0s}WrapperWithCustomDispatch(DispatchType: type) type {{
-            \\    return struct {{
+            \\    return extern struct {{
             \\        const Self = @This();
             \\        pub const Dispatch = DispatchType;
             \\
@@ -1564,9 +1553,9 @@ const Renderer = struct {
 
     fn renderWrapperLoader(self: *Self, dispatch_type: CommandDispatchType) !void {
         const params = switch (dispatch_type) {
-            .base => "loader: *const fn(Instance, [*:0]const u8) PfnVoidFunction",
-            .instance => "instance: Instance, loader: *const fn(Instance, [*:0]const u8) PfnVoidFunction",
-            .device => "device: Device, loader: *const fn(Device, [*:0]const u8) PfnVoidFunction",
+            .base => "loader: anytype",
+            .instance => "instance: Instance, loader: anytype",
+            .device => "device: Device, loader: anytype",
         };
 
         const loader_first_arg = switch (dispatch_type) {
@@ -1586,7 +1575,10 @@ const Renderer = struct {
             \\        for (&names, fields) |*d, f| d.* = f.name.ptr;
             \\        break :blk names;
             \\    }};
-            \\    loadCommonImpl(@ptrCast(loader), @intFromEnum({[first_arg]s}), &names, @ptrCast(&self.dispatch));
+            \\    const self_as_ptr: [*]?*const anyopaque = @ptrCast(&self.dispatch);
+            \\    for (self_as_ptr[0..names.len], names) |*ptr, name| {{
+            \\        ptr.* = loader({[first_arg]s}, name);
+            \\    }}            
             \\    return self;
             \\}}
         , .{ .params = params, .first_arg = loader_first_arg });
