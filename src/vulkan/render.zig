@@ -1505,9 +1505,20 @@ const Renderer = struct {
 
     fn renderWrappers(self: *Self) !void {
         try self.writer.writeAll(command_flags_mixin);
+        try self.renderWrappersCommon();
         try self.renderWrappersOfDispatchType(.base);
         try self.renderWrappersOfDispatchType(.instance);
         try self.renderWrappersOfDispatchType(.device);
+    }
+
+    fn renderWrappersCommon(self: *Self) !void {
+        try self.writer.print(
+            \\fn loadCommonImpl(loader: *const fn(usize, [*:0]const u8) PfnVoidFunction, handle: usize, names: []const [*:0]const u8, ptrs: [*]PfnVoidFunction) void {{
+            \\    for (ptrs[0..names.len], names) |*ptr, name| {{
+            \\        ptr.* = loader(handle, name);
+            \\    }}
+            \\}}
+        , .{});
     }
 
     fn renderWrappersOfDispatchType(self: *Self, dispatch_type: CommandDispatchType) !void {
@@ -1553,9 +1564,9 @@ const Renderer = struct {
 
     fn renderWrapperLoader(self: *Self, dispatch_type: CommandDispatchType) !void {
         const params = switch (dispatch_type) {
-            .base => "loader: anytype",
-            .instance => "instance: Instance, loader: anytype",
-            .device => "device: Device, loader: anytype",
+            .base => "loader: *const fn(Instance, [*:0]const u8) PfnVoidFunction",
+            .instance => "instance: Instance, loader: *const fn(Instance, [*:0]const u8) PfnVoidFunction",
+            .device => "device: Device, loader: *const fn(Device, [*:0]const u8) PfnVoidFunction",
         };
 
         const loader_first_arg = switch (dispatch_type) {
@@ -1569,11 +1580,13 @@ const Renderer = struct {
         try self.writer.print(
             \\pub fn load({[params]s}) Self {{
             \\    var self: Self = .{{ .dispatch = .{{}} }};
-            \\    inline for (std.meta.fields(Dispatch)) |field| {{
-            \\        if (loader({[first_arg]s}, field.name.ptr)) |cmd_ptr| {{
-            \\            @field(self.dispatch, field.name) = @ptrCast(cmd_ptr);
-            \\        }}
-            \\    }}
+            \\    const names = comptime blk:{{ 
+            \\        const fields = @typeInfo(Dispatch).@"struct".fields;
+            \\        var names: [fields.len][*:0]const u8 = undefined;
+            \\        for (&names, fields) |*d, f| d.* = f.name.ptr;
+            \\        break :blk names;
+            \\    }};
+            \\    loadCommonImpl(@ptrCast(loader), @intFromEnum({[first_arg]s}), &names, @ptrCast(&self.dispatch));
             \\    return self;
             \\}}
         , .{ .params = params, .first_arg = loader_first_arg });
