@@ -8,7 +8,9 @@ pub const Registry = struct {
     api_constants: []ApiConstant,
     tags: []Tag,
     features: []Feature,
-    extensions: []Extension,
+    instance_extensions: []Extension,
+    device_extensions: []Extension,
+    video_extensions: []Extension,
 };
 
 pub const Declaration = struct {
@@ -193,12 +195,6 @@ pub const Feature = struct {
 };
 
 pub const Extension = struct {
-    pub const ExtensionType = enum {
-        instance,
-        device,
-        video,
-    };
-
     pub const Promotion = union(enum) {
         none,
         feature: FeatureLevel,
@@ -214,7 +210,6 @@ pub const Extension = struct {
     name: []const u8,
     number: u31,
     version: Version,
-    extension_type: ?ExtensionType,
     depends: []const []const u8, // Other extensions
     promoted_to: Promotion,
     platform: ?[]const u8,
