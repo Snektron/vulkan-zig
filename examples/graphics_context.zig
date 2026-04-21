@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 
 const required_layer_names = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
-const required_device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
+const required_device_extensions = [_][*:0]const u8{vk.device_extensions.khr_swapchain.name};
 
 /// There are 3 levels of bindings in vulkan-zig:
 /// - The Dispatch types (vk.BaseDispatch, vk.InstanceDispatch, vk.DeviceDispatch)
@@ -65,11 +65,11 @@ pub const GraphicsContext = struct {
 
         var extension_names: std.ArrayList([*:0]const u8) = .empty;
         defer extension_names.deinit(allocator);
-        try extension_names.append(allocator, vk.extensions.ext_debug_utils.name);
+        try extension_names.append(allocator, vk.instance_extensions.ext_debug_utils.name);
         // the following extensions are to support vulkan in mac os
         // see https://github.com/glfw/glfw/issues/2335
-        try extension_names.append(allocator, vk.extensions.khr_portability_enumeration.name);
-        try extension_names.append(allocator, vk.extensions.khr_get_physical_device_properties_2.name);
+        try extension_names.append(allocator, vk.instance_extensions.khr_portability_enumeration.name);
+        try extension_names.append(allocator, vk.instance_extensions.khr_get_physical_device_properties_2.name);
 
         var glfw_exts_count: u32 = 0;
         const glfw_exts = c.glfwGetRequiredInstanceExtensions(&glfw_exts_count);

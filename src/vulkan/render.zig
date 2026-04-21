@@ -1443,14 +1443,10 @@ const Renderer = struct {
         try self.writer.writeAll("};\n");
     }
 
-    fn renderExtensionInfo(self: *Self) !void {
-        try self.writer.writeAll(
-            \\pub const extensions = struct {
-            \\
-        );
-        for (self.registry.extensions) |ext| {
+    fn renderExtensionInfoImpl(self: *Self, extensions: []const reg.Extension, comptime is_video: bool) !void {
+        for (extensions) |ext| {
             try self.writer.writeAll("pub const ");
-            if (ext.extension_type == .video) {
+            if (comptime is_video) {
                 // These are already in the right form, and the auto-casing style transformer
                 // is prone to messing up these names.
                 try self.writeIdentifier(trimVkNamespace(ext.name));
@@ -1469,6 +1465,24 @@ const Renderer = struct {
             try self.writer.writeAll(",};\n");
         }
         try self.writer.writeAll("};\n");
+    }
+
+    fn renderExtensionInfo(self: *Self) !void {
+        try self.writer.writeAll(
+            \\pub const instance_extensions = struct {
+            \\
+        );
+        try self.renderExtensionInfoImpl(self.registry.instance_extensions, false);
+        try self.writer.writeAll(
+            \\pub const device_extensions = struct {
+            \\
+        );
+        try self.renderExtensionInfoImpl(self.registry.device_extensions, false);
+        try self.writer.writeAll(
+            \\pub const video_extensions = struct {
+            \\
+        );
+        try self.renderExtensionInfoImpl(self.registry.video_extensions, true);
     }
 
     fn renderDispatchTables(self: *Self) !void {
