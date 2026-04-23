@@ -1217,7 +1217,7 @@ const Renderer = struct {
 
         try self.writer.writeAll("pub const ");
         try self.renderName(name);
-        try self.writer.writeAll(" = enum(i32) {");
+        try self.writer.writeAll(" = enum(c_int) {");
 
         for (enumeration.fields) |field| {
             if (field.value == .alias)
