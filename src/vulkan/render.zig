@@ -1479,7 +1479,7 @@ const Renderer = struct {
 
     fn renderDispatchTable(self: *Self, dispatch_type: CommandDispatchType) !void {
         try self.writer.print(
-            "pub const {s}Dispatch = struct {{\n",
+            "pub const {s}Dispatch = extern struct {{\n",
             .{dispatch_type.name()},
         );
 
@@ -1516,7 +1516,7 @@ const Renderer = struct {
         try self.writer.print(
             \\pub const {0s}Wrapper = {0s}WrapperWithCustomDispatch({0s}Dispatch);
             \\pub fn {0s}WrapperWithCustomDispatch(DispatchType: type) type {{
-            \\    return struct {{
+            \\    return extern struct {{
             \\        const Self = @This();
             \\        pub const Dispatch = DispatchType;
             \\
@@ -1569,11 +1569,16 @@ const Renderer = struct {
         try self.writer.print(
             \\pub fn load({[params]s}) Self {{
             \\    var self: Self = .{{ .dispatch = .{{}} }};
-            \\    inline for (std.meta.fields(Dispatch)) |field| {{
-            \\        if (loader({[first_arg]s}, field.name.ptr)) |cmd_ptr| {{
-            \\            @field(self.dispatch, field.name) = @ptrCast(cmd_ptr);
-            \\        }}
-            \\    }}
+            \\    const names = comptime blk:{{ 
+            \\        const fields = @typeInfo(Dispatch).@"struct".fields;
+            \\        var names: [fields.len][*:0]const u8 = undefined;
+            \\        for (&names, fields) |*d, f| d.* = f.name.ptr;
+            \\        break :blk names;
+            \\    }};
+            \\    const self_as_ptr: [*]?*const anyopaque = @ptrCast(&self.dispatch);
+            \\    for (self_as_ptr[0..names.len], names) |*ptr, name| {{
+            \\        ptr.* = loader({[first_arg]s}, name);
+            \\    }}            
             \\    return self;
             \\}}
         , .{ .params = params, .first_arg = loader_first_arg });
