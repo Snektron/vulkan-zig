@@ -101,8 +101,8 @@ fn reallyRefAllDecls(comptime T: type) void {
     switch (@typeInfo(T)) {
         .@"struct", .@"union" => {
             reallyRefAllContainerDecls(T);
-            inline for (std.meta.fields(T)) |field| {
-                reallyRefAllDecls(field.type);
+            inline for (std.meta.fieldTypes(T)) |field_type| {
+                reallyRefAllDecls(field_type);
             }
         },
         .@"enum", .@"opaque" => {
