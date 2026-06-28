@@ -2385,11 +2385,10 @@ const Renderer = struct {
                 continue;
             }
 
+            std.debug.assert(std.mem.indexOfScalar(u8, line, '\n') == null);
             try self.writer.writeAll("/// ");
-            try self.writer.writeAll(std.mem.trim(u8, comment, "/ "));
-            if (line[line.len - 1] != '\n') {
-                try self.writer.writeByte('\n');
-            }
+            try self.writer.writeAll(std.mem.trim(u8, line, "/ "));
+            try self.writer.writeByte('\n');
         }
     }
 };
