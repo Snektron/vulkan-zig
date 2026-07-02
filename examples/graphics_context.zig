@@ -87,9 +87,9 @@ pub const GraphicsContext = struct {
             .pp_enabled_layer_names = @ptrCast(&required_layer_names),
             .enabled_extension_count = @intCast(extension_names.items.len),
             .pp_enabled_extension_names = extension_names.items.ptr,
-            // enumerate_portability_bit_khr to support vulkan in mac os
+            // enumerate_portability_khr to support vulkan in mac os
             // see https://github.com/glfw/glfw/issues/2335
-            .flags = .{ .enumerate_portability_bit_khr = true },
+            .flags = .{ .enumerate_portability_khr = true },
         }, null);
 
         const vki = try allocator.create(InstanceWrapper);
@@ -100,15 +100,15 @@ pub const GraphicsContext = struct {
 
         self.debug_messenger = try self.instance.createDebugUtilsMessengerEXT(&.{
             .message_severity = .{
-                //.verbose_bit_ext = true,
-                //.info_bit_ext = true,
-                .warning_bit_ext = true,
-                .error_bit_ext = true,
+                //.verbose_ext = true,
+                //.info_ext = true,
+                .warning_ext = true,
+                .error_ext = true,
             },
             .message_type = .{
-                .general_bit_ext = true,
-                .validation_bit_ext = true,
-                .performance_bit_ext = true,
+                .general_ext = true,
+                .validation_ext = true,
+                .performance_ext = true,
             },
             .pfn_user_callback = &debugUtilsMessengerCallback,
             .p_user_data = null,
@@ -152,9 +152,9 @@ pub const GraphicsContext = struct {
         return std.mem.sliceTo(&self.props.device_name, 0);
     }
 
-    pub fn findMemoryTypeIndex(self: GraphicsContext, memory_type_bits: u32, flags: vk.MemoryPropertyFlags) !u32 {
+    pub fn findMemoryTypeIndex(self: GraphicsContext, memory_types: u32, flags: vk.MemoryPropertyFlags) !u32 {
         for (self.mem_props.memory_types[0..self.mem_props.memory_type_count], 0..) |mem_type, i| {
-            if (memory_type_bits & (@as(u32, 1) << @truncate(i)) != 0 and mem_type.property_flags.contains(flags)) {
+            if (memory_types & (@as(u32, 1) << @truncate(i)) != 0 and mem_type.property_flags.contains(flags)) {
                 return @truncate(i);
             }
         }
@@ -254,9 +254,9 @@ const QueueAllocation = struct {
 };
 
 fn debugUtilsMessengerCallback(severity: vk.DebugUtilsMessageSeverityFlagsEXT, msg_type: vk.DebugUtilsMessageTypeFlagsEXT, callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, _: ?*anyopaque) callconv(.c) vk.Bool32 {
-    const severity_str = if (severity.verbose_bit_ext) "verbose" else if (severity.info_bit_ext) "info" else if (severity.warning_bit_ext) "warning" else if (severity.error_bit_ext) "error" else "unknown";
+    const severity_str = if (severity.verbose_ext) "verbose" else if (severity.info_ext) "info" else if (severity.warning_ext) "warning" else if (severity.error_ext) "error" else "unknown";
 
-    const type_str = if (msg_type.general_bit_ext) "general" else if (msg_type.validation_bit_ext) "validation" else if (msg_type.performance_bit_ext) "performance" else if (msg_type.device_address_binding_bit_ext) "device addr" else "unknown";
+    const type_str = if (msg_type.general_ext) "general" else if (msg_type.validation_ext) "validation" else if (msg_type.performance_ext) "performance" else if (msg_type.device_address_binding_ext) "device addr" else "unknown";
 
     const message: [*c]const u8 = if (callback_data) |cb_data| cb_data.p_message else "NO MESSAGE!";
     std.debug.print("[{s}][{s}]. Message:\n  {s}\n", .{ severity_str, type_str, message });
@@ -317,7 +317,7 @@ fn allocateQueues(instance: Instance, pdev: vk.PhysicalDevice, allocator: Alloca
     for (families, 0..) |properties, i| {
         const family: u32 = @intCast(i);
 
-        if (graphics_family == null and properties.queue_flags.graphics_bit) {
+        if (graphics_family == null and properties.queue_flags.graphics) {
             graphics_family = family;
         }
 

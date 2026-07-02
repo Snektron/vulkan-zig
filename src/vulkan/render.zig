@@ -1286,13 +1286,25 @@ const Renderer = struct {
                 }
             }
 
+            var arena: std.heap.ArenaAllocator = .init(self.allocator);
+            defer arena.deinit();
+
             for (flags_by_bitpos[0..bits.bitwidth], 0..) |maybe_flag, bitpos| {
+                defer _ = arena.reset(.retain_capacity);
                 if (maybe_flag) |flag| {
                     if (flag.comment) |comment| {
                         try self.renderDocComment(comment);
                     }
                     const field_name = try extractBitflagFieldName(bitflag_name, flag.name);
-                    try self.writeIdentifierWithCase(.snake, field_name);
+                    const name_without_bit = blk: {
+                        const bit_prefix = "_BIT";
+                        const index = std.mem.lastIndexOf(u8, field_name, bit_prefix) orelse break :blk field_name;
+                        break :blk try std.mem.concat(arena.allocator(), u8, &.{
+                            field_name[0..index],
+                            field_name[index + bit_prefix.len ..],
+                        });
+                    };
+                    try self.writeIdentifierWithCase(.snake, name_without_bit);
                 } else {
                     try self.writer.print("_reserved_bit_{}", .{bitpos});
                 }
