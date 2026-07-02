@@ -2216,8 +2216,15 @@ const Renderer = struct {
         for (command.error_codes) |err| {
             try self.writer.writeAll("Result.");
             try self.renderEnumFieldName("VkResult", err);
-            try self.writer.writeAll(" => return error.");
-            try self.renderResultAsErrorName(err);
+            try self.writer.writeAll(" => ");
+            if (std.mem.eql(u8, err, "VK_ERROR_VALIDATION_FAILED_EXT") or
+                std.mem.eql(u8, err, "VK_ERROR_VALIDATION_FAILED"))
+            {
+                try self.writer.writeAll("std.debug.panic(\"VK_ERROR_VALIDATION_FAILED: invalid API usage\", .{})");
+            } else {
+                try self.writer.writeAll("return error.");
+                try self.renderResultAsErrorName(err);
+            }
             try self.writer.writeAll(", ");
         }
 
@@ -2227,7 +2234,10 @@ const Renderer = struct {
     fn renderErrorSet(self: *Self, errors: []const []const u8) !void {
         try self.writer.writeAll("error{");
         for (errors) |name| {
-            if (std.mem.eql(u8, name, "VK_ERROR_UNKNOWN")) {
+            if (std.mem.eql(u8, name, "VK_ERROR_UNKNOWN") or
+                std.mem.eql(u8, name, "VK_ERROR_VALIDATION_FAILED_EXT") or
+                std.mem.eql(u8, name, "VK_ERROR_VALIDATION_FAILED"))
+            {
                 continue;
             }
             try self.renderResultAsErrorName(name);
