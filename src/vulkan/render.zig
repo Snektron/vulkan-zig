@@ -909,6 +909,9 @@ const Renderer = struct {
                 \\enum(u32) {
                 \\    false,
                 \\    true,
+                \\    pub fn fromBool(b: bool) Bool32 {
+                \\        return if (b) .true else .false;
+                \\    }
                 \\};
                 \\
             );
