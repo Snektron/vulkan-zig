@@ -11,8 +11,8 @@
             .hash = "N-V-__8AAC1ZbAIG2kVq3iPpAWaOlDTQ3MOyOyQQR0o_-9ez",
         },
         .glfw = .{
-            .url = "git+https://github.com/allyourcodebase/glfw#79e7ba3d082765954b59c4f11a2f9b4ff1ecb350",
-            .hash = "glfw-0.0.0-R5AeUo0JGgBvENV2Oz-u0V_unpWhEJTfK4qckBH5da6e",
+            .url = "git+https://github.com/allyourcodebase/glfw#74b53d74a79f66af4e0c620dd37a38796f015770",
+            .hash = "glfw-0.0.0-R5AeUroIGgByZTBiH9I-eE2y7IQ5H3Vmqi9_67OFLOZ2",
         },
     },
     .paths = .{""},

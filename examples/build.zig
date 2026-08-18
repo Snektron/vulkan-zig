@@ -7,7 +7,8 @@ pub fn build(b: *std.Build) void {
     const maybe_override_registry = b.option([]const u8, "override-registry", "Override the path to the Vulkan registry used for the examples");
     const use_zig_shaders = b.option(bool, "zig-shader", "Use Zig shaders instead of GLSL") orelse false;
 
-    const registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml");
+    const vk_headers = b.dependency("vulkan_headers", .{});
+    const registry = vk_headers.path("registry/vk.xml");
 
     const glfw = b.dependency("glfw", .{
         .target = target,
@@ -21,6 +22,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     trans_glfw.addSystemIncludePath(glfw.artifact("glfw").getEmittedIncludeTree());
+    trans_glfw.addSystemIncludePath(vk_headers.path("include"));
 
     const registry_path: std.Build.LazyPath = if (maybe_override_registry) |override_registry|
         .{ .cwd_relative = override_registry }
