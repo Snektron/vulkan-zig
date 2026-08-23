@@ -545,7 +545,7 @@ const Renderer = struct {
             return false;
         }
 
-        const decl = self.resolveDeclaration(ptr.child.name) orelse return error.InvalidRegistry;
+        const decl = self.resolveDeclaration(ptr.child.name.str) orelse return error.InvalidRegistry;
         if (decl != .container) {
             return false;
         }
@@ -576,7 +576,7 @@ const Renderer = struct {
                 }
 
                 if (ptr.child.* == .name) {
-                    const child_name = ptr.child.name;
+                    const child_name = ptr.child.name.str;
                     if (mem.eql(u8, child_name, "void")) {
                         return .other;
                     } else if (builtin_types.get(child_name) == null and trimVkNamespace(child_name).ptr == child_name.ptr) {
@@ -609,11 +609,11 @@ const Renderer = struct {
                 }
             },
             .name => |name| {
-                if (dispatchable_handles.get(name) != null) {
+                if (dispatchable_handles.get(name.str) != null) {
                     return .dispatch_handle;
                 }
 
-                if ((try self.extractBitflagName(name)) != null or self.isFlags(name)) {
+                if ((try self.extractBitflagName(name.str)) != null or self.isFlags(name.str)) {
                     return .bitflags;
                 }
             },
@@ -634,7 +634,7 @@ const Renderer = struct {
 
         switch (command.params[0].param_type) {
             .name => |first_param_type_name| {
-                if (dispatchable_handles.get(first_param_type_name)) |dispatch_type| {
+                if (dispatchable_handles.get(first_param_type_name.str)) |dispatch_type| {
                     return dispatch_type;
                 }
             },
@@ -758,7 +758,16 @@ const Renderer = struct {
 
     fn renderTypeInfo(self: *Self, type_info: reg.TypeInfo) RenderTypeInfoError!void {
         switch (type_info) {
-            .name => |name| try self.renderName(name),
+            .name => |name| {
+                if (type_info.name.is_optional) {
+                    if (self.resolveDeclaration(type_info.name.str)) |decl| {
+                        if (decl == .handle and decl.handle.is_dispatchable) {
+                            try self.writer.writeByte('?');
+                        }
+                    }
+                }
+                try self.renderName(name.str);
+            },
             .command_ptr => |command_ptr| try self.renderCommandPtr(command_ptr, true),
             .pointer => |pointer| try self.renderPointer(pointer),
             .array => |array| try self.renderArray(array),
@@ -816,25 +825,7 @@ const Renderer = struct {
         for (command_ptr.params) |param| {
             try self.renderParamName(param.name);
             try self.writer.writeAll(": ");
-
-            blk: {
-                if (param.param_type == .name) {
-                    if (try self.extractBitflagName(param.param_type.name)) |bitflag_name| {
-                        try self.writeIdentifierFmt("{s}Flags{s}{s}", .{
-                            trimVkNamespace(bitflag_name.base_name),
-                            @as([]const u8, if (bitflag_name.revision) |revision| revision else ""),
-                            @as([]const u8, if (bitflag_name.tag) |tag| tag else ""),
-                        });
-                        break :blk;
-                    } else if (self.isFlags(param.param_type.name)) {
-                        try self.renderTypeInfo(param.param_type);
-                        break :blk;
-                    }
-                }
-
-                try self.renderTypeInfo(param.param_type);
-            }
-
+            try self.renderTypeInfo(param.param_type);
             try self.writer.writeAll(", ");
         }
         try self.writer.writeAll(") callconv(vulkan_call_conv)");
@@ -842,7 +833,7 @@ const Renderer = struct {
     }
 
     fn renderPointer(self: *Self, pointer: reg.Pointer) !void {
-        const child_is_void = pointer.child.* == .name and mem.eql(u8, pointer.child.name, "void");
+        const child_is_void = pointer.child.* == .name and mem.eql(u8, pointer.child.name.str, "void");
 
         if (pointer.is_optional) {
             try self.writer.writeByte('?');
@@ -1135,7 +1126,7 @@ const Renderer = struct {
             try self.writer.writeAll(": ");
             if (field.bits) |bits| {
                 try self.writer.print(" u{},", .{bits});
-                if (field.field_type != .name or builtin_types.get(field.field_type.name) == null) {
+                if (field.field_type != .name or builtin_types.get(field.field_type.name.str) == null) {
                     try self.writer.writeAll("// ");
                     try self.renderTypeInfo(field.field_type);
                     try self.writer.writeByte('\n');
@@ -1169,21 +1160,25 @@ const Renderer = struct {
 
             try self.writer.writeAll(" = .");
             try self.writeIdentifierWithCase(.snake, stype["VK_STRUCTURE_TYPE_".len..]);
-        } else if (field.field_type == .name and mem.eql(u8, "VkBool32", field.field_type.name) and isFeatureStruct(name, container.extends)) {
+        } else if (field.field_type == .name and mem.eql(u8, "VkBool32", field.field_type.name.str) and isFeatureStruct(name, container.extends)) {
             try self.writer.writeAll(" = .false");
-        } else if (field.is_optional) {
+        } else if (field.field_type.isOptional()) {
             if (field.field_type == .name) {
-                const field_type_name = field.field_type.name;
+                const field_type_name = field.field_type.name.str;
                 if (self.resolveDeclaration(field_type_name)) |decl_type| {
                     if (decl_type == .handle) {
-                        try self.writer.writeAll(" = .null_handle");
+                        if (decl_type.handle.is_dispatchable) {
+                            try self.writer.writeAll(" = null");
+                        } else {
+                            try self.writer.writeAll(" = .null_handle");
+                        }
                     } else if (decl_type == .bitmask) {
                         try self.writer.writeAll(" = .{}");
                     } else if (decl_type == .typedef and decl_type.typedef == .command_ptr) {
                         try self.writer.writeAll(" = null");
-                    } else if (mem.eql(u8, "VkBool32", field.field_type.name)) {
+                    } else if (mem.eql(u8, "VkBool32", field.field_type.name.str)) {
                         try self.writer.writeAll(" = .false");
-                    } else if ((decl_type == .typedef and builtin_types.has(decl_type.typedef.name)) or
+                    } else if ((decl_type == .typedef and builtin_types.has(decl_type.typedef.name.str)) or
                         (decl_type == .foreign and builtin_types.has(field_type_name)))
                     {
                         try self.writer.writeAll(" = 0");
@@ -1356,11 +1351,13 @@ const Renderer = struct {
     }
 
     fn renderHandle(self: *Self, name: []const u8, handle: reg.Handle) !void {
-        const backing_type: []const u8 = if (handle.is_dispatchable) "usize" else "u64";
-
         try self.writer.writeAll("pub const ");
         try self.renderName(name);
-        try self.writer.print(" = enum({s}) {{null_handle = 0, _}};\n", .{backing_type});
+        if (handle.is_dispatchable) {
+            try self.writer.writeAll(" = *opaque{};\n");
+        } else {
+            try self.writer.writeAll(" = enum(u64) {null_handle = 0, _};\n");
+        }
     }
 
     fn renderAlias(self: *Self, name: []const u8, alias: reg.Alias) !void {
@@ -1574,7 +1571,7 @@ const Renderer = struct {
         };
 
         const loader_first_arg = switch (dispatch_type) {
-            .base => "Instance.null_handle",
+            .base => "null",
             .instance => "instance",
             .device => "device",
         };
@@ -1644,7 +1641,7 @@ const Renderer = struct {
             switch (command.params[0].param_type) {
                 .name => |name| {
                     const skip = blk: {
-                        if (mem.eql(u8, name, dispatch_handle)) {
+                        if (mem.eql(u8, name.str, dispatch_handle)) {
                             break :blk false;
                         }
 
@@ -1669,7 +1666,7 @@ const Renderer = struct {
     }
 
     fn renderProxyCommand(self: *Self, name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
-        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name.str, "VkResult");
         const returns = try self.extractReturns(command);
 
         if (returns_vk_result) {
@@ -1712,7 +1709,7 @@ const Renderer = struct {
     }
 
     fn renderProxyCommandAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command, dispatch_handle: []const u8) !void {
-        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name.str, "VkResult");
 
         const name = try self.makeAllocWrapperName(wrapped_name);
         defer self.allocator.free(name);
@@ -1763,7 +1760,7 @@ const Renderer = struct {
                     try self.renderParamName(param.name);
                 },
                 .dispatch_handle => {
-                    if (mem.eql(u8, param.param_type.name, dispatch_handle)) {
+                    if (mem.eql(u8, param.param_type.name.str, dispatch_handle)) {
                         try self.writer.writeAll("self.handle");
                     } else {
                         try self.renderParamName(param.name);
@@ -1832,7 +1829,7 @@ const Renderer = struct {
         for (command.params) |param| {
             const class = try self.classifyParam(command.params, param);
             // Skip the dispatch type for proxying wrappers
-            if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name, dispatch_handle)) {
+            if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name.str, dispatch_handle)) {
                 continue;
             }
             // This parameter is returned instead.
@@ -1851,7 +1848,7 @@ const Renderer = struct {
 
         try self.writer.writeAll(") ");
 
-        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name.str, "VkResult");
         if (returns_vk_result) {
             try self.renderErrorSetName(name);
             try self.writer.writeByte('!');
@@ -1912,7 +1909,7 @@ const Renderer = struct {
         var returns: std.ArrayList(ReturnValue) = .empty;
 
         if (command.return_type.* == .name) {
-            const return_name = command.return_type.name;
+            const return_name = command.return_type.name.str;
             if (!mem.eql(u8, return_name, "void") and !mem.eql(u8, return_name, "VkResult")) {
                 try returns.append(allocator, .{
                     .name = "return_value",
@@ -1923,7 +1920,7 @@ const Renderer = struct {
         }
 
         if (command.success_codes.len > 1) {
-            if (command.return_type.* != .name or !mem.eql(u8, command.return_type.name, "VkResult")) {
+            if (command.return_type.* != .name or !mem.eql(u8, command.return_type.name.str, "VkResult")) {
                 return error.InvalidRegistry;
             }
             try returns.append(allocator, .{
@@ -1971,8 +1968,8 @@ const Renderer = struct {
     }
 
     fn renderWrapper(self: *Self, name: []const u8, command: reg.Command) !void {
-        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
-        const returns_void = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "void");
+        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name.str, "VkResult");
+        const returns_void = command.return_type.* == .name and mem.eql(u8, command.return_type.name.str, "void");
 
         const returns = try self.extractReturns(command);
 
@@ -2072,7 +2069,7 @@ const Renderer = struct {
         for (params) |param| {
             const class = try self.classifyParam(params, param);
             // Skip the dispatch type for proxying wrappers
-            if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name, dispatch_handle)) {
+            if (kind == .proxy and class == .dispatch_handle and mem.eql(u8, param.param_type.name.str, dispatch_handle)) {
                 continue;
             }
             if (try self.shouldSkipLen(name, params, param)) {
@@ -2097,7 +2094,7 @@ const Renderer = struct {
     }
 
     fn renderWrapperAlloc(self: *Self, wrapped_name: []const u8, command: reg.Command) !void {
-        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name, "VkResult");
+        const returns_vk_result = command.return_type.* == .name and mem.eql(u8, command.return_type.name.str, "VkResult");
 
         const name = try self.makeAllocWrapperName(wrapped_name);
         defer self.allocator.free(name);
@@ -2119,12 +2116,12 @@ const Renderer = struct {
         const count_type: reg.TypeInfo = blk: {
             for (command.params) |param| {
                 if (std.mem.endsWith(u8, param.name, "Count")) {
-                    break :blk .{ .name = "uint32_t" };
+                    break :blk .{ .name = .{ .str = "uint32_t", .is_optional = false } };
                 }
 
                 if (std.mem.endsWith(u8, param.name, "Size")) {
-                    data_type = .{ .name = "uint8_t" };
-                    break :blk .{ .name = "size_t" };
+                    data_type = .{ .name = .{ .str = "uint8_t", .is_optional = false } };
+                    break :blk .{ .name = .{ .str = "size_t", .is_optional = false } };
                 }
             }
 
