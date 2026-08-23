@@ -22,7 +22,7 @@ pub const Swapchain = struct {
     next_image_acquired: vk.Semaphore,
 
     pub fn init(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D) !Swapchain {
-        return try initRecycle(gc, allocator, extent, .null_handle);
+        return try initRecycle(gc, allocator, extent, .null);
     }
 
     pub fn initRecycle(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D, old_handle: vk.SwapchainKHR) !Swapchain {
@@ -67,7 +67,7 @@ pub const Swapchain = struct {
         };
         errdefer gc.dev.destroySwapchainKHR(handle, null);
 
-        if (old_handle != .null_handle) {
+        if (old_handle != .null) {
             // Apparently, the old swapchain handle still needs to be destroyed after recreating.
             gc.dev.destroySwapchainKHR(old_handle, null);
         }
@@ -81,7 +81,7 @@ pub const Swapchain = struct {
         var next_image_acquired = try gc.dev.createSemaphore(&.{}, null);
         errdefer gc.dev.destroySemaphore(next_image_acquired, null);
 
-        const result = try gc.dev.acquireNextImageKHR(handle, std.math.maxInt(u64), next_image_acquired, .null_handle);
+        const result = try gc.dev.acquireNextImageKHR(handle, std.math.maxInt(u64), next_image_acquired, .null);
         // event with a .suboptimal_khr we can still go on to present
         // if we error even for .suboptimal_khr the example will crash and segfault
         // on resize, since even the recreated swapchain can be suboptimal during a
@@ -116,7 +116,7 @@ pub const Swapchain = struct {
 
     pub fn deinit(self: Swapchain) void {
         // if we have no swapchain none of these should exist and we can just return
-        if (self.handle == .null_handle) return;
+        if (self.handle == .null) return;
         self.deinitExceptSwapchain();
         self.gc.dev.destroySwapchainKHR(self.handle, null);
     }
@@ -134,7 +134,7 @@ pub const Swapchain = struct {
 
         // set current handle to NULL_HANDLE to signal that the current swapchain does no longer need to be
         // de-initialized if we fail to recreate it.
-        self.handle = .null_handle;
+        self.handle = .null;
         self.* = initRecycle(gc, allocator, new_extent, old_handle) catch |err| switch (err) {
             error.SwapchainCreationFailed => {
                 // we failed while recreating so our current handle still exists,
@@ -203,7 +203,7 @@ pub const Swapchain = struct {
             self.handle,
             std.math.maxInt(u64),
             self.next_image_acquired,
-            .null_handle,
+            .null,
         );
 
         std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
