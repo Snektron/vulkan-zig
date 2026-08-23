@@ -237,7 +237,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool, api: r
         if (member.getAttribute("optional")) |optionals| {
             var optional_it = mem.splitScalar(u8, optionals, ',');
             if (optional_it.next()) |first_optional| {
-                members[i].is_optional = mem.eql(u8, first_optional, "true");
+                setTypeInfoOptional(&members[i].field_type, mem.eql(u8, first_optional, "true"));
             } else {
                 // Optional is empty, probably incorrect.
                 return error.InvalidRegistry;
@@ -280,7 +280,7 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool, api: r
         // deprecated. Just fix them up here to create a valid registry.
         if (is_vk_device_create_info) {
             if (mem.eql(u8, member.name, "enabledLayerCount")) {
-                member.is_optional = true;
+                member.field_type.name.is_optional = true;
             } else if (mem.eql(u8, member.name, "ppEnabledLayerNames")) {
                 member.field_type.pointer.is_optional = true;
                 member.field_type.pointer.size = .{ .other_field = "enabledLayerCount" };
@@ -347,7 +347,7 @@ fn lenToPointer(fields: Fields, len: []const u8) struct { registry.Pointer.Point
             for (params) |*param| {
                 if (mem.eql(u8, param.name, len)) {
                     param.is_buffer_len = true;
-                    return .{ .{ .other_field = param.name }, param.is_optional };
+                    return .{ .{ .other_field = param.name }, param.param_type.isOptional() };
                 }
             }
         },
@@ -355,7 +355,7 @@ fn lenToPointer(fields: Fields, len: []const u8) struct { registry.Pointer.Point
             for (members) |*member| {
                 if (mem.eql(u8, member.name, len)) {
                     member.is_buffer_len = true;
-                    return .{ .{ .other_field = member.name }, member.is_optional };
+                    return .{ .{ .other_field = member.name }, member.field_type.isOptional() };
                 }
             }
         },
@@ -409,7 +409,7 @@ fn parsePointerMeta(fields: Fields, type_info: *registry.TypeInfo, elem: *xml.El
             // There are more elements in the `len` attribute than there are pointers
             // Something probably went wrong
             switch (current_type_info.*) {
-                .name => |name| if (std.mem.eql(u8, name, "StdVideoH265SubLayerHrdParameters")) {
+                .name => |name| if (std.mem.eql(u8, name.str, "StdVideoH265SubLayerHrdParameters")) {
                     // Known issue: https://github.com/KhronosGroup/Vulkan-Docs/issues/2557
                     break :ignore;
                 },
@@ -616,15 +616,13 @@ fn parseCommand(allocator: Allocator, elem: *xml.Element, api: registry.Api, ptr
             .name = decl.name,
             .param_type = decl.decl_type.typedef,
             .is_buffer_len = false,
-            .is_optional = false,
         };
 
         if (param.getAttribute("optional")) |optionals| {
             var optional_it = mem.splitScalar(u8, optionals, ',');
             if (optional_it.next()) |first_optional| {
-                params[i].is_optional = mem.eql(u8, first_optional, "true");
+                setTypeInfoOptional(&params[i].param_type, mem.eql(u8, first_optional, "true"));
             } else {
-                // Optional is empty, probably incorrect.
                 return error.InvalidRegistry;
             }
         }
@@ -1072,4 +1070,13 @@ fn requiredByApi(elem: *xml.Element, api: registry.Api) bool {
     }
 
     return false;
+}
+
+fn setTypeInfoOptional(type_info: *registry.TypeInfo, is_optional: bool) void {
+    switch (type_info.*) {
+        .name => |*n| n.is_optional = is_optional,
+        .pointer => |*p| p.is_optional = is_optional,
+        .array => |*a| a.is_optional = is_optional,
+        .command_ptr => {},
+    }
 }

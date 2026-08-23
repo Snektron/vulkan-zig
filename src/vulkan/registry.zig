@@ -56,10 +56,24 @@ pub const Tag = struct {
 };
 
 pub const TypeInfo = union(enum) {
-    name: []const u8,
+    name: Name,
     command_ptr: Command,
     pointer: Pointer,
     array: Array,
+
+    pub const Name = struct {
+        str: []const u8,
+        is_optional: bool,
+    };
+
+    pub fn isOptional(self: TypeInfo) bool {
+        return switch (self) {
+            .name => |n| n.is_optional,
+            .pointer => |p| p.is_optional,
+            .array => |a| a.is_optional,
+            .command_ptr => true,
+        };
+    }
 };
 
 pub const Container = struct {
@@ -68,7 +82,6 @@ pub const Container = struct {
         field_type: TypeInfo,
         bits: ?usize,
         is_buffer_len: bool,
-        is_optional: bool,
         comment: ?[]const u8,
     };
 
@@ -116,7 +129,6 @@ pub const Command = struct {
         name: []const u8,
         param_type: TypeInfo,
         is_buffer_len: bool,
-        is_optional: bool,
     };
 
     params: []Param,

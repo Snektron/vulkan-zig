@@ -29,9 +29,9 @@ const DeviceWrapper = vk.DeviceWrapper;
 const Instance = vk.InstanceProxy;
 const Device = vk.DeviceProxy;
 
-fn getGlfwInstanceProcAddr(instance: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction {
+fn getGlfwInstanceProcAddr(instance: ?vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction {
     return @ptrCast(c.glfwGetInstanceProcAddress(
-        @ptrFromInt(@backingInt(instance)),
+        @ptrCast(instance),
         procname,
     ));
 }
@@ -200,7 +200,7 @@ pub const Queue = struct {
 fn createSurface(instance: Instance, window: *c.GLFWwindow) !vk.SurfaceKHR {
     var surface: vk.SurfaceKHR = undefined;
     const result: vk.Result = @fromBackingInt(@intCast(c.glfwCreateWindowSurface(
-        @ptrFromInt(@backingInt(instance.handle)),
+        @ptrCast(instance.handle),
         window,
         null,
         @ptrCast(&surface),
