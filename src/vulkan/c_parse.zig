@@ -277,7 +277,6 @@ pub fn parseMember(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: b
         .field_type = decl.decl_type,
         .bits = null,
         .is_buffer_len = false,
-        .is_optional = false,
         .comment = null,
     };
 
@@ -380,7 +379,7 @@ fn parseDeclaration(allocator: Allocator, xctok: *XmlCTokenizer, ptrs_optional: 
     if (tok.kind != .type_name and tok.kind != .id) return error.InvalidSyntax;
     const type_name = tok.text;
 
-    var type_info = TypeInfo{ .name = type_name };
+    var type_info = TypeInfo{ .name = .{ .str = type_name, .is_optional = false } };
 
     // Parse pointers
     type_info = try parsePointers(allocator, xctok, inner_is_const, type_info, ptrs_optional);
@@ -464,7 +463,7 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
 
     const first_param = try parseDeclaration(allocator, xctok, ptrs_optional);
     if (first_param.name == null) {
-        if (first_param.decl_type != .name or !mem.eql(u8, first_param.decl_type.name, "void")) {
+        if (first_param.decl_type != .name or !mem.eql(u8, first_param.decl_type.name.str, "void")) {
             return error.InvalidSyntax;
         }
 
@@ -480,7 +479,6 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
         .name = first_param.name.?,
         .param_type = first_param.decl_type,
         .is_buffer_len = false,
-        .is_optional = false,
     });
 
     while (true) {
@@ -495,7 +493,6 @@ fn parseFnPtrSuffix(allocator: Allocator, xctok: *XmlCTokenizer, return_type: Ty
             .name = decl.name orelse return error.MissingTypeIdentifier,
             .param_type = decl.decl_type,
             .is_buffer_len = false,
-            .is_optional = false,
         });
     }
 
@@ -681,7 +678,7 @@ test "parseMemberWithBits" {
     var xctok = XmlCTokenizer.init(document.root);
     const field = try parseMember(arena.allocator(), &xctok, false);
 
-    try testing.expectEqualSlices(u8, "uint32_t", field.field_type.name);
+    try testing.expectEqualSlices(u8, "uint32_t", field.field_type.name.str);
     try testing.expectEqualSlices(u8, "flags", field.name);
     try testing.expectEqualSlices(u8, "Requires pythons", field.comment.?);
     try testing.expect(field.bits == 8);
@@ -730,5 +727,5 @@ test "parseTypedef" {
     try testing.expectEqual(ArraySize{ .int = 4 }, array.size);
     const ptr = array.child.pointer;
     try testing.expectEqual(true, ptr.is_const);
-    try testing.expectEqualSlices(u8, "Python", ptr.child.name);
+    try testing.expectEqualSlices(u8, "Python", ptr.child.name.str);
 }
