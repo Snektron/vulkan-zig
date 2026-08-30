@@ -239,7 +239,7 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
         .p_command_buffers = &.{cmdbuf.handle},
         .p_wait_dst_stage_mask = undefined,
     };
-    try gc.dev.queueSubmit(gc.graphics_queue.handle, &.{si}, .null_handle);
+    try gc.dev.queueSubmit(gc.graphics_queue.handle, &.{si}, .null);
     try gc.dev.queueWaitIdle(gc.graphics_queue.handle);
 }
 
@@ -487,13 +487,13 @@ fn createPipeline(
         .layout = layout,
         .render_pass = render_pass,
         .subpass = 0,
-        .base_pipeline_handle = .null_handle,
+        .base_pipeline_handle = .null,
         .base_pipeline_index = -1,
     };
 
     var pipeline: vk.Pipeline = undefined;
     _ = try gc.dev.createGraphicsPipelines(
-        .null_handle,
+        .null,
         &.{gpci},
         null,
         (&pipeline)[0..1],

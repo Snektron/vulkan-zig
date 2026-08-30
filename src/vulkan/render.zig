@@ -1170,7 +1170,7 @@ const Renderer = struct {
                         if (decl_type.handle.is_dispatchable) {
                             try self.writer.writeAll(" = null");
                         } else {
-                            try self.writer.writeAll(" = .null_handle");
+                            try self.writer.writeAll(" = .null");
                         }
                     } else if (decl_type == .bitmask) {
                         try self.writer.writeAll(" = .{}");
@@ -1356,7 +1356,7 @@ const Renderer = struct {
         if (handle.is_dispatchable) {
             try self.writer.writeAll(" = *opaque{};\n");
         } else {
-            try self.writer.writeAll(" = enum(u64) {null_handle = 0, _};\n");
+            try self.writer.writeAll(" = enum(u64) {null = 0, _};\n");
         }
     }
 
