@@ -32,20 +32,22 @@ pub fn parseXml(
     var api_constants: std.ArrayList(registry.ApiConstant) = .empty;
     var tags: std.ArrayList(registry.Tag) = .empty;
     var features: std.ArrayList(registry.Feature) = .empty;
-    var extensions: std.ArrayList(registry.Extension) = .empty;
+    var instance_extensions: std.ArrayList(registry.Extension) = .empty;
+    var device_extensions: std.ArrayList(registry.Extension) = .empty;
+    var video_extensions: std.ArrayList(registry.Extension) = .empty;
 
     try parseDeclarations(allocator, root, api, &decls);
     try parseApiConstants(allocator, root, api, &api_constants);
     try parseTags(allocator, root, &tags);
     try parseFeatures(allocator, root, api, &features);
-    try parseExtensions(allocator, root, api, &extensions);
+    try parseExtensions(allocator, root, api, &instance_extensions, &device_extensions, &video_extensions);
 
     if (maybe_video_root) |video_root| {
         try parseDeclarations(allocator, video_root, api, &decls);
         try parseApiConstants(allocator, video_root, api, &api_constants);
         try parseTags(allocator, video_root, &tags);
         try parseFeatures(allocator, video_root, api, &features);
-        try parseExtensions(allocator, video_root, api, &extensions);
+        try parseExtensions(allocator, video_root, api, &instance_extensions, &device_extensions, &video_extensions);
     }
 
     const reg = registry.Registry{
@@ -53,7 +55,9 @@ pub fn parseXml(
         .api_constants = api_constants.items,
         .tags = tags.items,
         .features = features.items,
-        .extensions = extensions.items,
+        .instance_extensions = instance_extensions.items,
+        .device_extensions = device_extensions.items,
+        .video_extensions = video_extensions.items,
     };
 
     return ParseResult{
@@ -934,10 +938,11 @@ fn parseExtensions(
     allocator: Allocator,
     root: *xml.Element,
     api: registry.Api,
-    extensions: *std.ArrayList(registry.Extension),
+    instance_extensions: *std.ArrayList(registry.Extension),
+    device_extensions: *std.ArrayList(registry.Extension),
+    video_extensions: *std.ArrayList(registry.Extension),
 ) !void {
     const extensions_elem = root.findChildByTag("extensions") orelse return error.InvalidRegistry;
-    try extensions.ensureUnusedCapacity(allocator, extensions_elem.children.len);
 
     var it = extensions_elem.findChildrenByTag("extension");
     while (it.next()) |extension| {
@@ -950,7 +955,7 @@ fn parseExtensions(
             }
         }
 
-        extensions.appendAssumeCapacity(try parseExtension(allocator, extension, api));
+        try parseExtension(allocator, extension, api, instance_extensions, device_extensions, video_extensions);
     }
 }
 
@@ -973,7 +978,14 @@ fn findExtVersion(extension: *xml.Element) !registry.Extension.Version {
     return .unknown;
 }
 
-fn parseExtension(allocator: Allocator, extension: *xml.Element, api: registry.Api) !registry.Extension {
+fn parseExtension(
+    allocator: Allocator,
+    extension: *xml.Element,
+    api: registry.Api,
+    instance_extensions: *std.ArrayList(registry.Extension),
+    device_extensions: *std.ArrayList(registry.Extension),
+    video_extensions: *std.ArrayList(registry.Extension),
+) !void {
     const name = extension.getAttribute("name") orelse return error.InvalidRegistry;
     const platform = extension.getAttribute("platform");
 
@@ -1000,19 +1012,17 @@ fn parseExtension(allocator: Allocator, extension: *xml.Element, api: registry.A
     };
 
     const number = blk: {
-        // Vulkan Video extensions do not have numbers.
-        if (is_video) break :blk 0;
         const number_str = extension.getAttribute("number") orelse return error.InvalidRegistry;
         break :blk try std.fmt.parseInt(u31, number_str, 10);
     };
 
-    const ext_type: ?registry.Extension.ExtensionType = blk: {
-        if (is_video) break :blk .video;
-        const ext_type_str = extension.getAttribute("type") orelse break :blk null;
+    const array_list = blk: {
+        if (is_video) break :blk video_extensions;
+        const ext_type_str = extension.getAttribute("type") orelse return error.InvalidRegistry;
         if (mem.eql(u8, ext_type_str, "instance")) {
-            break :blk .instance;
+            break :blk instance_extensions;
         } else if (mem.eql(u8, ext_type_str, "device")) {
-            break :blk .device;
+            break :blk device_extensions;
         } else {
             return error.InvalidRegistry;
         }
@@ -1033,17 +1043,16 @@ fn parseExtension(allocator: Allocator, extension: *xml.Element, api: registry.A
         i += 1;
     }
 
-    return registry.Extension{
+    try array_list.append(allocator, registry.Extension{
         .name = name,
         .number = number,
         .version = version,
-        .extension_type = ext_type,
         .depends = depends,
         .promoted_to = promoted_to,
         .platform = platform,
         .required_feature_level = requires_core,
         .requires = requires[0..i],
-    };
+    });
 }
 
 fn splitFeatureLevel(ver: []const u8, split: []const u8) !registry.FeatureLevel {
