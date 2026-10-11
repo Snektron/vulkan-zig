@@ -117,12 +117,12 @@ pub fn main() !void {
 
     const buffer = try gc.dev.createBuffer(&.{
         .size = @sizeOf(@TypeOf(vertices)),
-        .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
+        .usage = .{ .transfer_dst = true, .vertex_buffer = true },
         .sharing_mode = .exclusive,
     }, null);
     defer gc.dev.destroyBuffer(buffer, null);
     const mem_reqs = gc.dev.getBufferMemoryRequirements(buffer);
-    const memory = try gc.allocate(mem_reqs, .{ .device_local_bit = true });
+    const memory = try gc.allocate(mem_reqs, .{ .device_local = true });
     defer gc.dev.freeMemory(memory, null);
     try gc.dev.bindBufferMemory(buffer, memory, 0);
 
@@ -190,12 +190,12 @@ pub fn main() !void {
 fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer) !void {
     const staging_buffer = try gc.dev.createBuffer(&.{
         .size = @sizeOf(@TypeOf(vertices)),
-        .usage = .{ .transfer_src_bit = true },
+        .usage = .{ .transfer_src = true },
         .sharing_mode = .exclusive,
     }, null);
     defer gc.dev.destroyBuffer(staging_buffer, null);
     const mem_reqs = gc.dev.getBufferMemoryRequirements(staging_buffer);
-    const staging_memory = try gc.allocate(mem_reqs, .{ .host_visible_bit = true, .host_coherent_bit = true });
+    const staging_memory = try gc.allocate(mem_reqs, .{ .host_visible = true, .host_coherent = true });
     defer gc.dev.freeMemory(staging_memory, null);
     try gc.dev.bindBufferMemory(staging_buffer, staging_memory, 0);
 
@@ -222,7 +222,7 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
     const cmdbuf = GraphicsContext.CommandBuffer.init(cmdbuf_handle, gc.dev.wrapper);
 
     try cmdbuf.beginCommandBuffer(&.{
-        .flags = .{ .one_time_submit_bit = true },
+        .flags = .{ .one_time_submit = true },
     });
 
     const region = vk.BufferCopy{
@@ -347,7 +347,7 @@ fn destroyFramebuffers(gc: *const GraphicsContext, allocator: Allocator, framebu
 fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .format = swapchain.surface_format.format,
-        .samples = .{ .@"1_bit" = true },
+        .samples = .{ .@"1" = true },
         .load_op = .clear,
         .store_op = .store,
         .stencil_load_op = .dont_care,
@@ -394,12 +394,12 @@ fn createPipeline(
 
     const pssci = [_]vk.PipelineShaderStageCreateInfo{
         .{
-            .stage = .{ .vertex_bit = true },
+            .stage = .{ .vertex = true },
             .module = vert,
             .p_name = "main",
         },
         .{
-            .stage = .{ .fragment_bit = true },
+            .stage = .{ .fragment = true },
             .module = frag,
             .p_name = "main",
         },
@@ -428,7 +428,7 @@ fn createPipeline(
         .depth_clamp_enable = .false,
         .rasterizer_discard_enable = .false,
         .polygon_mode = .fill,
-        .cull_mode = .{ .back_bit = true },
+        .cull_mode = .{ .back = true },
         .front_face = .clockwise,
         .depth_bias_enable = .false,
         .depth_bias_constant_factor = 0,
@@ -438,7 +438,7 @@ fn createPipeline(
     };
 
     const pmsci = vk.PipelineMultisampleStateCreateInfo{
-        .rasterization_samples = .{ .@"1_bit" = true },
+        .rasterization_samples = .{ .@"1" = true },
         .sample_shading_enable = .false,
         .min_sample_shading = 1,
         .alpha_to_coverage_enable = .false,
@@ -453,7 +453,7 @@ fn createPipeline(
         .src_alpha_blend_factor = .one,
         .dst_alpha_blend_factor = .zero,
         .alpha_blend_op = .add,
-        .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+        .color_write_mask = .{ .r = true, .g = true, .b = true, .a = true },
     };
 
     const pcbsci = vk.PipelineColorBlendStateCreateInfo{

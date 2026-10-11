@@ -82,12 +82,19 @@ pub const SegmentIterator = struct {
                 return i;
             }
 
-            const prev_lower = std.ascii.isLower(self.text[i - 1]);
-            const next_lower = std.ascii.isLower(self.text[i]);
+            const prev_char = self.text[i - 1];
+            const next_char = self.text[i];
+            const prev_upper = std.ascii.isUpper(prev_char);
+            const prev_lower = std.ascii.isLower(prev_char);
+            const next_lower = std.ascii.isLower(next_char);
 
             if (prev_lower and !next_lower) {
-                return i;
-            } else if (i != self.offset + 1 and !prev_lower and next_lower) {
+                // keep a lowercase separator when in between digits (eg `4x4`).
+                const in_between_digits =
+                    std.ascii.isDigit(next_char) and
+                    i >= 2 and std.ascii.isDigit(self.text[i - 2]);
+                if (!in_between_digits) return i;
+            } else if (i != self.offset + 1 and prev_upper and next_lower) {
                 return i - 1;
             }
 
