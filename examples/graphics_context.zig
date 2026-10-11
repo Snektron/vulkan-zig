@@ -272,16 +272,16 @@ fn debugUtilsMessengerCallback(
         .{ .verbose_bit_ext = true } => log.debug("{s}", .{msg}), // reverse order so the worst is printed
         else => log.info("{s}", .{msg}),
     }
-    
+
     const data = p_callback_data orelse return .false;
     if (data.object_count == 0 or data.p_objects == null) return .false;
 
-    const objects = data.p_objects.?[0..data.object_count]; 
-    for (objects) |obj| { 
-        const name = if (obj.p_object_name) |ptr| std.mem.span(ptr) else "Unnamed"; 
-        std.debug.print("    | {s} 0x{x} {s}\n", .{@tagName(obj.object_type), obj.object_handle, name});
+    const objects = data.p_objects.?[0..data.object_count];
+    for (objects) |obj| {
+        const name = if (obj.p_object_name) |ptr| std.mem.span(ptr) else "Unnamed";
+        std.debug.print("    | {s} 0x{x} {s}\n", .{ @tagName(obj.object_type), obj.object_handle, name });
     }
-    if (message_severity.error_bit_ext == true) @panic("vulkan error"); 
+    if (message_severity.error_bit_ext == true) @panic("vulkan error");
     // panic to have the stack trace of where the error happened
     // besides that sometimes the code crashes something and you have to manually force kill it with killall, panic prevents this
 
