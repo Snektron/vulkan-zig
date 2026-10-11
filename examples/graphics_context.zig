@@ -266,10 +266,10 @@ fn debugUtilsMessengerCallback(
     const msg = (if (p_callback_data) |cb| cb.p_message else null) orelse default;
     const log = std.log.scoped(.vulkan);
     switch (message_severity) {
-        .{ .error_bit_ext = true } => log.err("{s}", .{msg}),
-        .{ .warning_bit_ext = true } => log.warn("{s}", .{msg}),
-        .{ .info_bit_ext = true } => log.info("{s}", .{msg}),
-        .{ .verbose_bit_ext = true } => log.debug("{s}", .{msg}), // reverse order so the worst is printed
+        .{ .error_ext = true } => log.err("{s}", .{msg}),
+        .{ .warning_ext = true } => log.warn("{s}", .{msg}),
+        .{ .info_ext = true } => log.info("{s}", .{msg}),
+        .{ .verbose_ext = true } => log.debug("{s}", .{msg}), // reverse order so the worst is printed
         else => log.info("{s}", .{msg}),
     }
 
@@ -281,7 +281,7 @@ fn debugUtilsMessengerCallback(
         const name = if (obj.p_object_name) |ptr| std.mem.span(ptr) else "Unnamed";
         std.debug.print("    | {s} 0x{x} {s}\n", .{ @tagName(obj.object_type), obj.object_handle, name });
     }
-    if (message_severity.error_bit_ext == true) @panic("vulkan error");
+    if (message_severity.error_ext == true) @panic("vulkan error");
     // panic to have the stack trace of where the error happened
     // besides that sometimes the code crashes something and you have to manually force kill it with killall, panic prevents this
 
