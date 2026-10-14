@@ -100,8 +100,10 @@ const EnumFieldMerger = struct {
             try self.addRequires(feature.requires);
         }
 
-        for (self.registry.extensions) |ext| {
-            try self.addRequires(ext.requires);
+        for ([_][]const reg.Extension{ self.registry.instance_extensions, self.registry.device_extensions, self.registry.video_extensions }) |extensions| {
+            for (extensions) |ext| {
+                try self.addRequires(ext.requires);
+            }
         }
 
         // Merge all the enum fields.
