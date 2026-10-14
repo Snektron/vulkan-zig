@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Setup Zig
-      uses: mlugg/setup-zig@v2
+      uses: setup-zig@v2
       with:
         version: master
 
