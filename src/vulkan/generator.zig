@@ -9,7 +9,7 @@ const Allocator = mem.Allocator;
 const FeatureLevel = reg.FeatureLevel;
 
 const EnumFieldMerger = struct {
-    const EnumExtensionMap = std.array_hash_map.String(std.ArrayListUnmanaged(reg.Enum.Field));
+    const EnumExtensionMap = std.array_hash_map.String(std.ArrayList(reg.Enum.Field));
     const ApiConstantMap = std.array_hash_map.String(reg.ApiConstant);
     const FieldSet = std.array_hash_map.String(void);
 
