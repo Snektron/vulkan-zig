@@ -280,6 +280,17 @@ fn parseContainer(allocator: Allocator, ty: *xml.Element, is_union: bool, api: r
             member.field_type.pointer.is_optional = true;
         }
 
+        // The registry omits optionality for these fields because their validity depends on
+        // descriptorType. A pointer may be null when the descriptor does not use that info.
+        if (mem.eql(u8, name, "VkWriteDescriptorSet")) {
+            if (mem.eql(u8, member.name, "pImageInfo") or
+                mem.eql(u8, member.name, "pBufferInfo") or
+                mem.eql(u8, member.name, "pTexelBufferView"))
+            {
+                member.field_type.pointer.is_optional = true;
+            }
+        }
+
         // HACK: These fields don't have the correct attributes set. Probably because they are
         // deprecated. Just fix them up here to create a valid registry.
         if (is_vk_device_create_info) {
@@ -1087,5 +1098,25 @@ fn setTypeInfoOptional(type_info: *registry.TypeInfo, is_optional: bool) void {
         .pointer => |*p| p.is_optional = is_optional,
         .array => |*a| a.is_optional = is_optional,
         .command_ptr => {},
+    }
+}
+
+test "VkWriteDescriptorSet info pointers are nullable when unused" {
+    const document = try xml.parse(std.testing.allocator,
+        \\<type category="struct" name="VkWriteDescriptorSet">
+        \\  <member><type>uint32_t</type><name>descriptorCount</name></member>
+        \\  <member noautovalidity="true" len="descriptorCount">const <type>VkDescriptorImageInfo</type>* <name>pImageInfo</name></member>
+        \\  <member noautovalidity="true" len="descriptorCount">const <type>VkDescriptorBufferInfo</type>* <name>pBufferInfo</name></member>
+        \\  <member noautovalidity="true" len="descriptorCount">const <type>VkBufferView</type>* <name>pTexelBufferView</name></member>
+        \\</type>
+    );
+    defer document.deinit();
+
+    var arena = ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const declaration = try parseContainer(arena.allocator(), document.root, false, .vulkan);
+    for (declaration.decl_type.container.fields[1..]) |field| {
+        try std.testing.expect(field.field_type.pointer.is_optional);
     }
 }
