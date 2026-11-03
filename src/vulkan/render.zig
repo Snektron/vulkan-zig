@@ -1229,7 +1229,6 @@ const Renderer = struct {
             defer arena.deinit();
 
             var padding_size: usize = 0;
-            var padding_start: usize = 0;
             for (flags_by_bitpos[0..bits.bitwidth], 0..) |maybe_flag, bitpos| {
                 defer _ = arena.reset(.retain_capacity);
                 if (maybe_flag) |flag| {
@@ -1250,7 +1249,6 @@ const Renderer = struct {
                     try self.writeIdentifierWithCase(.snake, name_without_bit);
                     try self.writer.writeAll(": bool = false,");
                 } else {
-                    padding_start = bitpos;
                     padding_size += 1;
                 }
             }
