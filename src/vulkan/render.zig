@@ -1257,16 +1257,12 @@ const Renderer = struct {
         try self.renderFlagFunctions(name, "FlagsMixin", flag_functions, null);
         try self.writer.writeAll("};\n");
     }
-    
+
     fn renderBitmaskPadding(self: *Self, endpos: usize, size: usize) !void {
         if (size == 1) {
             try self.writer.print("_reserved_bit_{}: bool = false,", .{endpos - 1});
         } else if (size > 1) {
-            try self.writer.print("_reserved_bits_{}_to_{}: u{} = 0,", .{
-                endpos - size,
-                endpos - 1,
-                size
-            });
+            try self.writer.print("_reserved_bits_{}_to_{}: u{} = 0,", .{ endpos - size, endpos - 1, size });
         }
     }
 
