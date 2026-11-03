@@ -1228,9 +1228,12 @@ const Renderer = struct {
             var arena: std.heap.ArenaAllocator = .init(self.allocator);
             defer arena.deinit();
 
+            var padding_size: usize = 0;
             for (flags_by_bitpos[0..bits.bitwidth], 0..) |maybe_flag, bitpos| {
                 defer _ = arena.reset(.retain_capacity);
                 if (maybe_flag) |flag| {
+                    try renderBitmaskPadding(self, bitpos, padding_size);
+                    padding_size = 0;
                     if (flag.comment) |comment| {
                         try self.renderDocComment(comment);
                     }
@@ -1244,15 +1247,23 @@ const Renderer = struct {
                         });
                     };
                     try self.writeIdentifierWithCase(.snake, name_without_bit);
+                    try self.writer.writeAll(": bool = false,");
                 } else {
-                    try self.writer.print("_reserved_bit_{}", .{bitpos});
+                    padding_size += 1;
                 }
-
-                try self.writer.writeAll(": bool = false,");
             }
+            try renderBitmaskPadding(self, bits.bitwidth, padding_size);
         }
         try self.renderFlagFunctions(name, "FlagsMixin", flag_functions, null);
         try self.writer.writeAll("};\n");
+    }
+
+    fn renderBitmaskPadding(self: *Self, endpos: usize, size: usize) !void {
+        if (size == 1) {
+            try self.writer.print("_reserved_bit_{}: bool = false,", .{endpos - 1});
+        } else if (size > 1) {
+            try self.writer.print("_reserved_bits_{}_to_{}: u{} = 0,", .{ endpos - size, endpos - 1, size });
+        }
     }
 
     fn renderBitmask(self: *Self, name: []const u8, bitmask: reg.Bitmask) !void {
