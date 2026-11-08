@@ -123,7 +123,12 @@ pub const GraphicsContext = struct {
 
         const dev = try initializeCandidate(self.instance, candidate);
 
-        const vkd = try allocator.create(DeviceWrapper);
+        // TODO: The DeviceWrapper struct is too big for the create function in the Zig stdlib,
+        // so work around it by pointer-casting an array.
+        const vkd: *DeviceWrapper = @ptrCast(try allocator.alignedCreate(
+            [@sizeOf(DeviceWrapper)]u8,
+            .fromByteUnits(@alignOf(DeviceWrapper)),
+        ));
         errdefer allocator.destroy(vkd);
         vkd.* = DeviceWrapper.load(dev, self.instance.wrapper.dispatch.vkGetDeviceProcAddr.?);
         self.dev = Device.init(dev, vkd);
@@ -144,7 +149,8 @@ pub const GraphicsContext = struct {
         self.instance.destroyInstance(null);
 
         // Don't forget to free the tables to prevent a memory leak.
-        self.allocator.destroy(self.dev.wrapper);
+        const vkd_mem: *const [@sizeOf(DeviceWrapper)]u8 = @ptrCast(self.dev.wrapper);
+        self.allocator.destroy(vkd_mem);
         self.allocator.destroy(self.instance.wrapper);
     }
 
