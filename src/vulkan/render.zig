@@ -160,6 +160,7 @@ const foreign_types = std.StaticStringMap([]const u8).initComptime(.{
     // separately.
     .{ "StdVideoVP9Profile", "u32" },
     .{ "StdVideoVP9Level", "u32" },
+    .{ "InternalHandleNV", "*opaque {}" },
 });
 
 const CommandDispatchType = enum {
@@ -1340,13 +1341,15 @@ const Renderer = struct {
             return; // Skip built-in types, they are handled differently
         }
 
+        const trimmed_name = trimVkNamespace(name);
+
         try self.writer.writeAll("pub const ");
-        try self.writeIdentifier(name);
-        try self.writer.print(" = if (@hasDecl(root, \"{s}\")) root.", .{name});
-        try self.writeIdentifier(name);
+        try self.writeIdentifier(trimmed_name);
+        try self.writer.print(" = if (@hasDecl(root, \"{s}\")) root.", .{trimmed_name});
+        try self.writeIdentifier(trimmed_name);
         try self.writer.writeAll(" else ");
 
-        if (foreign_types.get(name)) |default| {
+        if (foreign_types.get(trimmed_name)) |default| {
             try self.writer.writeAll(default);
             try self.writer.writeAll(";\n");
         } else {
