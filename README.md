@@ -234,7 +234,7 @@ Packed structs of bools are used for bit flags in vulkan-zig, instead of both a 
 Each bit is defaulted to `false`, and the first `bool` is aligned to guarantee the overal alignment
 of each Flags type to guarantee ABI compatibility when passing bitfields through structs:
 ```zig
-pub const QueueFlags = packed struct {
+pub const QueueFlags = bitpack struct {
     graphics_bit: bool align(@alignOf(Flags)) = false,
     compute_bit: bool = false,
     transfer_bit: bool = false,

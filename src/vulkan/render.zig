@@ -80,7 +80,7 @@ const preamble =
     \\        }
     \\    };
     \\}
-    \\pub const Version = packed struct(u32) {
+    \\pub const Version = bitpack struct(u32) {
     \\    patch: u12,
     \\    minor: u10,
     \\    major: u7,
@@ -853,11 +853,11 @@ const Renderer = struct {
             try self.writer.print(
                 \\extern struct {{
                 \\    transform: TransformMatrix{s},
-                \\    instance_custom_index_and_mask: packed struct(u32) {{
+                \\    instance_custom_index_and_mask: bitpack struct(u32) {{
                 \\        instance_custom_index: u24,
                 \\        mask: u8,
                 \\    }},
-                \\    instance_shader_binding_table_record_offset_and_flags: packed struct(u32) {{
+                \\    instance_shader_binding_table_record_offset_and_flags: bitpack struct(u32) {{
                 \\        instance_shader_binding_table_record_offset: u24,
                 \\        flags: u8, // GeometryInstanceFlagsKHR
                 \\    }},
@@ -873,11 +873,11 @@ const Renderer = struct {
                 \\extern struct {{
                 \\    transform_t0: SRTData{0s},
                 \\    transform_t1: SRTData{0s},
-                \\    instance_custom_index_and_mask: packed struct(u32) {{
+                \\    instance_custom_index_and_mask: bitpack struct(u32) {{
                 \\        instance_custom_index: u24,
                 \\        mask: u8,
                 \\    }},
-                \\    instance_shader_binding_table_record_offset_and_flags: packed struct(u32) {{
+                \\    instance_shader_binding_table_record_offset_and_flags: bitpack struct(u32) {{
                 \\        instance_shader_binding_table_record_offset: u24,
                 \\        flags: u8, // GeometryInstanceFlagsKHR
                 \\    }},
@@ -893,11 +893,11 @@ const Renderer = struct {
                 \\extern struct {{
                 \\    transform_t0: TransformMatrix{0s},
                 \\    transform_t1: TransformMatrix{0s},
-                \\    instance_custom_index_and_mask: packed struct(u32) {{
+                \\    instance_custom_index_and_mask: bitpack struct(u32) {{
                 \\        instance_custom_index: u24,
                 \\        mask: u8,
                 \\    }},
-                \\    instance_shader_binding_table_record_offset_and_flags: packed struct(u32) {{
+                \\    instance_shader_binding_table_record_offset_and_flags: bitpack struct(u32) {{
                 \\        instance_shader_binding_table_record_offset: u24,
                 \\        flags: u8, // GeometryInstanceFlagsKHR
                 \\    }},
@@ -913,7 +913,7 @@ const Renderer = struct {
                 \\extern struct {{
                 \\    cluster_id: u32,
                 \\    cluster_flags: ClusterAccelerationStructureClusterFlags{0s},
-                \\    cluster_data: packed struct(u32) {{
+                \\    cluster_data: bitpack struct(u32) {{
                 \\        triangle_count: u9,
                 \\        vertex_count: u9,
                 \\        position_truncate_bit_count: u6,
@@ -940,7 +940,7 @@ const Renderer = struct {
                 \\extern struct {{
                 \\    cluster_id: u32,
                 \\    cluster_flags: ClusterAccelerationStructureClusterFlags{0s},
-                \\    cluster_data: packed struct(u32) {{
+                \\    cluster_data: bitpack struct(u32) {{
                 \\        triangle_count: u9,
                 \\        vertex_count: u9,
                 \\        position_truncate_bit_count: u6,
@@ -967,7 +967,7 @@ const Renderer = struct {
             try self.writer.print(
                 \\extern struct {{
                 \\    cluster_id_offset: u32,
-                \\    geometry_index_offset: packed struct(u32) {{
+                \\    geometry_index_offset: bitpack struct(u32) {{
                 \\       offset: u24,
                 \\       reserved: u8 = 0,
                 \\    }},
@@ -989,7 +989,7 @@ const Renderer = struct {
         var is_flags_container = true;
         for (container.fields) |field| {
             const bits = field.bits orelse {
-                // C abi type - not a packed struct.
+                // C abi type - not a bitpack struct.
                 return false;
             };
             total_bits += bits;
@@ -998,7 +998,7 @@ const Renderer = struct {
             }
         }
 
-        try self.writer.writeAll("packed struct(u32) {");
+        try self.writer.writeAll("bitpack struct(u32) {");
 
         for (container.fields) |field| {
             if (field.comment) |comment| {
@@ -1206,7 +1206,7 @@ const Renderer = struct {
         try self.writer.writeAll("pub const ");
         try self.renderName(name);
         const flags_type = try bitmaskFlagsType(bits.bitwidth);
-        try self.writer.print(" = packed struct({s}) {{", .{flags_type});
+        try self.writer.print(" = bitpack struct({s}) {{", .{flags_type});
 
         const bitflag_name = (try self.extractBitflagName(name)) orelse return error.InvalidRegistry;
 
@@ -1277,7 +1277,7 @@ const Renderer = struct {
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
             try self.writer.print(
-                \\ = packed struct({s}) {{
+                \\ = bitpack struct({s}) {{
                 \\_reserved_bits: {s} = 0,
             , .{ flags_type, flags_type });
             try self.renderFlagFunctions(name, "FlagsMixin", flag_functions, null);
